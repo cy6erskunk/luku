@@ -28,19 +28,32 @@ async function ocrImage(apiKey, base64, mediaType) {
 // ── Local OCR (Tesseract.js) ──────────────────────────────────────────────
 let tesseractWorker = null;
 
-async function getOrCreateWorker() {
+async function getOrCreateWorker(onStatus) {
   if (tesseractWorker) return tesseractWorker;
+  if (onStatus) onStatus("Loading OCR engine…", 0);
   const { createWorker } = await import("tesseract.js");
-  tesseractWorker = await createWorker("fin");
+  tesseractWorker = await createWorker("fin", 1, {
+    logger(p) {
+      if (onStatus && p.progress != null) {
+        const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
+          : p.status === "initializing tesseract" ? "Initializing OCR…"
+          : p.status === "loading language traineddata" ? "Downloading Finnish model…"
+          : p.status === "initializing api" ? "Preparing OCR…"
+          : null;
+        if (label) onStatus(label, p.progress);
+      }
+    },
+  });
   return tesseractWorker;
 }
 
-async function ocrLocal(base64, mediaType, onProgress) {
-  const worker = await getOrCreateWorker();
+async function ocrLocal(base64, mediaType, onStatus) {
+  const worker = await getOrCreateWorker(onStatus);
+  if (onStatus) onStatus("Recognizing text…", 0);
   const dataUrl = `data:${mediaType};base64,${base64}`;
   const { data: { text } } = await worker.recognize(dataUrl, {}, {
     progressUpdate(p) {
-      if (p.status === "recognizing text" && onProgress) onProgress(p.progress);
+      if (p.status === "recognizing text" && onStatus) onStatus("Recognizing text…", p.progress);
     },
   });
   return text;
@@ -199,9 +212,12 @@ export default function Luku() {
     try {
       const { base64, mediaType } = await fileToBase64(file);
       setPreview(`data:${mediaType};base64,${base64}`);
-      setStep("Extracting text locally…");
+      setStep("Loading OCR engine…");
       setOcrProgress(0);
-      const out = await ocrLocal(base64, mediaType, (p) => setOcrProgress(p));
+      const out = await ocrLocal(base64, mediaType, (label, p) => {
+        setStep(label);
+        setOcrProgress(p);
+      });
       setOcrProgress(1);
       if (!out?.trim()) { setErr("No text found — try a clearer photo."); return; }
       setText(out.trim()); setTokens(tokenize(out.trim())); setStage(1); setOcrSource("local");
