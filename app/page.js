@@ -104,7 +104,7 @@ export default function Luku() {
   const [xlating, setXlating] = useState(null);
   const [session, _setSession] = useState(() => {
     if (typeof window === "undefined") return {};
-    try { return JSON.parse(localStorage.getItem("luku_session") || "{}"); } catch { return {}; }
+    try { const v = JSON.parse(localStorage.getItem("luku_session") || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch { return {}; }
   });
   const setSession = useCallback((v) => _setSession((prev) => {
     const next = typeof v === "function" ? v(prev) : v;
@@ -113,7 +113,7 @@ export default function Luku() {
   }), []);
   const [saved, _setSaved] = useState(() => {
     if (typeof window === "undefined") return [];
-    try { return JSON.parse(localStorage.getItem("luku_saved") || "[]"); } catch { return []; }
+    try { const v = JSON.parse(localStorage.getItem("luku_saved") || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
   });
   const setSaved = useCallback((v) => _setSaved((prev) => {
     const next = typeof v === "function" ? v(prev) : v;
@@ -382,7 +382,7 @@ export default function Luku() {
                   </div>
                 )}
                 <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
-                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Clear all saved words</button>}
+                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Start over</button>}
               </div>}
         </div>
       )}
