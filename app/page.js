@@ -27,35 +27,33 @@ async function ocrImage(apiKey, base64, mediaType) {
 
 // ── Local OCR (Tesseract.js) ──────────────────────────────────────────────
 let tesseractWorker = null;
+let ocrStatusCallback = null;
 
-async function getOrCreateWorker(onStatus) {
+async function getOrCreateWorker() {
   if (tesseractWorker) return tesseractWorker;
-  if (onStatus) onStatus("Loading OCR engine…", 0);
   const { createWorker } = await import("tesseract.js");
   tesseractWorker = await createWorker("fin", 1, {
     logger(p) {
-      if (onStatus && p.progress != null) {
-        const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
-          : p.status === "initializing tesseract" ? "Initializing OCR…"
-          : p.status === "loading language traineddata" ? "Downloading Finnish model…"
-          : p.status === "initializing api" ? "Preparing OCR…"
-          : null;
-        if (label) onStatus(label, p.progress);
-      }
+      if (!ocrStatusCallback || p.progress == null) return;
+      const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
+        : p.status === "initializing tesseract" ? "Initializing OCR…"
+        : p.status === "loading language traineddata" ? "Downloading Finnish model…"
+        : p.status === "initializing api" ? "Preparing OCR…"
+        : p.status === "recognizing text" ? "Recognizing text…"
+        : null;
+      if (label) ocrStatusCallback(label, p.progress);
     },
   });
   return tesseractWorker;
 }
 
 async function ocrLocal(base64, mediaType, onStatus) {
-  const worker = await getOrCreateWorker(onStatus);
-  if (onStatus) onStatus("Recognizing text…", 0);
+  ocrStatusCallback = onStatus;
+  if (onStatus) onStatus("Loading OCR engine…", 0);
+  const worker = await getOrCreateWorker();
   const dataUrl = `data:${mediaType};base64,${base64}`;
-  const { data: { text } } = await worker.recognize(dataUrl, {}, {
-    progressUpdate(p) {
-      if (p.status === "recognizing text" && onStatus) onStatus("Recognizing text…", p.progress);
-    },
-  });
+  const { data: { text } } = await worker.recognize(dataUrl);
+  ocrStatusCallback = null;
   return text;
 }
 
