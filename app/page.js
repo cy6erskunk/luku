@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 
 // ── API ────────────────────────────────────────────────────────────────────
 async function callClaude(apiKey, messages, system, maxTokens = 1500) {
@@ -102,18 +102,25 @@ export default function Luku() {
   const [err, setErr] = useState("");
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
-  const [session, setSession] = useState(() => {
+  const [session, _setSession] = useState(() => {
     if (typeof window === "undefined") return {};
     try { return JSON.parse(localStorage.getItem("luku_session") || "{}"); } catch { return {}; }
   });
-  const [saved, setSaved] = useState(() => {
+  const setSession = useCallback((v) => _setSession((prev) => {
+    const next = typeof v === "function" ? v(prev) : v;
+    try { localStorage.setItem("luku_session", JSON.stringify(next)); } catch {}
+    return next;
+  }), []);
+  const [saved, _setSaved] = useState(() => {
     if (typeof window === "undefined") return [];
     try { return JSON.parse(localStorage.getItem("luku_saved") || "[]"); } catch { return []; }
   });
+  const setSaved = useCallback((v) => _setSaved((prev) => {
+    const next = typeof v === "function" ? v(prev) : v;
+    try { localStorage.setItem("luku_saved", JSON.stringify(next)); } catch {}
+    return next;
+  }), []);
   const [revIdx, setRevIdx] = useState(0);
-
-  useEffect(() => { try { localStorage.setItem("luku_session", JSON.stringify(session)); } catch {} }, [session]);
-  useEffect(() => { try { localStorage.setItem("luku_saved", JSON.stringify(saved)); } catch {} }, [saved]);
 
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
 
