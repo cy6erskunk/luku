@@ -44,6 +44,10 @@ async function getOrCreateWorker() {
       if (label) ocrStatusCallback(label, p.progress);
     },
   });
+  await tesseractWorker.setParameters({
+    tessedit_pageseg_mode: "6",
+    preserve_interword_spaces: "1",
+  });
   return tesseractWorker;
 }
 
