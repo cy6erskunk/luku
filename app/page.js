@@ -29,9 +29,20 @@ async function ocrImage(apiKey, base64, mediaType) {
 let tesseractWorker = null;
 let ocrStatusCallback = null;
 
+function waitForTesseract(timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined" && window.Tesseract) return resolve(window.Tesseract);
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      if (typeof window !== "undefined" && window.Tesseract) { clearInterval(id); resolve(window.Tesseract); }
+      else if (Date.now() - t0 > timeout) { clearInterval(id); reject(new Error("Tesseract.js failed to load")); }
+    }, 100);
+  });
+}
+
 async function getOrCreateWorker() {
   if (tesseractWorker) return tesseractWorker;
-  const { createWorker } = await import("tesseract.js");
+  const { createWorker } = await waitForTesseract();
   tesseractWorker = await createWorker("fin", 1, {
     logger(p) {
       if (!ocrStatusCallback || p.progress == null) return;
