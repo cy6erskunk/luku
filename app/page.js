@@ -102,8 +102,24 @@ export default function Luku() {
   const [err, setErr] = useState("");
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
-  const [session, setSession] = useState({});
-  const [saved, setSaved] = useState([]);
+  const [session, _setSession] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try { const v = JSON.parse(localStorage.getItem("luku_session") || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch { return {}; }
+  });
+  const setSession = useCallback((v) => {
+    let next;
+    _setSession((prev) => { next = typeof v === "function" ? v(prev) : v; return next; });
+    try { localStorage.setItem("luku_session", JSON.stringify(next)); } catch {}
+  }, []);
+  const [saved, _setSaved] = useState(() => {
+    if (typeof window === "undefined") return [];
+    try { const v = JSON.parse(localStorage.getItem("luku_saved") || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+  });
+  const setSaved = useCallback((v) => {
+    let next;
+    _setSaved((prev) => { next = typeof v === "function" ? v(prev) : v; return next; });
+    try { localStorage.setItem("luku_saved", JSON.stringify(next)); } catch {}
+  }, []);
   const [revIdx, setRevIdx] = useState(0);
 
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
@@ -365,7 +381,8 @@ export default function Luku() {
                     </div>
                   </div>
                 )}
-                <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); }} style={{ ...Bp, width: "100%" }}>📸 Scan Another Page</button>
+                <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
+                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Start over</button>}
               </div>}
         </div>
       )}
