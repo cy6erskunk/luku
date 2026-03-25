@@ -1,5 +1,8 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+const SKIP_KEY = "__skip__";
+const hasApiKey = (key) => key && key !== SKIP_KEY;
 
 // ── API ────────────────────────────────────────────────────────────────────
 async function callClaude(apiKey, messages, system, maxTokens = 1500) {
@@ -26,7 +29,7 @@ async function ocrImage(apiKey, base64, mediaType) {
 }
 
 // ── Local OCR (Tesseract.js) ──────────────────────────────────────────────
-let tesseractWorker = null;
+let tesseractWorkerPromise = null;
 let ocrStatusCallback = null;
 
 function waitForTesseract(timeout = 15000) {
@@ -40,10 +43,9 @@ function waitForTesseract(timeout = 15000) {
   });
 }
 
-async function getOrCreateWorker() {
-  if (tesseractWorker) return tesseractWorker;
+async function initWorker() {
   const { createWorker } = await waitForTesseract();
-  tesseractWorker = await createWorker("fin", 1, {
+  const worker = await createWorker("fin", 1, {
     logger(p) {
       if (!ocrStatusCallback || p.progress == null) return;
       const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
@@ -55,11 +57,28 @@ async function getOrCreateWorker() {
       if (label) ocrStatusCallback(label, p.progress);
     },
   });
-  await tesseractWorker.setParameters({
+  await worker.setParameters({
     tessedit_pageseg_mode: "6",
     preserve_interword_spaces: "1",
   });
-  return tesseractWorker;
+  return worker;
+}
+
+function getOrCreateWorker() {
+  if (!tesseractWorkerPromise) {
+    tesseractWorkerPromise = initWorker().catch((err) => {
+      tesseractWorkerPromise = null;
+      throw err;
+    });
+  }
+  return tesseractWorkerPromise;
+}
+
+function resetTesseractWorker() {
+  if (!tesseractWorkerPromise) return;
+  const p = tesseractWorkerPromise;
+  tesseractWorkerPromise = null;
+  p.then((w) => w.terminate()).catch(() => {});
 }
 
 async function ocrLocal(base64, mediaType, onStatus) {
@@ -173,6 +192,8 @@ export default function Luku() {
 
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
 
+  useEffect(() => () => resetTesseractWorker(), []);
+
   // ── API key screen ───────────────────────────────────────────────────────
   if (!savedKey) {
     return (
@@ -206,7 +227,7 @@ export default function Luku() {
             Start reading →
           </button>
           <button
-            onClick={() => setSavedKey("__skip__")}
+            onClick={() => setSavedKey(SKIP_KEY)}
             style={{ ...Bg, width: "100%", marginTop: 8 }}
           >
             Skip — use local OCR only
@@ -238,11 +259,11 @@ export default function Luku() {
     finally { setBusy(false); setStep(""); }
   };
 
-  const onFile = (e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; };
-  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); };
+  const onFile = (e) => { const f = e.target.files?.[0]; if (f && !busy) processFile(f); e.target.value = ""; };
+  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && !busy) processFile(f); };
 
   const rescanWithAI = async () => {
-    const hasKey = savedKey && savedKey !== "__skip__";
+    const hasKey = hasApiKey(savedKey);
     if (!hasKey) { setErr("Enter your API key to use AI OCR — tap 'Key' in the header."); return; }
     setErr(""); setBusy(true); setStep("Re-scanning with AI…");
     try {
@@ -258,7 +279,7 @@ export default function Luku() {
   };
 
   // ── Word tap ─────────────────────────────────────────────────────────────
-  const hasRealKey = savedKey && savedKey !== "__skip__";
+  const hasRealKey = hasApiKey(savedKey);
 
   const onWord = async (e, tok) => {
     e.stopPropagation(); if (xlating) return;
