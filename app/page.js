@@ -1,5 +1,8 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+const SKIP_KEY = "__skip__";
+const hasApiKey = (key) => key && key !== SKIP_KEY;
 
 // ── API ────────────────────────────────────────────────────────────────────
 async function callClaude(apiKey, messages, system, maxTokens = 1500) {
@@ -23,6 +26,69 @@ async function ocrImage(apiKey, base64, mediaType) {
     "You are an OCR assistant. Extract text from images with high accuracy.",
     1500
   );
+}
+
+// ── Local OCR (Tesseract.js) ──────────────────────────────────────────────
+let tesseractWorkerPromise = null;
+let ocrStatusCallback = null;
+
+function waitForTesseract(timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined" && window.Tesseract) return resolve(window.Tesseract);
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      if (typeof window !== "undefined" && window.Tesseract) { clearInterval(id); resolve(window.Tesseract); }
+      else if (Date.now() - t0 > timeout) { clearInterval(id); reject(new Error("Tesseract.js failed to load")); }
+    }, 100);
+  });
+}
+
+async function initWorker() {
+  const { createWorker } = await waitForTesseract();
+  const worker = await createWorker("fin", 1, {
+    logger(p) {
+      if (!ocrStatusCallback || p.progress == null) return;
+      const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
+        : p.status === "initializing tesseract" ? "Initializing OCR…"
+        : p.status === "loading language traineddata" ? "Downloading Finnish model…"
+        : p.status === "initializing api" ? "Preparing OCR…"
+        : p.status === "recognizing text" ? "Recognizing text…"
+        : null;
+      if (label) ocrStatusCallback(label, p.progress);
+    },
+  });
+  await worker.setParameters({
+    tessedit_pageseg_mode: "6",
+    preserve_interword_spaces: "1",
+  });
+  return worker;
+}
+
+function getOrCreateWorker() {
+  if (!tesseractWorkerPromise) {
+    tesseractWorkerPromise = initWorker().catch((err) => {
+      tesseractWorkerPromise = null;
+      throw err;
+    });
+  }
+  return tesseractWorkerPromise;
+}
+
+function resetTesseractWorker() {
+  if (!tesseractWorkerPromise) return;
+  const p = tesseractWorkerPromise;
+  tesseractWorkerPromise = null;
+  p.then((w) => w.terminate()).catch(() => {});
+}
+
+async function ocrLocal(base64, mediaType, onStatus) {
+  ocrStatusCallback = onStatus;
+  if (onStatus) onStatus("Loading OCR engine…", 0);
+  const worker = await getOrCreateWorker();
+  const dataUrl = `data:${mediaType};base64,${base64}`;
+  const { data: { text } } = await worker.recognize(dataUrl);
+  ocrStatusCallback = null;
+  return text;
 }
 
 async function translateWord(apiKey, word, context) {
@@ -121,8 +187,12 @@ export default function Luku() {
     try { localStorage.setItem("luku_saved", JSON.stringify(next)); } catch {}
   }, []);
   const [revIdx, setRevIdx] = useState(0);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrSource, setOcrSource] = useState("");
 
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
+
+  useEffect(() => () => resetTesseractWorker(), []);
 
   // ── API key screen ───────────────────────────────────────────────────────
   if (!savedKey) {
@@ -137,9 +207,9 @@ export default function Luku() {
             </div>
           </div>
           <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>
-            Luku uses the Anthropic API to read Finnish text from photos and translate words on tap. Enter your API key from{" "}
-            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#4a7c9e" }}>console.anthropic.com</a>.
-            Your key is sent only to Anthropic and is never stored on any server.
+            Luku reads Finnish text from photos and helps you learn vocabulary. An API key from{" "}
+            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#4a7c9e" }}>console.anthropic.com</a>{" "}
+            enables translations and AI-powered OCR, or skip to scan locally for free.
           </p>
           <input
             type="password"
@@ -154,7 +224,13 @@ export default function Luku() {
             disabled={!keyInput.startsWith("sk-")}
             style={{ ...Bp, width: "100%", opacity: keyInput.startsWith("sk-") ? 1 : 0.4 }}
           >
-            Start reading →
+            {stage > 0 ? "Save key & continue →" : "Start reading →"}
+          </button>
+          <button
+            onClick={() => setSavedKey(SKIP_KEY)}
+            style={{ ...Bg, width: "100%", marginTop: 8 }}
+          >
+            Skip — use local OCR only
           </button>
           <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
             Keys are kept in memory only and cleared when you close the tab.
@@ -170,22 +246,46 @@ export default function Luku() {
     try {
       const { base64, mediaType } = await fileToBase64(file);
       setPreview(`data:${mediaType};base64,${base64}`);
-      setStep("Extracting text with AI…");
-      const out = await ocrImage(savedKey, base64, mediaType);
+      setStep("Loading OCR engine…");
+      setOcrProgress(0);
+      const out = await ocrLocal(base64, mediaType, (label, p) => {
+        setStep(label);
+        setOcrProgress(p);
+      });
+      setOcrProgress(1);
       if (!out?.trim()) { setErr("No text found — try a clearer photo."); return; }
-      setText(out.trim()); setTokens(tokenize(out.trim())); setStage(1);
+      setText(out.trim()); setTokens(tokenize(out.trim())); setStage(1); setOcrSource("local");
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); setStep(""); }
   };
 
-  const onFile = (e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; };
-  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); };
+  const onFile = (e) => { const f = e.target.files?.[0]; if (f && !busy) processFile(f); e.target.value = ""; };
+  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && !busy) processFile(f); };
+
+  const rescanWithAI = async () => {
+    const hasKey = hasApiKey(savedKey);
+    if (!hasKey) { setErr("Enter your API key to use AI OCR — tap 'Key' in the header."); return; }
+    setErr(""); setBusy(true); setStep("Re-scanning with AI…");
+    try {
+      const [header, b64] = preview.split(",");
+      const mediaType = header.match(/data:(.*?);/)[1];
+      const out = await ocrImage(savedKey, b64, mediaType);
+      if (!out?.trim()) { setErr("AI found no text — try a different photo."); return; }
+      setText(out.trim()); setTokens(tokenize(out.trim()));
+      setOcrSource("ai");
+      setSession({}); setPopup(null);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); setStep(""); }
+  };
 
   // ── Word tap ─────────────────────────────────────────────────────────────
+  const hasRealKey = hasApiKey(savedKey);
+
   const onWord = async (e, tok) => {
     e.stopPropagation(); if (xlating) return;
     const r = e.target.getBoundingClientRect(), pr = readRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const x = r.left - pr.left + r.width / 2, y = r.top - pr.top;
+    if (!hasRealKey) { setPopup({ word: tok.v, k: tok.k, x, y, noKey: true }); return; }
     if (session[tok.k]) { setPopup({ ...session[tok.k], word: tok.v, k: tok.k, x, y }); return; }
     setXlating(tok.k); setPopup({ word: tok.v, k: tok.k, x, y, loading: true });
     try {
@@ -193,7 +293,7 @@ export default function Luku() {
       const entry = { base: d.base, translations: d.translations, pos: d.pos, original: tok.v, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       setPopup({ ...entry, word: tok.v, k: tok.k, x, y });
-    } catch { setPopup((p) => ({ ...p, loading: false, translations: ["(error)"] })); }
+    } catch (e) { setPopup((p) => ({ ...p, loading: false, translations: [`(${e.message || "error"})`] })); }
     finally { setXlating(null); }
   };
 
@@ -238,7 +338,7 @@ export default function Luku() {
         <div style={{ padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 10, fontFamily: "monospace" }}>Step 1 — Scan</div>
           <h2 style={{ fontSize: 24, fontWeight: 400, textAlign: "center", margin: "0 0 6px" }}>Photograph a Finnish page</h2>
-          <p style={{ color: "#6b645e", textAlign: "center", marginBottom: 28, maxWidth: 300, fontSize: 13, lineHeight: 1.6 }}>Take a photo or upload an image. Claude will extract the text.</p>
+          <p style={{ color: "#6b645e", textAlign: "center", marginBottom: 28, maxWidth: 300, fontSize: 13, lineHeight: 1.6 }}>Take a photo or upload an image. Text will be extracted locally.</p>
           <div
             onDrop={onDrop} onDragOver={(e) => e.preventDefault()}
             onClick={() => !busy && fileRef.current?.click()}
@@ -260,7 +360,18 @@ export default function Luku() {
             <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
             <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>📁 Photo Library</button>
           </div>
-          {busy && <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13 }}><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{step}</div>}
+          {busy && (
+            <div style={{ marginTop: 20, width: "100%", maxWidth: 400 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13, marginBottom: 8 }}>
+                <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{step}
+              </div>
+              {ocrProgress > 0 && ocrProgress < 1 && (
+                <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.round(ocrProgress * 100)}%`, background: "linear-gradient(90deg,#4a7c9e,#2d5a7a)", transition: "width 0.2s" }} />
+                </div>
+              )}
+            </div>
+          )}
           {err && <div style={{ marginTop: 14, maxWidth: 400, width: "100%", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>⚠ {err}</div>}
         </div>
       )}
@@ -282,6 +393,20 @@ export default function Luku() {
               </div>
             ))}
           </div>
+          {ocrSource === "local" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 9, padding: "8px 13px", marginBottom: 14, fontSize: 12 }}>
+              <span style={{ color: "#6b645e" }}>Scanned locally with Tesseract</span>
+              <button onClick={rescanWithAI} disabled={busy} style={{ ...Bg, padding: "5px 12px", fontSize: 11, opacity: busy ? 0.5 : 1 }}>
+                {busy ? "Scanning…" : "Re-scan with AI"}
+              </button>
+            </div>
+          )}
+          {ocrSource === "ai" && (
+            <div style={{ background: "rgba(74,124,158,0.08)", border: "1px solid rgba(74,124,158,0.15)", borderRadius: 9, padding: "8px 13px", marginBottom: 14, fontSize: 11, color: "#4a7c9e" }}>
+              Scanned with AI (Claude Vision)
+            </div>
+          )}
+          {err && <div style={{ marginBottom: 14, background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>⚠ {err}</div>}
           <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "20px 16px", lineHeight: 2.1, fontSize: 17 }}>
             {tokens.map((tok, i) => {
               if (tok.t === "br") return <br key={i} />;
@@ -306,7 +431,13 @@ export default function Luku() {
           </div>
           {popup && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: Math.min(Math.max((popup.x ?? 150) - 125, 4), (readRef.current?.offsetWidth ?? 360) - 258), top: Math.max((popup.y ?? 80) - 155, 8), width: 250, background: "#181d2a", border: "1px solid rgba(74,124,158,0.45)", borderRadius: 12, padding: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.7)", zIndex: 200, animation: "fadeUp 0.12s ease" }}>
-              {popup.loading
+              {popup.noKey
+                ? <div style={{ textAlign: "center", padding: "12px 0", color: "#6b645e", fontSize: 12 }}>
+                    <div style={{ fontSize: 19, color: "#e8e0d5", fontWeight: 600, marginBottom: 8 }}>{popup.word}</div>
+                    Add your API key to translate words.
+                    <button onClick={() => { setPopup(null); setSavedKey(""); }} style={{ ...Bg, marginTop: 10, padding: "5px 12px", fontSize: 11, display: "block", width: "100%" }}>Add API key</button>
+                  </div>
+                : popup.loading
                 ? <div style={{ textAlign: "center", padding: "18px 0", color: "#4a7c9e" }}><div style={{ fontSize: 22, animation: "spin 1s linear infinite", marginBottom: 6 }}>⟳</div><div style={{ fontSize: 12 }}>Analysing "{popup.word}"…</div></div>
                 : <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -381,8 +512,8 @@ export default function Luku() {
                     </div>
                   </div>
                 )}
-                <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
-                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Start over</button>}
+                <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
+                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Start over</button>}
               </div>}
         </div>
       )}
