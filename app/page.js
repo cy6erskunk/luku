@@ -224,7 +224,7 @@ export default function Luku() {
             disabled={!keyInput.startsWith("sk-")}
             style={{ ...Bp, width: "100%", opacity: keyInput.startsWith("sk-") ? 1 : 0.4 }}
           >
-            Start reading →
+            {stage > 0 ? "Save key & continue →" : "Start reading →"}
           </button>
           <button
             onClick={() => setSavedKey(SKIP_KEY)}
@@ -293,7 +293,7 @@ export default function Luku() {
       const entry = { base: d.base, translations: d.translations, pos: d.pos, original: tok.v, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       setPopup({ ...entry, word: tok.v, k: tok.k, x, y });
-    } catch { setPopup((p) => ({ ...p, loading: false, translations: ["(error)"] })); }
+    } catch (e) { setPopup((p) => ({ ...p, loading: false, translations: [`(${e.message || "error"})`] })); }
     finally { setXlating(null); }
   };
 
