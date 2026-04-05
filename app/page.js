@@ -156,7 +156,14 @@ const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,2
 // ── Component ──────────────────────────────────────────────────────────────
 export default function Luku() {
   const [apiKey, setApiKey] = useState("");
-  const [savedKey, setSavedKey] = useState("");
+  const [savedKey, _setSavedKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try { return localStorage.getItem("luku_api_key") || ""; } catch { return ""; }
+  });
+  const setSavedKey = useCallback((v) => {
+    _setSavedKey(v);
+    try { if (v) localStorage.setItem("luku_api_key", v); else localStorage.removeItem("luku_api_key"); } catch {}
+  }, []);
   const [keyInput, setKeyInput] = useState("");
 
   const [stage, setStage] = useState(0);
@@ -233,7 +240,7 @@ export default function Luku() {
             Skip — use local OCR only
           </button>
           <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
-            Keys are kept in memory only and cleared when you close the tab.
+            Key is saved in your browser's local storage and never sent to any server except Anthropic.
           </p>
         </div>
       </div>
