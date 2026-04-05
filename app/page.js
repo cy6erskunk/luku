@@ -157,7 +157,6 @@ const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,2
 export default function Luku() {
   const [apiKey, setApiKey] = useState("");
   const [savedKey, _setSavedKey] = useState(() => {
-    if (typeof window === "undefined") return "";
     try { return localStorage.getItem("luku_api_key") || ""; } catch { return ""; }
   });
   const setSavedKey = useCallback((v) => {
@@ -176,7 +175,6 @@ export default function Luku() {
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
   const [session, _setSession] = useState(() => {
-    if (typeof window === "undefined") return {};
     try { const v = JSON.parse(localStorage.getItem("luku_session") || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch { return {}; }
   });
   const setSession = useCallback((v) => {
@@ -185,7 +183,6 @@ export default function Luku() {
     try { localStorage.setItem("luku_session", JSON.stringify(next)); } catch {}
   }, []);
   const [saved, _setSaved] = useState(() => {
-    if (typeof window === "undefined") return [];
     try { const v = JSON.parse(localStorage.getItem("luku_saved") || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
   });
   const setSaved = useCallback((v) => {
