@@ -1,5 +1,8 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { createAuthClient } from "@neondatabase/auth/next";
+
+const authClient = createAuthClient();
 
 const SKIP_KEY = "__skip__";
 const hasApiKey = (key) => key && key !== SKIP_KEY;
@@ -149,12 +152,116 @@ function sentenceOf(text, word) {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const D = "#0f1117";
+
+// ── Sign-in screen ─────────────────────────────────────────────────────────
+function SignIn() {
+  const [loading, setLoading] = useState(null);
+  const [err, setErr] = useState("");
+  const [mode, setMode] = useState("main"); // "main" | "sign-in" | "sign-up"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+
+  const Bp2 = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
+  const Bg2 = { ...Bp2, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
+  const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "Georgia,serif", boxSizing: "border-box", outline: "none", marginBottom: 10 };
+
+  const signInSocial = async (provider) => {
+    setErr(""); setLoading(provider);
+    try {
+      const result = await authClient.signIn.social({ provider, callbackURL: "/" });
+      if (result?.error) setErr(result.error.message || "Sign-in failed. Check your Neon Auth setup.");
+    } catch (e) { setErr(e?.message || "Sign-in failed."); }
+    finally { setLoading(null); }
+  };
+
+  const signInEmail = async () => {
+    setErr(""); setLoading("email");
+    try {
+      const result = await authClient.signIn.email({ email, password, callbackURL: "/" });
+      if (result?.error) setErr(result.error.message || "Sign-in failed.");
+    } catch (e) { setErr(e?.message || "Sign-in failed."); }
+    finally { setLoading(null); }
+  };
+
+  const signUpEmail = async () => {
+    setErr(""); setLoading("email");
+    try {
+      const result = await authClient.signUp.email({ email, password, name: name || email.split("@")[0], callbackURL: "/" });
+      if (result?.error) setErr(result.error.message || "Sign-up failed.");
+    } catch (e) { setErr(e?.message || "Sign-up failed."); }
+    finally { setLoading(null); }
+  };
+
+  const logo = (
+    <>
+      <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 20px" }}>🇫🇮</div>
+      <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
+      <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
+    </>
+  );
+
+  const errBox = err && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, fontSize: 12, color: "#c48a8a" }}>{err}</div>;
+
+  return (
+    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+        {logo}
+
+        {mode === "main" && <>
+          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
+          <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+            {loading === "google" ? "Redirecting…" : "Continue with Google"}
+          </button>
+          <button onClick={() => signInSocial("github")} disabled={!!loading} style={{ ...Bg2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+            {loading === "github" ? "Redirecting…" : "Continue with GitHub"}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            <span style={{ fontSize: 11, color: "#3a4550" }}>or</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          </div>
+          <button onClick={() => { setErr(""); setMode("sign-in"); }} style={{ ...Bg2, width: "100%", marginBottom: 8 }}>Sign in with email</button>
+          <button onClick={() => { setErr(""); setMode("sign-up"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>Create account</button>
+          {errBox}
+        </>}
+
+        {mode === "sign-in" && <>
+          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+            onKeyDown={(e) => e.key === "Enter" && signInEmail()} />
+          <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+            {loading === "email" ? "Signing in…" : "Sign in"}
+          </button>
+          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
+          {errBox}
+        </>}
+
+        {mode === "sign-up" && <>
+          <input style={inp} type="text" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
+            onKeyDown={(e) => e.key === "Enter" && signUpEmail()} />
+          <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+            {loading === "email" ? "Creating account…" : "Create account"}
+          </button>
+          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
+          {errBox}
+        </>}
+      </div>
+    </div>
+  );
+}
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 const Bp = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
 const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function Luku() {
+  const authSession = authClient.useSession();
+  const user = authSession.data?.user ?? null;
+  const authLoading = authSession.isPending;
+
   const [apiKey, setApiKey] = useState("");
   const [savedKey, _setSavedKey] = useState(() => {
     try { return localStorage.getItem("luku_api_key") || ""; } catch { return ""; }
@@ -182,21 +289,44 @@ export default function Luku() {
     _setSession((prev) => { next = typeof v === "function" ? v(prev) : v; return next; });
     try { localStorage.setItem("luku_session", JSON.stringify(next)); } catch {}
   }, []);
-  const [saved, _setSaved] = useState(() => {
-    try { const v = JSON.parse(localStorage.getItem("luku_saved") || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
-  });
-  const setSaved = useCallback((v) => {
-    let next;
-    _setSaved((prev) => { next = typeof v === "function" ? v(prev) : v; return next; });
-    try { localStorage.setItem("luku_saved", JSON.stringify(next)); } catch {}
-  }, []);
   const [revIdx, setRevIdx] = useState(0);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrSource, setOcrSource] = useState("");
 
+  // DB-backed word list
+  const [dbWords, setDbWords] = useState([]);
+  const [loadingWords, setLoadingWords] = useState(true);
+
+  // SRS review UI
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [grading, setGrading] = useState(false);
+
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
 
   useEffect(() => () => resetTesseractWorker(), []);
+
+  useEffect(() => {
+    if (!user) { setLoadingWords(false); return; }
+    setLoadingWords(true);
+    fetch("/api/words")
+      .then((r) => r.json())
+      .then(({ words }) => setDbWords(words || []))
+      .catch(() => {})
+      .finally(() => setLoadingWords(false));
+  }, [user?.id]);
+
+  // ── Sign-in screen ───────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <SignIn />;
+  }
 
   // ── API key screen ───────────────────────────────────────────────────────
   if (!savedKey) {
@@ -230,14 +360,11 @@ export default function Luku() {
           >
             {stage > 0 ? "Save key & continue →" : "Start reading →"}
           </button>
-          <button
-            onClick={() => setSavedKey(SKIP_KEY)}
-            style={{ ...Bg, width: "100%", marginTop: 8 }}
-          >
+          <button onClick={() => setSavedKey(SKIP_KEY)} style={{ ...Bg, width: "100%", marginTop: 8 }}>
             Skip — use local OCR only
           </button>
           <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
-            Key is saved in your browser's local storage and never sent to any server except Anthropic.
+            Key is saved in your browser&apos;s local storage and never sent to any server except Anthropic.
           </p>
         </div>
       </div>
@@ -301,14 +428,43 @@ export default function Luku() {
     finally { setXlating(null); }
   };
 
-  const addWord = () => {
+  const addWord = async () => {
     if (!popup?.k) return;
+    const entry = session[popup.k];
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
+    try {
+      const r = await fetch("/api/words", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos }),
+      });
+      const { word: saved } = await r.json();
+      if (saved) setDbWords((prev) => { const without = prev.filter((w) => w.id !== saved.id); return [...without, saved]; });
+    } catch (e) { console.error("save word failed", e); }
   };
 
-  const reviewList = Object.entries(session).filter(([, v]) => v.added);
-  const confirmWord = (k) => { setSaved((s) => [...s, session[k]]); setRevIdx((i) => i + 1); };
+  const gradeWord = async (grade) => {
+    const word = dueWords[revIdx];
+    if (!word) return;
+    setGrading(true);
+    try {
+      const r = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ wordId: word.id, grade }),
+      });
+      const { word: updated } = await r.json();
+      if (updated) setDbWords((prev) => prev.map((w) => w.id === updated.id ? updated : w));
+    } catch (e) { console.error("grade failed", e); }
+    finally { setGrading(false); }
+    setRevIdx((i) => i + 1);
+    setShowAnswer(false);
+  };
+
+  // ── Derived values ────────────────────────────────────────────────────────
+  const dueWords = dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  const savedBases = new Set(dbWords.map((w) => w.base));
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -331,9 +487,15 @@ export default function Luku() {
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {saved.length > 0 && <div style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)" }}>{saved.length} saved</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {dbWords.length > 0 && (
+            <div style={{ display: "flex", gap: 5 }}>
+              <div style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)" }}>{dbWords.length} words</div>
+              {dueWords.length > 0 && <div style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)" }}>{dueWords.length} due</div>}
+            </div>
+          )}
           <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
+          <button onClick={() => authClient.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
         </div>
       </div>
 
@@ -377,6 +539,11 @@ export default function Luku() {
             </div>
           )}
           {err && <div style={{ marginTop: 14, maxWidth: 400, width: "100%", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>⚠ {err}</div>}
+          {dueWords.length > 0 && (
+            <button onClick={() => { setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13 }}>
+              Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
+            </button>
+          )}
         </div>
       )}
 
@@ -416,14 +583,16 @@ export default function Luku() {
               if (tok.t === "br") return <br key={i} />;
               if (tok.t === "sp") return <span key={i}> </span>;
               if (tok.t === "pu") return <span key={i} style={{ color: "#333" }}>{tok.v}</span>;
-              const added = session[tok.k]?.added, seen = !!session[tok.k] && !added, loading = xlating === tok.k;
+              const added = session[tok.k]?.added || savedBases.has(session[tok.k]?.base);
+              const seen = !!session[tok.k] && !added;
+              const loading = xlating === tok.k;
               return (
                 <span key={i} onClick={(e) => onWord(e, tok)} style={{ cursor: "pointer", borderRadius: 3, padding: "1px 2px", background: loading ? "rgba(74,124,158,0.3)" : added ? "rgba(74,124,158,0.15)" : seen ? "rgba(122,158,126,0.1)" : "transparent", color: added ? "#7ab4d4" : seen ? "#8eba92" : "#e0d8cf", borderBottom: !added && !seen && !loading ? "1px dotted rgba(232,224,213,0.12)" : "none", transition: "all 0.12s" }}>{tok.v}</span>
               );
             })}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            {[{ n: Object.keys(session).length, l: "looked up" }, { n: Object.values(session).filter((w) => w.added).length, l: "to review" }].map(({ n, l }) => (
+            {[{ n: Object.keys(session).length, l: "looked up" }, { n: Object.values(session).filter((w) => w.added).length, l: "added" }].map(({ n, l }) => (
               <div key={l} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 9, padding: "7px 13px" }}>
                 <div style={{ fontSize: 18, fontWeight: 600, color: "#4a7c9e" }}>{n}</div>
                 <div style={{ fontSize: 10, color: "#555" }}>{l}</div>
@@ -431,7 +600,9 @@ export default function Luku() {
             ))}
           </div>
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 18px", background: "linear-gradient(to top,#0f1117 60%,transparent)", zIndex: 50 }}>
-            <button onClick={() => { setPopup(null); setRevIdx(0); setStage(2); }} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block" }}>Done Reading → Review Words</button>
+            <button onClick={() => { setPopup(null); setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block" }}>
+              Done Reading → Review{dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
+            </button>
           </div>
           {popup && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", left: Math.min(Math.max((popup.x ?? 150) - 125, 4), (readRef.current?.offsetWidth ?? 360) - 258), top: Math.max((popup.y ?? 80) - 155, 8), width: 250, background: "#181d2a", border: "1px solid rgba(74,124,158,0.45)", borderRadius: 12, padding: 14, boxShadow: "0 12px 40px rgba(0,0,0,0.7)", zIndex: 200, animation: "fadeUp 0.12s ease" }}>
@@ -467,58 +638,60 @@ export default function Luku() {
       {stage === 2 && (
         <div style={{ padding: "24px 18px 36px", maxWidth: 460, margin: "0 auto" }}>
           <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 14, fontFamily: "monospace" }}>Step 3 — Review</div>
-          {reviewList.length === 0
-            ? <div style={{ textAlign: "center", padding: "50px 0" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📖</div>
-              <div style={{ color: "#6b645e", fontSize: 14, lineHeight: 1.6 }}>No words added.<br />Tap words while reading to look them up.</div>
-              <button onClick={() => setStage(1)} style={{ ...Bg, marginTop: 18, padding: "9px 20px" }}>← Back</button>
-            </div>
-            : revIdx < reviewList.length
-              ? (() => {
-                const [k, w] = reviewList[revIdx];
-                return <>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{ fontSize: 16, fontWeight: 400 }}>Review words</div>
-                    <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {reviewList.length}</div>
-                  </div>
-                  <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 24, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${(revIdx / reviewList.length) * 100}%`, background: "#4a7c9e", transition: "width 0.3s" }} />
-                  </div>
-                  <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18 }}>
-                    <div style={{ fontSize: 30, marginBottom: 4 }}>{w.original}</div>
-                    {w.base && w.base !== w.original?.toLowerCase() && <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace", marginBottom: 4 }}>base: {w.base}</div>}
-                    {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 18 }}>{w.pos}</div>}
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 18 }}>
-                      {w.translations.map((t, i) => <div key={i} style={{ fontSize: i === 0 ? 17 : 13, color: i === 0 ? "#c8c0b5" : "#6b645e", marginBottom: 4 }}>{t}</div>)}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button onClick={() => setRevIdx((i) => i + 1)} style={{ ...Bg, flex: 1 }}>Skip</button>
-                    <button onClick={() => confirmWord(k)} style={{ ...Bp, flex: 2 }}>✓ Save to list</button>
-                  </div>
-                </>;
-              })()
-              : <div style={{ textAlign: "center", padding: "36px 0" }}>
-                <div style={{ fontSize: 46, marginBottom: 12 }}>🎉</div>
-                <h2 style={{ fontSize: 20, fontWeight: 400, marginBottom: 6 }}>Session complete</h2>
-                <p style={{ color: "#6b645e", marginBottom: 24 }}>Saved <strong style={{ color: "#4a7c9e" }}>{saved.length}</strong> word{saved.length !== 1 ? "s" : ""}.</p>
-                {saved.length > 0 && (
-                  <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: 16, marginBottom: 24, textAlign: "left" }}>
-                    <div style={{ fontSize: 10, color: "#4a7c9e", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, fontFamily: "monospace" }}>Saved</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {saved.map((w, i) => (
-                        <div key={i} style={{ background: "rgba(74,124,158,0.1)", border: "1px solid rgba(74,124,158,0.2)", borderRadius: 7, padding: "4px 10px", fontSize: 12 }}>
-                          <span style={{ color: "#7ab4d4" }}>{w.base || w.original}</span>
-                          <span style={{ color: "#3a4550", margin: "0 3px" }}>·</span>
-                          <span style={{ color: "#8a8480" }}>{w.translations[0]}</span>
+          {loadingWords
+            ? <div style={{ textAlign: "center", padding: "60px 0", color: "#4a7c9e" }}>Loading…</div>
+            : dueWords.length === 0
+              ? <div style={{ textAlign: "center", padding: "50px 0" }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
+                  <div style={{ color: "#6b645e", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>All caught up!<br />No words due for review.</div>
+                  <div style={{ color: "#4a4040", fontSize: 12, marginBottom: 20 }}>{dbWords.length} word{dbWords.length !== 1 ? "s" : ""} in your vocabulary.</div>
+                  <button onClick={() => setStage(0)} style={{ ...Bg, padding: "9px 20px" }}>← Back to Scan</button>
+                </div>
+              : revIdx < dueWords.length
+                ? (() => {
+                    const w = dueWords[revIdx];
+                    return (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+                          <div style={{ fontSize: 16, fontWeight: 400 }}>Review</div>
+                          <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {dueWords.length}</div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
-                {saved.length > 0 && <button onClick={() => { setSaved([]); setSession({}); setRevIdx(0); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); setStage(0); }} style={{ ...Bg, width: "100%", fontSize: 12 }}>Start over</button>}
-              </div>}
+                        <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 24, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(revIdx / dueWords.length) * 100}%`, background: "#4a7c9e", transition: "width 0.3s" }} />
+                        </div>
+                        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                          <div style={{ fontSize: 32, marginBottom: 4 }}>{w.word}</div>
+                          {w.base && w.base !== w.word?.toLowerCase() && <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace", marginBottom: 4 }}>base: {w.base}</div>}
+                          {showAnswer && (
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
+                              {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 10 }}>{w.pos}</div>}
+                              {(w.translations || []).map((t, i) => (
+                                <div key={i} style={{ fontSize: i === 0 ? 18 : 13, color: i === 0 ? "#c8c0b5" : "#6b645e", marginBottom: 4 }}>{t}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {!showAnswer
+                          ? <button onClick={() => setShowAnswer(true)} style={{ ...Bp, width: "100%" }}>Show answer</button>
+                          : <div style={{ display: "flex", gap: 8, opacity: grading ? 0.5 : 1 }}>
+                              <button onClick={() => gradeWord(1)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
+                              <button onClick={() => gradeWord(3)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(158,138,80,0.4)", color: "#c4b870", fontSize: 13 }}>Hard</button>
+                              <button onClick={() => gradeWord(5)} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Easy</button>
+                            </div>}
+                        {w.interval_days > 0 && showAnswer && (
+                          <div style={{ textAlign: "center", marginTop: 12, fontSize: 11, color: "#3a4550" }}>
+                            last interval: {w.interval_days}d · ease: {Number(w.ease_factor).toFixed(1)}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()
+                : <div style={{ textAlign: "center", padding: "36px 0" }}>
+                    <div style={{ fontSize: 46, marginBottom: 12 }}>🎉</div>
+                    <h2 style={{ fontSize: 20, fontWeight: 400, marginBottom: 6 }}>Session complete</h2>
+                    <p style={{ color: "#6b645e", marginBottom: 24 }}>Reviewed <strong style={{ color: "#4a7c9e" }}>{dueWords.length}</strong> card{dueWords.length !== 1 ? "s" : ""}.</p>
+                    <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setShowAnswer(false); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
+                  </div>}
         </div>
       )}
 
