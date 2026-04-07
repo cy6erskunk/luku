@@ -1,6 +1,8 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useUser } from "@stackframe/stack";
+import { createAuthClient } from "@neondatabase/auth/next";
+
+const authClient = createAuthClient();
 
 const SKIP_KEY = "__skip__";
 const hasApiKey = (key) => key && key !== SKIP_KEY;
@@ -156,7 +158,9 @@ const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,2
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function Luku() {
-  const user = useUser();
+  const session = authClient.useSession();
+  const user = session.data?.user ?? null;
+  const authLoading = session.isPending;
 
   const [apiKey, setApiKey] = useState("");
   const [savedKey, _setSavedKey] = useState(() => {
@@ -212,6 +216,14 @@ export default function Luku() {
   }, [user?.id]);
 
   // ── Sign-in screen ───────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -220,7 +232,8 @@ export default function Luku() {
           <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
           <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
           <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 28 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
-          <a href="/handler/sign-in" style={{ display: "block", padding: "13px 18px", borderRadius: 12, fontSize: 14, fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff", textDecoration: "none" }}>Sign in →</a>
+          <button onClick={() => authClient.signIn.social({ provider: "google", callbackURL: "/" })} style={{ ...Bp, width: "100%", marginBottom: 10 }}>Sign in with Google</button>
+          <button onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/" })} style={{ ...Bg, width: "100%" }}>Sign in with GitHub</button>
         </div>
       </div>
     );
@@ -393,7 +406,7 @@ export default function Luku() {
             </div>
           )}
           <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
-          <button onClick={() => user.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
+          <button onClick={() => authClient.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
         </div>
       </div>
 

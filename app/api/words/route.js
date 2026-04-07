@@ -1,8 +1,9 @@
-import { stackServerApp } from "@/app/stack";
+import { auth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 
-export async function GET(request) {
-  const user = await stackServerApp.getUser({ tokenStore: request });
+export async function GET() {
+  const { data: session } = await auth.getSession();
+  const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const sql = getDb();
@@ -13,7 +14,8 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const user = await stackServerApp.getUser({ tokenStore: request });
+  const { data: session } = await auth.getSession();
+  const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { word, base, translations, pos } = await request.json();

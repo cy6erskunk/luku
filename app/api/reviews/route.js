@@ -1,9 +1,10 @@
-import { stackServerApp } from "@/app/stack";
+import { auth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 import { calcSRS } from "@/lib/srs";
 
 export async function POST(request) {
-  const user = await stackServerApp.getUser({ tokenStore: request });
+  const { data: session } = await auth.getSession();
+  const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { wordId, grade } = await request.json();
