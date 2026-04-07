@@ -1,8 +1,8 @@
-import { auth } from "@/lib/auth/server";
+import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 
 export async function GET() {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 

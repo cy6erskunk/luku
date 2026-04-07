@@ -158,9 +158,9 @@ const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,2
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function Luku() {
-  const session = authClient.useSession();
-  const user = session.data?.user ?? null;
-  const authLoading = session.isPending;
+  const authSession = authClient.useSession();
+  const user = authSession.data?.user ?? null;
+  const authLoading = authSession.isPending;
 
   const [apiKey, setApiKey] = useState("");
   const [savedKey, _setSavedKey] = useState(() => {

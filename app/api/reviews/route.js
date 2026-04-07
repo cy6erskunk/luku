@@ -1,9 +1,9 @@
-import { auth } from "@/lib/auth/server";
+import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 import { calcSRS } from "@/lib/srs";
 
 export async function POST(request) {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
