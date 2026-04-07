@@ -152,6 +152,46 @@ function sentenceOf(text, word) {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const D = "#0f1117";
+
+// ── Sign-in screen ─────────────────────────────────────────────────────────
+function SignIn() {
+  const [loading, setLoading] = useState(null); // "google" | "github" | null
+  const [err, setErr] = useState("");
+
+  const signIn = async (provider) => {
+    setErr("");
+    setLoading(provider);
+    try {
+      const result = await authClient.signIn.social({ provider, callbackURL: "/" });
+      if (result?.error) setErr(result.error.message || "Sign-in failed. Check your Neon Auth setup.");
+    } catch (e) {
+      setErr(e?.message || "Sign-in failed.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const Bp2 = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
+  const Bg2 = { ...Bp2, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 20px" }}>🇫🇮</div>
+        <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
+        <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
+        <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 28 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
+        <button onClick={() => signIn("google")} disabled={!!loading} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+          {loading === "google" ? "Redirecting…" : "Sign in with Google"}
+        </button>
+        <button onClick={() => signIn("github")} disabled={!!loading} style={{ ...Bg2, width: "100%", opacity: loading ? 0.6 : 1 }}>
+          {loading === "github" ? "Redirecting…" : "Sign in with GitHub"}
+        </button>
+        {err && <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, fontSize: 12, color: "#c48a8a" }}>{err}</div>}
+      </div>
+    </div>
+  );
+}
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 const Bp = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
 const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
@@ -225,18 +265,7 @@ export default function Luku() {
   }
 
   if (!user) {
-    return (
-      <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
-          <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 20px" }}>🇫🇮</div>
-          <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
-          <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
-          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 28 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
-          <button onClick={() => authClient.signIn.social({ provider: "google", callbackURL: "/" })} style={{ ...Bp, width: "100%", marginBottom: 10 }}>Sign in with Google</button>
-          <button onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/" })} style={{ ...Bg, width: "100%" }}>Sign in with GitHub</button>
-        </div>
-      </div>
-    );
+    return <SignIn />;
   }
 
   // ── API key screen ───────────────────────────────────────────────────────
