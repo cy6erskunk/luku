@@ -6,9 +6,17 @@ function handler() {
   return _handler;
 }
 
-export async function GET(request, ctx) {
-  return handler().GET(request, ctx);
+async function handle(request, ctx) {
+  try {
+    return await handler()[request.method === "GET" ? "GET" : "POST"](request, ctx);
+  } catch (e) {
+    console.error("[auth handler]", e?.message ?? e);
+    return Response.json(
+      { error: e?.message ?? "Auth handler error" },
+      { status: 500 }
+    );
+  }
 }
-export async function POST(request, ctx) {
-  return handler().POST(request, ctx);
-}
+
+export const GET = handle;
+export const POST = handle;
