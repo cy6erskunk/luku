@@ -454,7 +454,7 @@ export default function Luku() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div onClick={(e) => { e.stopPropagation(); setStage(0); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🇫🇮</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
@@ -473,7 +473,7 @@ export default function Luku() {
           {dbWords.length > 0 && (
             <div style={{ display: "flex", gap: 5 }}>
               <div style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)" }}>{dbWords.length} words</div>
-              {dueWords.length > 0 && <div style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)" }}>{dueWords.length} due</div>}
+              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
             </div>
           )}
           <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
