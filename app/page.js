@@ -137,14 +137,12 @@ function getCroppedImg(imageSrc, pixelCrop) {
     const img = new Image();
     img.onload = () => {
       const c = document.createElement("canvas");
-      const MAX = 1024;
-      const scale = Math.min(1, MAX / Math.max(pixelCrop.width, pixelCrop.height));
-      c.width = Math.round(pixelCrop.width * scale);
-      c.height = Math.round(pixelCrop.height * scale);
+      c.width = pixelCrop.width;
+      c.height = pixelCrop.height;
       c.getContext("2d").drawImage(
         img,
         pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-        0, 0, c.width, c.height
+        0, 0, pixelCrop.width, pixelCrop.height
       );
       let quality = 0.85;
       let base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
