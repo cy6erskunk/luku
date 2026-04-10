@@ -308,6 +308,7 @@ export default function Luku() {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   // DB-backed word list
   const [dbWords, setDbWords] = useState([]);
@@ -418,8 +419,6 @@ export default function Luku() {
   };
   const onFile = (e) => { const f = e.target.files?.[0]; showCropper(f); e.target.value = ""; };
   const onDrop = (e) => { e.preventDefault(); showCropper(e.dataTransfer.files?.[0]); };
-
-  const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   const cropAndProcess = async () => {
     if (!cropImage || !croppedAreaPixels) return;
