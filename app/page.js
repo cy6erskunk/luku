@@ -307,6 +307,7 @@ export default function Luku() {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [cropAspect, setCropAspect] = useState(4 / 3);
   const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   // DB-backed word list
@@ -412,6 +413,7 @@ export default function Luku() {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
+    setCropAspect(4 / 3);
     const reader = new FileReader();
     reader.onload = (ev) => setCropImage(ev.target.result);
     reader.readAsDataURL(f);
@@ -563,11 +565,16 @@ export default function Luku() {
               image={cropImage}
               crop={crop}
               zoom={zoom}
+              aspect={cropAspect}
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropComplete={onCropComplete}
               style={{ containerStyle: { borderRadius: 14 } }}
             />
+          </div>
+          <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400, marginBottom: 10 }}>
+            <button onClick={() => setCropAspect(4 / 3)} style={{ ...Bg, flex: 1, opacity: cropAspect === 4 / 3 ? 1 : 0.5 }}>▬ Horizontal</button>
+            <button onClick={() => setCropAspect(3 / 4)} style={{ ...Bg, flex: 1, opacity: cropAspect === 3 / 4 ? 1 : 0.5 }}>▮ Vertical</button>
           </div>
           <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
             <button onClick={cancelCrop} style={{ ...Bg, flex: 1 }}>Cancel</button>
