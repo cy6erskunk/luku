@@ -307,7 +307,7 @@ export default function Luku() {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-  const [cropAspect, setCropAspect] = useState(4 / 3);
+  const [cropAspect, setCropAspect] = useState(3 / 4);
   const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   // DB-backed word list
@@ -413,7 +413,7 @@ export default function Luku() {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
-    setCropAspect(4 / 3);
+    setCropAspect(3 / 4);
     const reader = new FileReader();
     reader.onload = (ev) => setCropImage(ev.target.result);
     reader.readAsDataURL(f);
@@ -528,7 +528,7 @@ export default function Luku() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div onClick={(e) => { e.stopPropagation(); setStage(0); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+        <div onClick={(e) => { e.stopPropagation(); setStage(0); setPreview(null); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🇫🇮</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
