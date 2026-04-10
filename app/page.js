@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
-import EasyCrop from "react-easy-crop";
-const Cropper = EasyCrop.default || EasyCrop;
+import dynamic from "next/dynamic";
+const Cropper = dynamic(() => import("react-easy-crop").then(m => m.default || m), { ssr: false });
 import { createAuthClient } from "@neondatabase/auth/next";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf } from "./lib/utils";
 
