@@ -15,7 +15,8 @@
     "@neondatabase/serverless": "^1.0.2",
     "next": "16.1.7",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-easy-crop": "^5.5.7"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.3",

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
+import Cropper from "react-easy-crop";
 import { createAuthClient } from "@neondatabase/auth/next";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf } from "./lib/utils";
 
@@ -128,6 +129,33 @@ function fileToBase64(file) {
     };
     reader.onerror = () => reject(new Error("FileReader failed"));
     reader.readAsDataURL(file);
+  });
+}
+
+function getCroppedImg(imageSrc, pixelCrop) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      const MAX = 1024;
+      const scale = Math.min(1, MAX / Math.max(pixelCrop.width, pixelCrop.height));
+      c.width = Math.round(pixelCrop.width * scale);
+      c.height = Math.round(pixelCrop.height * scale);
+      c.getContext("2d").drawImage(
+        img,
+        pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
+        0, 0, c.width, c.height
+      );
+      let quality = 0.85;
+      let base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
+      while (base64.length > 400000 && quality > 0.4) {
+        quality -= 0.1;
+        base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
+      }
+      resolve({ base64, mediaType: "image/jpeg" });
+    };
+    img.onerror = () => reject(new Error("Cannot decode image"));
+    img.src = imageSrc;
   });
 }
 
@@ -275,6 +303,13 @@ export default function Luku() {
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrSource, setOcrSource] = useState("");
 
+  // Crop state
+  const [cropImage, setCropImage] = useState(null);
+  const [cropFile, setCropFile] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+
   // DB-backed word list
   const [dbWords, setDbWords] = useState([]);
   const [loadingWords, setLoadingWords] = useState(true);
@@ -372,8 +407,48 @@ export default function Luku() {
     finally { setBusy(false); setStep(""); }
   };
 
-  const onFile = (e) => { const f = e.target.files?.[0]; if (f && !busy) processFile(f); e.target.value = ""; };
-  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && !busy) processFile(f); };
+  const showCropper = (f) => {
+    if (!f || busy) return;
+    setCropFile(f);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => setCropImage(ev.target.result);
+    reader.readAsDataURL(f);
+  };
+  const onFile = (e) => { const f = e.target.files?.[0]; showCropper(f); e.target.value = ""; };
+  const onDrop = (e) => { e.preventDefault(); showCropper(e.dataTransfer.files?.[0]); };
+
+  const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
+
+  const cropAndProcess = async () => {
+    if (!cropImage || !croppedAreaPixels) return;
+    setCropImage(null); setCropFile(null);
+    setErr(""); setBusy(true); setStep("Cropping image…");
+    try {
+      const { base64, mediaType } = await getCroppedImg(cropImage, croppedAreaPixels);
+      setPreview(`data:${mediaType};base64,${base64}`);
+      setStep("Loading OCR engine…");
+      setOcrProgress(0);
+      const out = await ocrLocal(base64, mediaType, (label, p) => {
+        setStep(label);
+        setOcrProgress(p);
+      });
+      setOcrProgress(1);
+      if (!out?.trim()) { setErr("No text found — try a clearer photo."); return; }
+      setText(out.trim()); setTokens(tokenize(out.trim())); setStage(1); setOcrSource("local");
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); setStep(""); }
+  };
+
+  const skipCrop = () => {
+    const f = cropFile;
+    setCropImage(null); setCropFile(null);
+    if (f) processFile(f);
+  };
+
+  const cancelCrop = () => { setCropImage(null); setCropFile(null); };
 
   const rescanWithAI = async () => {
     const hasKey = hasApiKey(savedKey);
@@ -481,8 +556,32 @@ export default function Luku() {
         </div>
       </div>
 
+      {/* Crop overlay */}
+      {stage === 0 && cropImage && (
+        <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 10, fontFamily: "monospace" }}>Crop image</div>
+          <p style={{ color: "#6b645e", textAlign: "center", marginBottom: 14, maxWidth: 300, fontSize: 13, lineHeight: 1.6 }}>Drag to reposition. Pinch or scroll to zoom. Select the text area to scan.</p>
+          <div style={{ position: "relative", width: "100%", maxWidth: 400, aspectRatio: "4/3", borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+            <Cropper
+              image={cropImage}
+              crop={crop}
+              zoom={zoom}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+              style={{ containerStyle: { borderRadius: 14 } }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
+            <button onClick={cancelCrop} style={{ ...Bg, flex: 1 }}>Cancel</button>
+            <button onClick={skipCrop} style={{ ...Bg, flex: 1 }}>Skip crop</button>
+            <button onClick={cropAndProcess} disabled={!croppedAreaPixels} style={{ ...Bp, flex: 2 }}>Scan text</button>
+          </div>
+        </div>
+      )}
+
       {/* Stage 0 — Scan */}
-      {stage === 0 && (
+      {stage === 0 && !cropImage && (
         <div style={{ padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 10, fontFamily: "monospace" }}>Step 1 — Scan</div>
           <h2 style={{ fontSize: 24, fontWeight: 400, textAlign: "center", margin: "0 0 6px" }}>Photograph a Finnish page</h2>
@@ -505,8 +604,8 @@ export default function Luku() {
           <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
           <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
-            <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
-            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>📁 Photo Library</button>
+            <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>Camera</button>
+            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>Photo Library</button>
           </div>
           {busy && (
             <div style={{ marginTop: 20, width: "100%", maxWidth: 400 }}>
