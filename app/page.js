@@ -572,6 +572,7 @@ export default function Luku() {
               style={{ containerStyle: { borderRadius: 14 } }}
             />
           </div>
+          <input type="range" min="0.1" max="2" step="0.1" value={cropAspect} onChange={(e) => setCropAspect(e.target.value)}/>
           <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400, marginBottom: 10 }}>
             <button onClick={() => setCropAspect(4 / 3)} style={{ ...Bg, flex: 1, opacity: cropAspect === 4 / 3 ? 1 : 0.5 }}>▬ Horizontal</button>
             <button onClick={() => setCropAspect(3 / 4)} style={{ ...Bg, flex: 1, opacity: cropAspect === 3 / 4 ? 1 : 0.5 }}>▮ Vertical</button>
