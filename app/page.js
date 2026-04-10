@@ -602,8 +602,8 @@ export default function Luku() {
           <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
           <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
           <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
-            <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>Camera</button>
-            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>Photo Library</button>
+            <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
+            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>📁 Photo Library</button>
           </div>
           {busy && (
             <div style={{ marginTop: 20, width: "100%", maxWidth: 400 }}>
