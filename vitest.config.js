@@ -8,8 +8,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
-      include: ["app/**/*.js"],
-      exclude: ["app/page.js", "app/layout.js", "app/components/SignIn.jsx"],
+      include: ["app/**/*.{js,jsx}"],
+      exclude: [
+        "app/page.js",
+        "app/layout.js",
+        "app/components/SignIn.jsx",
+        "app/**/__tests__/**",
+      ],
     },
   },
 });

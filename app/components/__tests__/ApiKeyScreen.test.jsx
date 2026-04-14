@@ -5,11 +5,6 @@ import ApiKeyScreen from "../ApiKeyScreen.jsx";
 
 afterEach(cleanup);
 
-// Stub out Next.js "use client" boundary — not needed in tests
-vi.mock("../../lib/utils", () => ({
-  SKIP_KEY: "__skip__",
-}));
-
 const setup = (props = {}) => {
   const onSave = props.onSave ?? vi.fn();
   const onSkip = props.onSkip ?? vi.fn();
