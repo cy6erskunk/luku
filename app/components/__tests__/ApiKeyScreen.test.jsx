@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import ApiKeyScreen from "../ApiKeyScreen.jsx";
 
 afterEach(cleanup);
-import ApiKeyScreen from "../ApiKeyScreen.jsx";
 
 // Stub out Next.js "use client" boundary — not needed in tests
 vi.mock("../../lib/utils", () => ({

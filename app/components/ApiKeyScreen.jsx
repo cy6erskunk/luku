@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { SKIP_KEY } from "../lib/utils";
 
 const D = "#0f1117";
 const Bp = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
