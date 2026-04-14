@@ -9,12 +9,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["app/**/*.{js,jsx}"],
-      exclude: [
-        "app/page.js",
-        "app/layout.js",
-        "app/components/SignIn.jsx",
-        "app/**/__tests__/**",
-      ],
+      exclude: ["app/page.js", "app/layout.js", "app/**/__tests__/**"],
     },
   },
 });

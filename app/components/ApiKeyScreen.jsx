@@ -43,7 +43,7 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
           Skip — use local OCR only
         </button>
         <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
-          Key is saved in your browser&apos;s local storage and never sent to any server except Anthropic.
+          Key is stored in your browser only. Each request passes it through this app&apos;s server to reach Anthropic — it is never stored server-side.
         </p>
       </div>
     </div>
