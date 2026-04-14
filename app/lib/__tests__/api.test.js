@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { callClaude, ocrImage, translateWord } from "../api.js";
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("callClaude", () => {

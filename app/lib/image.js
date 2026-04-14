@@ -8,7 +8,9 @@ export function fileToBase64(file) {
         const c = document.createElement("canvas");
         c.width = Math.round(img.width * scale);
         c.height = Math.round(img.height * scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const ctx = c.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas 2D context unavailable")); return; }
+        ctx.drawImage(img, 0, 0, c.width, c.height);
         let quality = 0.85;
         let base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
         while (base64.length > 400000 && quality > 0.4) {
@@ -32,7 +34,9 @@ export function getCroppedImg(imageSrc, pixelCrop) {
       const c = document.createElement("canvas");
       c.width = pixelCrop.width;
       c.height = pixelCrop.height;
-      c.getContext("2d").drawImage(
+      const ctx = c.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas 2D context unavailable")); return; }
+      ctx.drawImage(
         img,
         pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
         0, 0, pixelCrop.width, pixelCrop.height

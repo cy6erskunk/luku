@@ -55,7 +55,10 @@ export async function ocrLocal(base64, mediaType, onStatus) {
   if (onStatus) onStatus("Loading OCR engine…", 0);
   const worker = await getOrCreateWorker();
   const dataUrl = `data:${mediaType};base64,${base64}`;
-  const { data: { text } } = await worker.recognize(dataUrl);
-  ocrStatusCallback = null;
-  return text;
+  try {
+    const { data: { text } } = await worker.recognize(dataUrl);
+    return text;
+  } finally {
+    ocrStatusCallback = null;
+  }
 }
