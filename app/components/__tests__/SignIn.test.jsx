@@ -5,7 +5,7 @@ import SignIn from "../SignIn.jsx";
 
 afterEach(cleanup);
 
-vi.mock("../lib/authClient", () => ({
+vi.mock("../../lib/authClient", () => ({
   authClient: {
     signIn: { social: vi.fn(), email: vi.fn() },
     signUp: { email: vi.fn() },
