@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { authClient } from "../lib/authClient";
+import LukuLogo from "./LukuLogo.jsx";
 
 const D = "#0f1117";
 
@@ -45,7 +46,7 @@ export default function SignIn() {
 
   const logo = (
     <>
-      <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 20px" }}>🇫🇮</div>
+      <div style={{ margin: "0 auto 20px", width: 48 }}><LukuLogo size={48} /></div>
       <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
       <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
     </>

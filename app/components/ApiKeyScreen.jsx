@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import LukuLogo from "./LukuLogo.jsx";
 
 const D = "#0f1117";
 const Bp = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
@@ -13,7 +14,7 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
     <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ maxWidth: 400, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🇫🇮</div>
+          <LukuLogo size={36} />
           <div>
             <div style={{ fontSize: 18, fontWeight: 600 }}>Luku</div>
             <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>

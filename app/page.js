@@ -8,6 +8,7 @@ import { ocrLocal, resetTesseractWorker } from "./lib/ocr";
 import { fileToBase64, getCroppedImg } from "./lib/image";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
+import LukuLogo from "./components/LukuLogo.jsx";
 
 
 
@@ -243,7 +244,7 @@ export default function Luku() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <div onClick={(e) => { e.stopPropagation(); setStage(0); setPreview(null); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🇫🇮</div>
+          <LukuLogo size={32} />
           <div>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
             <div style={{ fontSize: 9, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>
