@@ -13,9 +13,9 @@ export default function LukuLogo({ size = 32 }) {
         </linearGradient>
       </defs>
       <circle cx="32" cy="32" r="32" fill={`url(#${gradId})`} />
-      <path d="M32,20 C24,16 16,17 12,21 L12,43 C16,47 24,48 32,44 Z" fill="#e8e0d5" opacity="0.9" />
-      <path d="M32,20 C40,16 48,17 52,21 L52,43 C48,47 40,48 32,44 Z" fill="#e8e0d5" opacity="0.75" />
-      <line x1="32" y1="18" x2="32" y2="46" stroke="#2d5a7a" strokeWidth="1.5" opacity="0.5" />
+      <path d="M32,16 C22,16 12,20 12,28 L12,36 C12,44 22,48 32,48 Z" fill="#e8e0d5" opacity="0.9" />
+      <path d="M32,16 C42,16 52,20 52,28 L52,36 C52,44 42,48 32,48 Z" fill="#e8e0d5" opacity="0.75" />
+      <line x1="32" y1="15" x2="32" y2="49" stroke="#2d5a7a" strokeWidth="1.5" opacity="0.5" />
     </svg>
   );
 }
