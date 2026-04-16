@@ -1,265 +1,19 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import Cropper from "react-easy-crop";
-import { createAuthClient } from "@neondatabase/auth/next";
+import { authClient } from "./lib/authClient";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf } from "./lib/utils";
+import { ocrImage, translateWord } from "./lib/api";
+import { ocrLocal, resetTesseractWorker } from "./lib/ocr";
+import { fileToBase64, getCroppedImg } from "./lib/image";
+import SignIn from "./components/SignIn.jsx";
+import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 
-const authClient = createAuthClient();
-
-// ── API ────────────────────────────────────────────────────────────────────
-async function callClaude(apiKey, messages, system, maxTokens = 1500) {
-  const res = await fetch("/api/claude", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ apiKey, messages, system, maxTokens }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-  return data.content.find((b) => b.type === "text")?.text ?? "";
-}
-
-async function ocrImage(apiKey, base64, mediaType) {
-  return callClaude(
-    apiKey,
-    [{ role: "user", content: [
-      { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-      { type: "text", text: "Extract ALL text from this image exactly as written. Return only the raw text, nothing else. Preserve paragraph breaks." },
-    ]}],
-    "You are an OCR assistant. Extract text from images with high accuracy.",
-    1500
-  );
-}
-
-// ── Local OCR (Tesseract.js) ──────────────────────────────────────────────
-let tesseractWorkerPromise = null;
-let ocrStatusCallback = null;
-
-function waitForTesseract(timeout = 15000) {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined" && window.Tesseract) return resolve(window.Tesseract);
-    const t0 = Date.now();
-    const id = setInterval(() => {
-      if (typeof window !== "undefined" && window.Tesseract) { clearInterval(id); resolve(window.Tesseract); }
-      else if (Date.now() - t0 > timeout) { clearInterval(id); reject(new Error("Tesseract.js failed to load")); }
-    }, 100);
-  });
-}
-
-async function initWorker() {
-  const { createWorker } = await waitForTesseract();
-  const worker = await createWorker("fin", 1, {
-    logger(p) {
-      if (!ocrStatusCallback || p.progress == null) return;
-      const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
-        : p.status === "initializing tesseract" ? "Initializing OCR…"
-        : p.status === "loading language traineddata" ? "Downloading Finnish model…"
-        : p.status === "initializing api" ? "Preparing OCR…"
-        : p.status === "recognizing text" ? "Recognizing text…"
-        : null;
-      if (label) ocrStatusCallback(label, p.progress);
-    },
-  });
-  await worker.setParameters({
-    tessedit_pageseg_mode: "6",
-    preserve_interword_spaces: "1",
-  });
-  return worker;
-}
-
-function getOrCreateWorker() {
-  if (!tesseractWorkerPromise) {
-    tesseractWorkerPromise = initWorker().catch((err) => {
-      tesseractWorkerPromise = null;
-      throw err;
-    });
-  }
-  return tesseractWorkerPromise;
-}
-
-function resetTesseractWorker() {
-  if (!tesseractWorkerPromise) return;
-  const p = tesseractWorkerPromise;
-  tesseractWorkerPromise = null;
-  p.then((w) => w.terminate()).catch(() => {});
-}
-
-async function ocrLocal(base64, mediaType, onStatus) {
-  ocrStatusCallback = onStatus;
-  if (onStatus) onStatus("Loading OCR engine…", 0);
-  const worker = await getOrCreateWorker();
-  const dataUrl = `data:${mediaType};base64,${base64}`;
-  const { data: { text } } = await worker.recognize(dataUrl);
-  ocrStatusCallback = null;
-  return text;
-}
-
-async function translateWord(apiKey, word, context) {
-  const raw = await callClaude(
-    apiKey,
-    [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English","alt1","alt2"],"pos":"noun/verb/adj/adv/other"}` }],
-    "You are a Finnish linguist. Return only raw JSON, no markdown.",
-    250
-  );
-  try { return JSON.parse(raw.replace(/```json|```/g, "").trim()); }
-  catch { return { base: word, translations: ["(unavailable)"], pos: "?" }; }
-}
-
-// ── Image helpers ──────────────────────────────────────────────────────────
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1024, scale = Math.min(1, MAX / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        let quality = 0.85;
-        let base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
-        while (base64.length > 400000 && quality > 0.4) {
-          quality -= 0.1;
-          base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
-        }
-        resolve({ base64, mediaType: "image/jpeg" });
-      };
-      img.onerror = () => reject(new Error("Cannot decode image"));
-      img.src = e.target.result;
-    };
-    reader.onerror = () => reject(new Error("FileReader failed"));
-    reader.readAsDataURL(file);
-  });
-}
-
-function getCroppedImg(imageSrc, pixelCrop) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = pixelCrop.width;
-      c.height = pixelCrop.height;
-      c.getContext("2d").drawImage(
-        img,
-        pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-        0, 0, pixelCrop.width, pixelCrop.height
-      );
-      let quality = 0.85;
-      let base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
-      while (base64.length > 400000 && quality > 0.4) {
-        quality -= 0.1;
-        base64 = c.toDataURL("image/jpeg", quality).split(",")[1];
-      }
-      resolve({ base64, mediaType: "image/jpeg" });
-    };
-    img.onerror = () => reject(new Error("Cannot decode image"));
-    img.src = imageSrc;
-  });
-}
 
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const D = "#0f1117";
 
-// ── Sign-in screen ─────────────────────────────────────────────────────────
-function SignIn() {
-  const [loading, setLoading] = useState(null);
-  const [err, setErr] = useState("");
-  const [mode, setMode] = useState("main"); // "main" | "sign-in" | "sign-up"
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-
-  const Bp2 = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
-  const Bg2 = { ...Bp2, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
-  const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "Georgia,serif", boxSizing: "border-box", outline: "none", marginBottom: 10 };
-
-  const signInSocial = async (provider) => {
-    setErr(""); setLoading(provider);
-    try {
-      const result = await authClient.signIn.social({ provider, callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-in failed. Check your Neon Auth setup.");
-    } catch (e) { setErr(e?.message || "Sign-in failed."); }
-    finally { setLoading(null); }
-  };
-
-  const signInEmail = async () => {
-    setErr(""); setLoading("email");
-    try {
-      const result = await authClient.signIn.email({ email, password, callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-in failed.");
-    } catch (e) { setErr(e?.message || "Sign-in failed."); }
-    finally { setLoading(null); }
-  };
-
-  const signUpEmail = async () => {
-    setErr(""); setLoading("email");
-    try {
-      const result = await authClient.signUp.email({ email, password, name: name || email.split("@")[0], callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-up failed.");
-    } catch (e) { setErr(e?.message || "Sign-up failed."); }
-    finally { setLoading(null); }
-  };
-
-  const logo = (
-    <>
-      <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 20px" }}>🇫🇮</div>
-      <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
-      <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
-    </>
-  );
-
-  const errBox = err && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, fontSize: 12, color: "#c48a8a" }}>{err}</div>;
-
-  return (
-    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
-        {logo}
-
-        {mode === "main" && <>
-          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
-          <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
-            {loading === "google" ? "Redirecting…" : "Continue with Google"}
-          </button>
-          <button onClick={() => signInSocial("github")} disabled={!!loading} style={{ ...Bg2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
-            {loading === "github" ? "Redirecting…" : "Continue with GitHub"}
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ fontSize: 11, color: "#3a4550" }}>or</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-          </div>
-          <button onClick={() => { setErr(""); setMode("sign-in"); }} style={{ ...Bg2, width: "100%", marginBottom: 8 }}>Sign in with email</button>
-          <button onClick={() => { setErr(""); setMode("sign-up"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>Create account</button>
-          {errBox}
-        </>}
-
-        {mode === "sign-in" && <>
-          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-            onKeyDown={(e) => e.key === "Enter" && signInEmail()} />
-          <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
-            {loading === "email" ? "Signing in…" : "Sign in"}
-          </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
-          {errBox}
-        </>}
-
-        {mode === "sign-up" && <>
-          <input style={inp} type="text" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
-            onKeyDown={(e) => e.key === "Enter" && signUpEmail()} />
-          <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
-            {loading === "email" ? "Creating account…" : "Create account"}
-          </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
-          {errBox}
-        </>}
-      </div>
-    </div>
-  );
-}
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 const Bp = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
 const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
@@ -278,8 +32,6 @@ export default function Luku() {
     _setSavedKey(v);
     try { if (v) localStorage.setItem("luku_api_key", v); else localStorage.removeItem("luku_api_key"); } catch {}
   }, []);
-  const [keyInput, setKeyInput] = useState("");
-
   const [stage, setStage] = useState(0);
   const [text, setText] = useState("");
   const [tokens, setTokens] = useState([]);
@@ -347,45 +99,7 @@ export default function Luku() {
 
   // ── API key screen ───────────────────────────────────────────────────────
   if (!savedKey) {
-    return (
-      <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ maxWidth: 400, width: "100%" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🇫🇮</div>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 600 }}>Luku</div>
-              <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>
-            </div>
-          </div>
-          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>
-            Luku reads Finnish text from photos and helps you learn vocabulary. An API key from{" "}
-            <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#4a7c9e" }}>console.anthropic.com</a>{" "}
-            enables translations and AI-powered OCR, or skip to scan locally for free.
-          </p>
-          <input
-            type="password"
-            placeholder="sk-ant-..."
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && keyInput.startsWith("sk-") && setSavedKey(keyInput)}
-            style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 12, outline: "none" }}
-          />
-          <button
-            onClick={() => keyInput.startsWith("sk-") && setSavedKey(keyInput)}
-            disabled={!keyInput.startsWith("sk-")}
-            style={{ ...Bp, width: "100%", opacity: keyInput.startsWith("sk-") ? 1 : 0.4 }}
-          >
-            {stage > 0 ? "Save key & continue →" : "Start reading →"}
-          </button>
-          <button onClick={() => setSavedKey(SKIP_KEY)} style={{ ...Bg, width: "100%", marginTop: 8 }}>
-            Skip — use local OCR only
-          </button>
-          <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
-            Key is saved in your browser&apos;s local storage and never sent to any server except Anthropic.
-          </p>
-        </div>
-      </div>
-    );
+    return <ApiKeyScreen stage={stage} onSave={setSavedKey} onSkip={() => setSavedKey(SKIP_KEY)} />;
   }
 
   // ── File processing ──────────────────────────────────────────────────────
