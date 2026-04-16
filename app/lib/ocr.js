@@ -1,5 +1,6 @@
 let tesseractWorkerPromise = null;
-let ocrStatusCallback = null;
+let _activeOnStatus = null; // set/cleared per serialized ocrLocal call
+let _ocrQueue = Promise.resolve(); // serializes ocrLocal invocations
 
 export function waitForTesseract(timeout = 15000) {
   return new Promise((resolve, reject) => {
@@ -16,14 +17,14 @@ async function initWorker() {
   const { createWorker } = await waitForTesseract();
   const worker = await createWorker("fin", 1, {
     logger(p) {
-      if (!ocrStatusCallback || p.progress == null) return;
+      if (!_activeOnStatus || p.progress == null) return;
       const label = p.status === "loading tesseract core" ? "Loading OCR engine…"
         : p.status === "initializing tesseract" ? "Initializing OCR…"
         : p.status === "loading language traineddata" ? "Downloading Finnish model…"
         : p.status === "initializing api" ? "Preparing OCR…"
         : p.status === "recognizing text" ? "Recognizing text…"
         : null;
-      if (label) ocrStatusCallback(label, p.progress);
+      if (label) _activeOnStatus(label, p.progress);
     },
   });
   await worker.setParameters({
@@ -47,18 +48,23 @@ export function resetTesseractWorker() {
   if (!tesseractWorkerPromise) return;
   const p = tesseractWorkerPromise;
   tesseractWorkerPromise = null;
+  _ocrQueue = Promise.resolve();
   p.then((w) => w.terminate()).catch(() => {});
 }
 
-export async function ocrLocal(base64, mediaType, onStatus) {
-  ocrStatusCallback = onStatus;
-  if (onStatus) onStatus("Loading OCR engine…", 0);
-  const worker = await getOrCreateWorker();
-  const dataUrl = `data:${mediaType};base64,${base64}`;
-  try {
-    const { data: { text } } = await worker.recognize(dataUrl);
-    return text;
-  } finally {
-    ocrStatusCallback = null;
-  }
+export function ocrLocal(base64, mediaType, onStatus) {
+  const task = _ocrQueue.then(async () => {
+    if (onStatus) onStatus("Loading OCR engine…", 0);
+    _activeOnStatus = onStatus ?? null;
+    const worker = await getOrCreateWorker();
+    const dataUrl = `data:${mediaType};base64,${base64}`;
+    try {
+      const { data: { text } } = await worker.recognize(dataUrl);
+      return text;
+    } finally {
+      _activeOnStatus = null;
+    }
+  });
+  _ocrQueue = task.catch(() => {});
+  return task;
 }
