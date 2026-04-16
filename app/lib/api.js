@@ -4,9 +4,10 @@ export async function callClaude(apiKey, messages, system, maxTokens = 1500) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ apiKey, messages, system, maxTokens }),
   });
-  const data = await res.json();
+  let data;
+  try { data = await res.json(); } catch { data = {}; }
   if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-  return data.content.find((b) => b.type === "text")?.text ?? "";
+  return data?.content?.find((b) => b.type === "text")?.text ?? "";
 }
 
 export async function ocrImage(apiKey, base64, mediaType) {

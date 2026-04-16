@@ -26,6 +26,7 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
         </p>
         <input
           type="password"
+          aria-label="Anthropic API key"
           placeholder="sk-ant-..."
           value={keyInput}
           onChange={(e) => setKeyInput(e.target.value)}

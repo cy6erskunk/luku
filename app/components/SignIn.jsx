@@ -77,8 +77,8 @@ export default function SignIn() {
         </>}
 
         {mode === "sign-in" && <>
-          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+          <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
             onKeyDown={(e) => e.key === "Enter" && signInEmail()} />
           <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Signing in…" : "Sign in"}
@@ -88,9 +88,9 @@ export default function SignIn() {
         </>}
 
         {mode === "sign-up" && <>
-          <input style={inp} type="text" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-          <input style={inp} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
+          <input style={inp} type="text" aria-label="Name" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+          <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
             onKeyDown={(e) => e.key === "Enter" && signUpEmail()} />
           <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Creating account…" : "Create account"}
