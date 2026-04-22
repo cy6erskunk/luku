@@ -13,6 +13,20 @@ export async function GET() {
   return Response.json({ words });
 }
 
+export async function DELETE(request) {
+  const { data: session } = await getAuth().getSession();
+  const user = session?.user;
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
+
+  const sql = getDb();
+  await sql`DELETE FROM words WHERE id = ${id} AND user_id = ${user.id}`;
+  return Response.json({ ok: true });
+}
+
 export async function POST(request) {
   const { data: session } = await getAuth().getSession();
   const user = session?.user;
