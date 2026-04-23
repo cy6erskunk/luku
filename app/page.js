@@ -237,10 +237,17 @@ export default function Luku() {
   };
 
   const deleteWord = async (id) => {
-    setDbWords((prev) => prev.filter((w) => w.id !== id));
+    let previousWords;
+    setDbWords((prev) => { previousWords = prev; return prev.filter((w) => w.id !== id); });
+    const deletedDueIdx = dueWords.findIndex((w) => w.id === id);
+    if (deletedDueIdx !== -1 && deletedDueIdx < revIdx) setRevIdx((i) => i - 1);
     try {
-      await fetch(`/api/words?id=${id}`, { method: "DELETE" });
-    } catch (e) { console.error("delete word failed", e); }
+      const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    } catch (e) {
+      console.error("delete word failed", e);
+      if (previousWords) setDbWords(previousWords);
+    }
   };
 
   // ── Derived values ────────────────────────────────────────────────────────

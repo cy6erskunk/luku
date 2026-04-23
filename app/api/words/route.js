@@ -19,11 +19,17 @@ export async function DELETE(request) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
+  const idParam = searchParams.get("id");
+  if (!idParam) return Response.json({ error: "Missing id" }, { status: 400 });
+
+  const id = Number.parseInt(idParam, 10);
+  if (!Number.isSafeInteger(id) || String(id) !== idParam) {
+    return Response.json({ error: "Invalid id" }, { status: 400 });
+  }
 
   const sql = getDb();
-  await sql`DELETE FROM words WHERE id = ${id} AND user_id = ${user.id}`;
+  const rows = await sql`DELETE FROM words WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
+  if (!rows[0]) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ ok: true });
 }
 

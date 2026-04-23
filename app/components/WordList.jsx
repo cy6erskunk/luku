@@ -16,11 +16,14 @@ export default function WordList({ words, onClose, onDelete }) {
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wordlist-heading"
         onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
         style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "75vh", display: "flex", flexDirection: "column", animation: "fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
+          <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
         <div style={{ overflowY: "auto", padding: "8px 0" }}>
@@ -31,7 +34,7 @@ export default function WordList({ words, onClose, onDelete }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                     <span style={{ fontSize: 15, color: "#e8e0d5" }}>{w.word}</span>
-                    {w.base && w.base !== w.word?.toLowerCase() && (
+                    {w.base && w.base.toLowerCase() !== w.word?.toLowerCase() && (
                       <span style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace" }}>{w.base}</span>
                     )}
                     {w.pos && (
