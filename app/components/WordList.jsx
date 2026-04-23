@@ -1,16 +1,22 @@
 "use client";
+import { useState } from "react";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
 export default function WordList({ words, onClose, onDelete }) {
+  const [pendingId, setPendingId] = useState(null);
+
+  const handleBackdropClick = () => { setPendingId(null); onClose(); };
+  const handlePanelClick = () => setPendingId(null);
+
   return (
     <div
       data-testid="wordlist-backdrop"
-      onClick={onClose}
+      onClick={handleBackdropClick}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
         style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "75vh", display: "flex", flexDirection: "column", animation: "fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -36,12 +42,27 @@ export default function WordList({ words, onClose, onDelete }) {
                     {(w.translations || []).slice(0, 2).join(", ")}
                   </div>
                 </div>
-                <button
-                  onClick={() => onDelete(w.id)}
-                  style={{ background: "none", border: "1px solid rgba(180,80,80,0.25)", color: "#c48a8a", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif", flexShrink: 0 }}
-                >
-                  Delete
-                </button>
+                {pendingId === w.id
+                  ? <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                      <button
+                        onClick={() => { onDelete(w.id); setPendingId(null); }}
+                        style={{ background: "rgba(180,80,80,0.15)", border: "1px solid rgba(180,80,80,0.45)", color: "#c48a8a", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}
+                      >
+                        Sure?
+                      </button>
+                      <button
+                        onClick={() => setPendingId(null)}
+                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#555", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  : <button
+                      onClick={(e) => { e.stopPropagation(); setPendingId(w.id); }}
+                      style={{ background: "none", border: "1px solid rgba(180,80,80,0.25)", color: "#c48a8a", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif", flexShrink: 0 }}
+                    >
+                      Delete
+                    </button>}
               </div>
             ))}
         </div>

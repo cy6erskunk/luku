@@ -55,14 +55,7 @@ describe("WordList", () => {
 
   it("shows a Delete button for each word", () => {
     setup();
-    expect(screen.getAllByRole("button", { name: /delete/i })).toHaveLength(WORDS.length);
-  });
-
-  it("calls onDelete with the word id when Delete is clicked", () => {
-    const { onDelete } = setup();
-    const deleteButtons = screen.getAllByRole("button", { name: /delete/i });
-    fireEvent.click(deleteButtons[1]);
-    expect(onDelete).toHaveBeenCalledWith(WORDS[1].id);
+    expect(screen.getAllByRole("button", { name: /^delete$/i })).toHaveLength(WORDS.length);
   });
 
   it("calls onClose when the close button is clicked", () => {
@@ -96,5 +89,58 @@ describe("WordList", () => {
   it("shows count of 0 in heading for empty list", () => {
     setup({ words: [] });
     expect(screen.getByText("Vocabulary (0)")).toBeTruthy();
+  });
+
+  describe("delete confirmation", () => {
+    it("does not call onDelete immediately when Delete is clicked", () => {
+      const { onDelete } = setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      expect(onDelete).not.toHaveBeenCalled();
+    });
+
+    it("shows Sure? and Cancel buttons after Delete is clicked", () => {
+      setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      expect(screen.getByRole("button", { name: /sure\?/i })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /cancel/i })).toBeTruthy();
+    });
+
+    it("hides the Delete button for the pending row while confirming", () => {
+      setup();
+      const deleteButtons = screen.getAllByRole("button", { name: /^delete$/i });
+      fireEvent.click(deleteButtons[0]);
+      expect(screen.getAllByRole("button", { name: /^delete$/i })).toHaveLength(WORDS.length - 1);
+    });
+
+    it("calls onDelete with the correct id when Sure? is confirmed", () => {
+      const { onDelete } = setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+      fireEvent.click(screen.getByRole("button", { name: /sure\?/i }));
+      expect(onDelete).toHaveBeenCalledWith(WORDS[1].id);
+    });
+
+    it("cancels and restores Delete button when Cancel is clicked", () => {
+      setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(screen.queryByRole("button", { name: /sure\?/i })).toBeNull();
+      expect(screen.getAllByRole("button", { name: /^delete$/i })).toHaveLength(WORDS.length);
+    });
+
+    it("cancels pending delete when clicking elsewhere on the panel", () => {
+      setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      fireEvent.click(screen.getByText(/vocabulary \(\d+\)/i));
+      expect(screen.queryByRole("button", { name: /sure\?/i })).toBeNull();
+    });
+
+    it("only one row shows confirmation at a time", () => {
+      setup();
+      const deleteButtons = screen.getAllByRole("button", { name: /^delete$/i });
+      fireEvent.click(deleteButtons[0]);
+      // clicking a second Delete while one is pending switches to the new row
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      expect(screen.getAllByRole("button", { name: /sure\?/i })).toHaveLength(1);
+    });
   });
 });
