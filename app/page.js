@@ -238,15 +238,20 @@ export default function Luku() {
 
   const deleteWord = async (id) => {
     let previousWords;
+    let didAdjustRevIdx = false;
     setDbWords((prev) => { previousWords = prev; return prev.filter((w) => w.id !== id); });
     const deletedDueIdx = dueWords.findIndex((w) => w.id === id);
-    if (deletedDueIdx !== -1 && deletedDueIdx < revIdx) setRevIdx((i) => i - 1);
+    if (deletedDueIdx !== -1 && deletedDueIdx < revIdx) {
+      didAdjustRevIdx = true;
+      setRevIdx((i) => i - 1);
+    }
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
       console.error("delete word failed", e);
       if (previousWords) setDbWords(previousWords);
+      if (didAdjustRevIdx) setRevIdx((i) => i + 1);
     }
   };
 

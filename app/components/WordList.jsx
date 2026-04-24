@@ -10,6 +10,8 @@ export default function WordList({ words, onClose, onDelete }) {
   const handlePanelClick = () => setPendingId(null);
 
   return (
+    <>
+    <style>{`@keyframes wl-fadeUp { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }`}</style>
     <div
       data-testid="wordlist-backdrop"
       onClick={handleBackdropClick}
@@ -20,7 +22,7 @@ export default function WordList({ words, onClose, onDelete }) {
         aria-modal="true"
         aria-labelledby="wordlist-heading"
         onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
-        style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "75vh", display: "flex", flexDirection: "column", animation: "fadeUp 0.15s ease" }}
+        style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", animation: "wl-fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
@@ -71,5 +73,6 @@ export default function WordList({ words, onClose, onDelete }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
