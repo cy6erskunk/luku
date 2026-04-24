@@ -22,13 +22,13 @@ export default function WordList({ words, onClose, onDelete }) {
         aria-modal="true"
         aria-labelledby="wordlist-heading"
         onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
-        style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", animation: "wl-fadeUp 0.15s ease" }}
+        style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", animation: "wl-fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
-        <div style={{ overflowY: "auto", padding: "8px 0" }}>
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "8px 0" }}>
           {words.length === 0
             ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words saved yet.</div>
             : words.map((w) => (
