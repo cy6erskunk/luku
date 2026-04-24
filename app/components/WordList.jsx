@@ -22,7 +22,7 @@ export default function WordList({ words, onClose, onDelete }) {
         aria-modal="true"
         aria-labelledby="wordlist-heading"
         onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
-        style={{ background: "#181d2a", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", animation: "wl-fadeUp 0.15s ease" }}
+        style={{ background: "#181d2a", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", alignSelf: "center", animation: "wl-fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
