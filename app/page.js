@@ -8,6 +8,7 @@ import { ocrLocal, resetTesseractWorker } from "./lib/ocr";
 import { fileToBase64, getCroppedImg } from "./lib/image";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
+import WordList from "./components/WordList.jsx";
 
 
 
@@ -69,6 +70,9 @@ export default function Luku() {
   // SRS review UI
   const [showAnswer, setShowAnswer] = useState(false);
   const [grading, setGrading] = useState(false);
+
+  // Word list overlay
+  const [showWordList, setShowWordList] = useState(false);
 
   const fileRef = useRef(), camRef = useRef(), readRef = useRef();
 
@@ -232,6 +236,25 @@ export default function Luku() {
     setShowAnswer(false);
   };
 
+  const deleteWord = async (id) => {
+    let previousWords;
+    let didAdjustRevIdx = false;
+    setDbWords((prev) => { previousWords = prev; return prev.filter((w) => w.id !== id); });
+    const deletedDueIdx = dueWords.findIndex((w) => w.id === id);
+    if (deletedDueIdx !== -1 && deletedDueIdx < revIdx) {
+      didAdjustRevIdx = true;
+      setRevIdx((i) => i - 1);
+    }
+    try {
+      const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    } catch (e) {
+      console.error("delete word failed", e);
+      if (previousWords) setDbWords(previousWords);
+      if (didAdjustRevIdx) setRevIdx((i) => i + 1);
+    }
+  };
+
   // ── Derived values ────────────────────────────────────────────────────────
   const dueWords = dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const savedBases = new Set(dbWords.map((w) => w.base));
@@ -260,7 +283,7 @@ export default function Luku() {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {dbWords.length > 0 && (
             <div style={{ display: "flex", gap: 5 }}>
-              <div style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)" }}>{dbWords.length} words</div>
+              <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dbWords.length} words</button>
               {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
             </div>
           )}
@@ -493,6 +516,11 @@ export default function Luku() {
                     <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setShowAnswer(false); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
                   </div>}
         </div>
+      )}
+
+      {/* Word list overlay */}
+      {showWordList && (
+        <WordList words={dbWords} onClose={() => setShowWordList(false)} onDelete={deleteWord} />
       )}
 
       <style>{`

@@ -13,6 +13,26 @@ export async function GET() {
   return Response.json({ words });
 }
 
+export async function DELETE(request) {
+  const { data: session } = await getAuth().getSession();
+  const user = session?.user;
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const idParam = searchParams.get("id");
+  if (!idParam) return Response.json({ error: "Missing id" }, { status: 400 });
+
+  const id = Number.parseInt(idParam, 10);
+  if (!Number.isSafeInteger(id) || String(id) !== idParam) {
+    return Response.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const sql = getDb();
+  const rows = await sql`DELETE FROM words WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
+  if (!rows[0]) return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json({ ok: true });
+}
+
 export async function POST(request) {
   const { data: session } = await getAuth().getSession();
   const user = session?.user;
