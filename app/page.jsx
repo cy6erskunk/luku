@@ -1,11 +1,11 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import Cropper from "react-easy-crop";
-import { authClient } from "./lib/authClient";
-import { SKIP_KEY, hasApiKey, tokenize, sentenceOf } from "./lib/utils";
-import { ocrImage, translateWord } from "./lib/api";
-import { ocrLocal, resetTesseractWorker } from "./lib/ocr";
-import { fileToBase64, getCroppedImg } from "./lib/image";
+import { authClient } from "./lib/authClient.js";
+import { SKIP_KEY, hasApiKey, tokenize, sentenceOf } from "./lib/utils.js";
+import { ocrImage, translateWord } from "./lib/api.js";
+import { ocrLocal, resetTesseractWorker } from "./lib/ocr.js";
+import { fileToBase64, getCroppedImg } from "./lib/image.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
