@@ -9,7 +9,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["app/**/*.{js,jsx}"],
-      exclude: ["app/page.js", "app/layout.js", "app/**/__tests__/**"],
+      exclude: ["app/page.jsx", "app/layout.jsx", "app/**/__tests__/**"],
     },
   },
 });

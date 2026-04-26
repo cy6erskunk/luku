@@ -34,8 +34,8 @@ There is no test suite configured.
 
 ```
 app/
-├── page.js              # Main SPA component (all UI logic)
-├── layout.js            # Root layout (metadata, lang="fi")
+├── page.jsx              # Main SPA component (all UI logic)
+├── layout.jsx            # Root layout (metadata, lang="fi")
 └── api/claude/route.js  # Server proxy for Anthropic API
 ```
 
