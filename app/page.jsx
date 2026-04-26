@@ -9,6 +9,7 @@ import { fileToBase64, getCroppedImg } from "./lib/image.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
+import LukuLogo from "./components/LukuLogo.jsx";
 
 
 
@@ -266,18 +267,7 @@ export default function Luku() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <div onClick={(e) => { e.stopPropagation(); setStage(0); setPreview(null); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <svg width="32" height="32" viewBox="0 0 32 32" aria-label="Luku" role="img">
-            <defs>
-              <linearGradient id="lukuLogoGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#4a7c9e" />
-                <stop offset="100%" stopColor="#2d5a7a" />
-              </linearGradient>
-            </defs>
-            <circle cx="16" cy="16" r="16" fill="url(#lukuLogoGrad)" />
-            <path d="M11 8 L11 22 L21 22" fill="none" stroke="#e8e0d5" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="14.5" y1="12" x2="22" y2="12" stroke="#e8e0d5" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
-            <line x1="14.5" y1="16" x2="20" y2="16" stroke="#e8e0d5" strokeWidth="1.6" strokeLinecap="round" opacity="0.4" />
-          </svg>
+          <LukuLogo size={32} />
           <div>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
             <div style={{ fontSize: 9, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>

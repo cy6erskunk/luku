@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { authClient } from "../lib/authClient";
+import LukuLogo from "./LukuLogo.jsx";
 
 const D = "#0f1117";
 
@@ -45,18 +46,7 @@ export default function SignIn() {
 
   const logo = (
     <>
-      <svg width="48" height="48" viewBox="0 0 32 32" aria-label="Luku" role="img" style={{ display: "block", margin: "0 auto 20px" }}>
-        <defs>
-          <linearGradient id="lukuSignInGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#4a7c9e" />
-            <stop offset="100%" stopColor="#2d5a7a" />
-          </linearGradient>
-        </defs>
-        <circle cx="16" cy="16" r="16" fill="url(#lukuSignInGrad)" />
-        <path d="M11 8 L11 22 L21 22" fill="none" stroke="#e8e0d5" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="14.5" y1="12" x2="22" y2="12" stroke="#e8e0d5" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
-        <line x1="14.5" y1="16" x2="20" y2="16" stroke="#e8e0d5" strokeWidth="1.6" strokeLinecap="round" opacity="0.4" />
-      </svg>
+      <LukuLogo size={48} style={{ display: "block", margin: "0 auto 20px" }} />
       <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
       <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
     </>
