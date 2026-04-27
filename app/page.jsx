@@ -52,6 +52,7 @@ export default function Luku() {
     try { localStorage.setItem("luku_session", JSON.stringify(next)); } catch {}
   }, []);
   const [revIdx, setRevIdx] = useState(0);
+  const [queue, setQueue] = useState([]);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrSource, setOcrSource] = useState("");
 
@@ -88,6 +89,20 @@ export default function Luku() {
       .catch(() => {})
       .finally(() => setLoadingWords(false));
   }, [user?.id]);
+
+  // Self-correct if the current queue entry refers to a word missing from
+  // dbWords (e.g., deleted in another tab). Otherwise the review screen
+  // would render blank with no way for the user to progress.
+  useEffect(() => {
+    if (stage !== 2) return;
+    if (revIdx >= queue.length) return;
+    const id = queue[revIdx];
+    if (id == null) return;
+    if (dbWords.some((w) => w.id === id)) return;
+    const adjust = queue.slice(0, revIdx).filter((qid) => qid === id).length;
+    setQueue((q) => q.filter((qid) => qid !== id));
+    if (adjust > 0) setRevIdx((i) => i - adjust);
+  }, [stage, revIdx, queue, dbWords]);
 
   // ── Sign-in screen ───────────────────────────────────────────────────────
   if (authLoading) {
@@ -220,8 +235,18 @@ export default function Luku() {
   };
 
   const gradeWord = async (grade) => {
-    const word = dueWords[revIdx];
-    if (!word) return;
+    const wordId = queue[revIdx];
+    const word = dbWords.find((w) => w.id === wordId);
+    if (!word) {
+      // Queue entry no longer exists — drop it so the session can progress.
+      if (wordId !== undefined) {
+        const adjust = queue.slice(0, revIdx).filter((qid) => qid === wordId).length;
+        setQueue((q) => q.filter((qid) => qid !== wordId));
+        if (adjust > 0) setRevIdx((i) => i - adjust);
+      }
+      setShowAnswer(false);
+      return;
+    }
     setGrading(true);
     try {
       const r = await fetch("/api/reviews", {
@@ -233,32 +258,54 @@ export default function Luku() {
       if (updated) setDbWords((prev) => prev.map((w) => w.id === updated.id ? updated : w));
     } catch (e) { console.error("grade failed", e); }
     finally { setGrading(false); }
+    if (grade < 3) setQueue((q) => [...q, wordId]);
     setRevIdx((i) => i + 1);
     setShowAnswer(false);
   };
 
   const deleteWord = async (id) => {
-    let previousWords;
-    let didAdjustRevIdx = false;
-    setDbWords((prev) => { previousWords = prev; return prev.filter((w) => w.id !== id); });
-    const deletedDueIdx = dueWords.findIndex((w) => w.id === id);
-    if (deletedDueIdx !== -1 && deletedDueIdx < revIdx) {
-      didAdjustRevIdx = true;
-      setRevIdx((i) => i - 1);
-    }
+    const deletedWord = dbWords.find((w) => w.id === id);
+    if (!deletedWord) return;
+    const queueIndices = [];
+    queue.forEach((qid, i) => { if (qid === id) queueIndices.push(i); });
+    const revIdxAdjust = queueIndices.filter((i) => i < revIdx).length;
+    const wasCurrent = queue[revIdx] === id;
+
+    setDbWords((prev) => prev.filter((w) => w.id !== id));
+    setQueue((prev) => prev.filter((qid) => qid !== id));
+    if (revIdxAdjust > 0) setRevIdx((i) => i - revIdxAdjust);
+    if (wasCurrent) setShowAnswer(false);
+
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
       console.error("delete word failed", e);
-      if (previousWords) setDbWords(previousWords);
-      if (didAdjustRevIdx) setRevIdx((i) => i + 1);
+      // Re-insert by id so concurrent updates to dbWords/queue aren't clobbered.
+      setDbWords((prev) => prev.some((w) => w.id === id) ? prev : [...prev, deletedWord]);
+      setQueue((prev) => {
+        const restored = [...prev];
+        for (const idx of queueIndices) {
+          restored.splice(Math.min(idx, restored.length), 0, id);
+        }
+        return restored;
+      });
+      if (revIdxAdjust > 0) setRevIdx((i) => i + revIdxAdjust);
     }
   };
 
   // ── Derived values ────────────────────────────────────────────────────────
   const dueWords = dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const savedBases = new Set(dbWords.map((w) => w.base));
+
+  const startReview = () => {
+    if (loadingWords) return;
+    setQueue(dueWords.map((w) => w.id));
+    setRevIdx(0);
+    setShowAnswer(false);
+    setPopup(null);
+    setStage(2);
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -285,7 +332,7 @@ export default function Luku() {
           {dbWords.length > 0 && (
             <div style={{ display: "flex", gap: 5 }}>
               <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dbWords.length} words</button>
-              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
+              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); startReview(); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
             </div>
           )}
           <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
@@ -364,7 +411,7 @@ export default function Luku() {
           )}
           {err && <div style={{ marginTop: 14, maxWidth: 400, width: "100%", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>⚠ {err}</div>}
           {dueWords.length > 0 && (
-            <button onClick={() => { setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13 }}>
+            <button onClick={startReview} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13 }}>
               Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
             </button>
           )}
@@ -424,8 +471,8 @@ export default function Luku() {
             ))}
           </div>
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 18px", background: "linear-gradient(to top,#0f1117 60%,transparent)", zIndex: 50 }}>
-            <button onClick={() => { setPopup(null); setRevIdx(0); setShowAnswer(false); setStage(2); }} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block" }}>
-              Done Reading → Review{dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
+            <button onClick={startReview} disabled={loadingWords} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block", opacity: loadingWords ? 0.5 : 1 }}>
+              Done Reading → Review{loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
             </button>
           </div>
           {popup && (
@@ -464,24 +511,25 @@ export default function Luku() {
           <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 14, fontFamily: "monospace" }}>Step 3 — Review</div>
           {loadingWords
             ? <div style={{ textAlign: "center", padding: "60px 0", color: "#4a7c9e" }}>Loading…</div>
-            : dueWords.length === 0
+            : queue.length === 0
               ? <div style={{ textAlign: "center", padding: "50px 0" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
                   <div style={{ color: "#6b645e", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>All caught up!<br />No words due for review.</div>
                   <div style={{ color: "#4a4040", fontSize: 12, marginBottom: 20 }}>{dbWords.length} word{dbWords.length !== 1 ? "s" : ""} in your vocabulary.</div>
                   <button onClick={() => setStage(0)} style={{ ...Bg, padding: "9px 20px" }}>← Back to Scan</button>
                 </div>
-              : revIdx < dueWords.length
+              : revIdx < queue.length
                 ? (() => {
-                    const w = dueWords[revIdx];
+                    const w = dbWords.find((dw) => dw.id === queue[revIdx]);
+                    if (!w) return null;
                     return (
                       <>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
                           <div style={{ fontSize: 16, fontWeight: 400 }}>Review</div>
-                          <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {dueWords.length}</div>
+                          <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {queue.length}</div>
                         </div>
                         <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 24, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${(revIdx / dueWords.length) * 100}%`, background: "#4a7c9e", transition: "width 0.3s" }} />
+                          <div style={{ height: "100%", width: `${(revIdx / queue.length) * 100}%`, background: "#4a7c9e", transition: "width 0.3s" }} />
                         </div>
                         <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
                           <div style={{ fontSize: 32, marginBottom: 4 }}>{w.word}</div>
@@ -513,8 +561,8 @@ export default function Luku() {
                 : <div style={{ textAlign: "center", padding: "36px 0" }}>
                     <div style={{ fontSize: 46, marginBottom: 12 }}>🎉</div>
                     <h2 style={{ fontSize: 20, fontWeight: 400, marginBottom: 6 }}>Session complete</h2>
-                    <p style={{ color: "#6b645e", marginBottom: 24 }}>Reviewed <strong style={{ color: "#4a7c9e" }}>{dueWords.length}</strong> card{dueWords.length !== 1 ? "s" : ""}.</p>
-                    <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setShowAnswer(false); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
+                    <p style={{ color: "#6b645e", marginBottom: 24 }}>Reviewed <strong style={{ color: "#4a7c9e" }}>{queue.length}</strong> card{queue.length !== 1 ? "s" : ""}.</p>
+                    <button onClick={() => { setStage(0); setSession({}); setRevIdx(0); setQueue([]); setShowAnswer(false); setPopup(null); setPreview(null); setText(""); setTokens([]); setOcrSource(""); setOcrProgress(0); }} style={{ ...Bp, width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
                   </div>}
         </div>
       )}
