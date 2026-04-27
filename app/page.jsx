@@ -90,6 +90,20 @@ export default function Luku() {
       .finally(() => setLoadingWords(false));
   }, [user?.id]);
 
+  // Self-correct if the current queue entry refers to a word missing from
+  // dbWords (e.g., deleted in another tab). Otherwise the review screen
+  // would render blank with no way for the user to progress.
+  useEffect(() => {
+    if (stage !== 2) return;
+    if (revIdx >= queue.length) return;
+    const id = queue[revIdx];
+    if (id == null) return;
+    if (dbWords.some((w) => w.id === id)) return;
+    const adjust = queue.slice(0, revIdx).filter((qid) => qid === id).length;
+    setQueue((q) => q.filter((qid) => qid !== id));
+    if (adjust > 0) setRevIdx((i) => i - adjust);
+  }, [stage, revIdx, queue, dbWords]);
+
   // ── Sign-in screen ───────────────────────────────────────────────────────
   if (authLoading) {
     return (
@@ -225,7 +239,11 @@ export default function Luku() {
     const word = dbWords.find((w) => w.id === wordId);
     if (!word) {
       // Queue entry no longer exists — drop it so the session can progress.
-      if (wordId !== undefined) setQueue((q) => q.filter((qid) => qid !== wordId));
+      if (wordId !== undefined) {
+        const adjust = queue.slice(0, revIdx).filter((qid) => qid === wordId).length;
+        setQueue((q) => q.filter((qid) => qid !== wordId));
+        if (adjust > 0) setRevIdx((i) => i - adjust);
+      }
       setShowAnswer(false);
       return;
     }
