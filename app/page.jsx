@@ -223,7 +223,12 @@ export default function Luku() {
   const gradeWord = async (grade) => {
     const wordId = queue[revIdx];
     const word = dbWords.find((w) => w.id === wordId);
-    if (!word) return;
+    if (!word) {
+      // Queue entry no longer exists — drop it so the session can progress.
+      if (wordId !== undefined) setQueue((q) => q.filter((qid) => qid !== wordId));
+      setShowAnswer(false);
+      return;
+    }
     setGrading(true);
     try {
       const r = await fetch("/api/reviews", {
@@ -241,19 +246,32 @@ export default function Luku() {
   };
 
   const deleteWord = async (id) => {
-    const previousWords = dbWords;
-    const previousQueue = queue;
-    const revIdxAdjust = queue.slice(0, revIdx).filter((qid) => qid === id).length;
+    const deletedWord = dbWords.find((w) => w.id === id);
+    if (!deletedWord) return;
+    const queueIndices = [];
+    queue.forEach((qid, i) => { if (qid === id) queueIndices.push(i); });
+    const revIdxAdjust = queueIndices.filter((i) => i < revIdx).length;
+    const wasCurrent = queue[revIdx] === id;
+
     setDbWords((prev) => prev.filter((w) => w.id !== id));
     setQueue((prev) => prev.filter((qid) => qid !== id));
     if (revIdxAdjust > 0) setRevIdx((i) => i - revIdxAdjust);
+    if (wasCurrent) setShowAnswer(false);
+
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
       console.error("delete word failed", e);
-      setDbWords(previousWords);
-      setQueue(previousQueue);
+      // Re-insert by id so concurrent updates to dbWords/queue aren't clobbered.
+      setDbWords((prev) => prev.some((w) => w.id === id) ? prev : [...prev, deletedWord]);
+      setQueue((prev) => {
+        const restored = [...prev];
+        for (const idx of queueIndices) {
+          restored.splice(Math.min(idx, restored.length), 0, id);
+        }
+        return restored;
+      });
       if (revIdxAdjust > 0) setRevIdx((i) => i + revIdxAdjust);
     }
   };
@@ -263,6 +281,7 @@ export default function Luku() {
   const savedBases = new Set(dbWords.map((w) => w.base));
 
   const startReview = () => {
+    if (loadingWords) return;
     setQueue(dueWords.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
@@ -434,8 +453,8 @@ export default function Luku() {
             ))}
           </div>
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 18px", background: "linear-gradient(to top,#0f1117 60%,transparent)", zIndex: 50 }}>
-            <button onClick={startReview} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block" }}>
-              Done Reading → Review{dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
+            <button onClick={startReview} disabled={loadingWords} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block", opacity: loadingWords ? 0.5 : 1 }}>
+              Done Reading → Review{loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
             </button>
           </div>
           {popup && (
