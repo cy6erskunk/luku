@@ -5,7 +5,7 @@ const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb
 export default function TranslationPopup({ popup, containerRef, session, onAddWord, onAddApiKey }) {
   if (!popup) return null;
   const containerWidth = containerRef?.current?.offsetWidth ?? 360;
-  const left = Math.min(Math.max((popup.x ?? 150) - 125, 4), containerWidth - 258);
+  const left = Math.max(Math.min((popup.x ?? 150) - 125, containerWidth - 258), 4);
   const top = Math.max((popup.y ?? 80) - 155, 8);
 
   return (

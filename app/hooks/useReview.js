@@ -45,13 +45,14 @@ export function useReview({ dbWords, updateWord, stage }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ wordId: word.id, grade }),
       });
+      if (!r.ok) throw new Error(`grade failed: ${r.status}`);
       const { word: updated } = await r.json();
       if (updated) updateWord(updated);
+      if (grade < 3) setQueue((q) => [...q, wordId]);
+      setRevIdx((i) => i + 1);
+      setShowAnswer(false);
     } catch (e) { console.error("grade failed", e); }
     finally { setGrading(false); }
-    if (grade < 3) setQueue((q) => [...q, wordId]);
-    setRevIdx((i) => i + 1);
-    setShowAnswer(false);
   };
 
   const removeWordFromQueue = (id) => {

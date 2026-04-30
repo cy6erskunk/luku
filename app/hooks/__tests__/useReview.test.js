@@ -35,7 +35,7 @@ describe("useReview – startReview", () => {
 describe("useReview – gradeWord", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(() =>
-      Promise.resolve({ json: () => Promise.resolve({ word: null }) })
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ word: null }) })
     ));
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -72,10 +72,19 @@ describe("useReview – gradeWord", () => {
     expect(result.current.showAnswer).toBe(false);
   });
 
+  it("does not advance revIdx or re-queue when the API call fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500 })));
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReview(WORDS));
+    await act(() => result.current.gradeWord(1));
+    expect(result.current.revIdx).toBe(0);
+    expect(result.current.queue).toEqual([1, 2, 3]);
+  });
+
   it("calls updateWord with the server response", async () => {
     const updated = { ...WORDS[0], interval_days: 3 };
     vi.stubGlobal("fetch", vi.fn(() =>
-      Promise.resolve({ json: () => Promise.resolve({ word: updated }) })
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ word: updated }) })
     ));
     const updateWord = vi.fn();
     const { result } = renderHook(() => useReview(makeProps({ updateWord })));

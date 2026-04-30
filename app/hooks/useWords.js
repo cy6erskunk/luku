@@ -21,6 +21,7 @@ export function useWords(userId) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos }),
     });
+    if (!r.ok) throw new Error(`Failed to save word (${r.status})`);
     const { word: saved } = await r.json();
     if (saved) setDbWords((prev) => { const without = prev.filter((w) => w.id !== saved.id); return [...without, saved]; });
     return saved;

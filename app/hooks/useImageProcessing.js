@@ -88,10 +88,12 @@ export function useImageProcessing({ savedKey, onTextReady }) {
 
   const rescanWithAI = async () => {
     if (!hasApiKey(savedKey)) { setErr("Enter your API key to use AI OCR — tap 'Key' in the header."); return; }
+    if (!preview) { setErr("No image to re-scan — upload an image first."); return; }
     setErr(""); setBusy(true); setStep("Re-scanning with AI…");
     try {
       const [header, b64] = preview.split(",");
-      const mediaType = header.match(/data:(.*?);/)[1];
+      const mediaType = header?.match(/data:(.*?);/)?.[1];
+      if (!b64 || !mediaType) { setErr("The image format is invalid — upload the image again."); return; }
       const out = await ocrImage(savedKey, b64, mediaType);
       if (!out?.trim()) { setErr("AI found no text — try a different photo."); return; }
       setOcrSource("ai");
