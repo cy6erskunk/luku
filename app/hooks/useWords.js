@@ -5,7 +5,8 @@ export function useWords(userId) {
   const [loadingWords, setLoadingWords] = useState(true);
 
   useEffect(() => {
-    if (!userId) { setLoadingWords(false); return; }
+    if (!userId) { setDbWords([]); setLoadingWords(false); return; }
+    setDbWords([]);
     setLoadingWords(true);
     fetch("/api/words")
       .then((r) => r.json())

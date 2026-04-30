@@ -161,7 +161,7 @@ export default function Luku() {
           savedBases={savedBases}
           xlating={xlating}
           popup={popup}
-          setPopup={setPopup}
+
           ocrSource={image.ocrSource}
           busy={image.busy}
           err={image.err}

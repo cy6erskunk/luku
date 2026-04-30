@@ -6,7 +6,7 @@ const Bg = { ...Bp, background: "transparent", border: "1px solid rgba(255,255,2
 
 export default function ReadStage({
   tokens, session, savedBases, xlating,
-  popup, setPopup,
+  popup,
   ocrSource, busy, err,
   loadingWords, dueWords,
   onWord, onAddWord, onRescanWithAI, onStartReview, onAddApiKey,
