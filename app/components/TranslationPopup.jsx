@@ -1,5 +1,6 @@
+import { Bg } from "../lib/styles.js";
+
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
-const Bg = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", fontFamily: "Georgia,serif", background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
 
 export default function TranslationPopup({ popup, containerRef, session, onAddWord, onAddApiKey }) {
   if (!popup) return null;
