@@ -26,45 +26,75 @@ npm run dev
 npm run dev    # Start dev server
 npm run build  # Production build
 npm start      # Start production server (run build first)
+npm test       # Run test suite (Vitest)
 ```
-
-There is no test suite configured.
 
 ## Project Structure
 
 ```
 app/
-├── page.jsx              # Main SPA component (all UI logic)
-├── layout.jsx            # Root layout (metadata, lang="fi")
-└── api/claude/route.js  # Server proxy for Anthropic API
+├── page.jsx                    # Root orchestrator — composes hooks and stage components
+├── layout.jsx                  # Root layout (metadata, lang="fi")
+├── hooks/
+│   ├── useApiKey.js            # Saved API key with localStorage sync
+│   ├── useSession.js           # Per-scan translation session with localStorage sync
+│   ├── useWords.js             # DB word list: fetch, save, update, remove/restore
+│   ├── useReview.js            # Flashcard queue: grading, self-correction, reset
+│   └── useImageProcessing.js  # File pick, crop UI, Tesseract OCR, AI rescan
+├── components/
+│   ├── ScanStage.jsx           # Stage 0 — image upload / crop UI
+│   ├── ReadStage.jsx           # Stage 1 — tappable text + TranslationPopup
+│   ├── ReviewStage.jsx         # Stage 2 — flashcard review
+│   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
+│   ├── WordList.jsx            # Full word-list overlay (all stages)
+│   ├── ApiKeyScreen.jsx        # API key entry screen
+│   ├── SignIn.jsx              # Auth screen
+│   └── LukuLogo.jsx            # SVG logo
+└── api/
+    ├── claude/route.js         # Server proxy for Anthropic API
+    ├── words/route.js          # CRUD for saved vocabulary
+    └── reviews/route.js        # SRS grading endpoint
 ```
-
-- `page.js` is a single `"use client"` component containing the entire app
-- `route.js` is the only server-side code — it proxies requests to `https://api.anthropic.com/v1/messages`
 
 ## Architecture
 
 ### Three-Stage Workflow
 
-1. **Scan (stage 0)** — Upload or photograph a Finnish text image
-2. **Read (stage 1)** — OCR-extracted text displayed; tap any word for translation
-3. **Review (stage 2)** — Flashcard session for words added during reading
+1. **Scan (stage 0)** — Upload or photograph a Finnish text image; optionally crop; OCR runs locally via Tesseract or via Claude Vision
+2. **Read (stage 1)** — OCR-extracted text displayed as tappable tokens; tap any word to translate; add words to the review list
+3. **Review (stage 2)** — SRS flashcard session for saved words
 
-### Key Functions in `app/page.js`
+### State organisation
+
+`page.jsx` is a thin orchestrator. All domain state lives in custom hooks:
+
+| Hook | Owns |
+|------|------|
+| `useApiKey` | `savedKey` + localStorage persistence |
+| `useSession` | Per-scan translation cache + localStorage persistence |
+| `useWords` | `dbWords`, `loadingWords`, word CRUD |
+| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
+| `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
+
+Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleScanAnother`, `onWord`) are composed in `page.jsx`.
+
+### Key utility functions (`app/lib/`)
 
 | Function | Purpose |
 |----------|---------|
-| `callClaude()` | Generic wrapper for Claude API calls via `/api/claude` |
-| `ocrImage()` | Extracts text from image using Claude Vision |
-| `translateWord()` | Gets dictionary form, translations, and part of speech |
-| `fileToBase64()` | Client-side image resize/compress (max 1024px, ≤400KB) |
-| `tokenize()` | Splits text into words, punctuation, spaces, and line breaks |
-| `sentenceOf()` | Finds the sentence containing a given word for context |
+| `callClaude()` (`api.js`) | Generic wrapper for Claude API calls via `/api/claude` |
+| `ocrImage()` (`api.js`) | Extracts text from image using Claude Vision |
+| `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech |
+| `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |
+| `fileToBase64()` (`image.js`) | Client-side image resize/compress (max 1024px, ≤400KB) |
+| `getCroppedImg()` (`image.js`) | Crops a canvas region to base64 |
+| `tokenize()` (`utils.js`) | Splits text into words, punctuation, spaces, and line breaks |
+| `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
 
 ### API Key Handling
 
 - Users enter their Anthropic API key on first load
-- Key is kept in React state only (memory) — never persisted or sent to any server except Anthropic
+- Key is persisted to `localStorage` (not server-side)
 - The server route (`route.js`) receives the key per-request and forwards it to Anthropic
 - Optional: set `ANTHROPIC_API_KEY` env var for personal deployments
 
@@ -74,13 +104,14 @@ app/
 - Primary color gradient: `#4a7c9e` → `#2d5a7a`
 - Part-of-speech colors: verb=green, noun=warm, adjective=blue, adverb=purple
 - All styles are inline objects (no CSS files or CSS-in-JS library)
+- Two shared button style objects (`Bp` = primary, `Bg` = ghost) are defined locally in each file that needs them
 
 ## Common Patterns
 
-- State is managed with 18 `useState` hooks in the root component
 - No external state management (no Redux, Zustand, etc.)
-- No component decomposition — everything lives in `app/page.js`
 - Claude API responses for translations are parsed as JSON with a regex fallback for markdown fences
+- Optimistic UI updates for word add/delete with server-side rollback on failure
+- `useReview` self-corrects the queue when a word is deleted externally (e.g. another tab)
 
 ## Environment Variables
 
