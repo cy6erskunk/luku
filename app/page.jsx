@@ -99,6 +99,7 @@ export default function Luku() {
   const handleAddWord = async () => {
     if (!popup?.k) return;
     const entry = session[popup.k];
+    if (!entry) return;
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
     try { await words.saveWord(entry); }

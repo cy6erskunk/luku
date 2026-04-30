@@ -50,10 +50,11 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
                 </div>
               ))}
             </div>
-            {(popup.added || session[popup.k]?.added)
-              ? <div style={{ fontSize: 11, color: "#4a7c9e", textAlign: "center", padding: 5, background: "rgba(74,124,158,0.1)", borderRadius: 6 }}>✓ Added to review</div>
-              : <button onClick={onAddWord} style={{ width: "100%", padding: 7, fontSize: 12, cursor: "pointer", background: "rgba(74,124,158,0.18)", border: "1px solid rgba(74,124,158,0.38)", color: "#7ab4d4", borderRadius: 7, fontFamily: "inherit" }}>+ Add to review list</button>
-            }
+            {session[popup.k] && (
+              (popup.added || session[popup.k]?.added)
+                ? <div style={{ fontSize: 11, color: "#4a7c9e", textAlign: "center", padding: 5, background: "rgba(74,124,158,0.1)", borderRadius: 6 }}>✓ Added to review</div>
+                : <button onClick={onAddWord} style={{ width: "100%", padding: 7, fontSize: 12, cursor: "pointer", background: "rgba(74,124,158,0.18)", border: "1px solid rgba(74,124,158,0.38)", color: "#7ab4d4", borderRadius: 7, fontFamily: "inherit" }}>+ Add to review list</button>
+            )}
           </>
         )
       }

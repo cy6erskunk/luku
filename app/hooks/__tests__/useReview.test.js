@@ -107,13 +107,12 @@ describe("useReview – removeWordFromQueue", () => {
     const { result } = renderHook(() => useReview(makeProps()));
     act(() => {
       result.current.startReview(WORDS);
-      // advance to word 3 (revIdx = 2)
-      result.current.startReview([WORDS[0], WORDS[1], WORDS[2]]);
+      result.current.setRevIdx(2); // position on word 3 (index 2)
     });
-    // simulate being at revIdx 2 by removing earlier words
     act(() => result.current.removeWordFromQueue(1));
-    // word 1 was at index 0 (before revIdx 0, initially), queue is now [2,3]
+    // word 1 was at index 0, before current position → revIdx shifts from 2 to 1
     expect(result.current.queue).toEqual([2, 3]);
+    expect(result.current.revIdx).toBe(1);
   });
 
   it("clears showAnswer when current word is removed", () => {

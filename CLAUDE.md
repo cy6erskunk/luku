@@ -104,7 +104,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 - Primary color gradient: `#4a7c9e` → `#2d5a7a`
 - Part-of-speech colors: verb=green, noun=warm, adjective=blue, adverb=purple
 - All styles are inline objects (no CSS files or CSS-in-JS library)
-- Two shared button style objects (`Bp` = primary, `Bg` = ghost) are defined locally in each file that needs them
+- Two shared button style objects (`Bp` = primary, `Bg` = ghost) are imported from `app/lib/styles.js`
 
 ## Common Patterns
 

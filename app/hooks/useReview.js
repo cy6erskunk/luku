@@ -84,7 +84,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   };
 
   return {
-    queue, revIdx, showAnswer, setShowAnswer, grading,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading,
     startReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }
