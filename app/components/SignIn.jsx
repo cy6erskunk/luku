@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { authClient } from "../lib/authClient";
 import LukuLogo from "./LukuLogo.jsx";
+import { Bp, Bg } from "../lib/styles.js";
 
 const D = "#0f1117";
 
@@ -13,8 +14,6 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
 
-  const Bp2 = { padding: "13px 18px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: "none", fontFamily: "Georgia,serif", background: "linear-gradient(135deg,#4a7c9e,#2d5a7a)", color: "#fff" };
-  const Bg2 = { ...Bp2, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "#6b645e" };
   const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "Georgia,serif", boxSizing: "border-box", outline: "none", marginBottom: 10 };
 
   const signInSocial = async (provider) => {
@@ -61,10 +60,10 @@ export default function SignIn() {
 
         {mode === "main" && <>
           <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
-          <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+          <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
             {loading === "google" ? "Redirecting…" : "Continue with Google"}
           </button>
-          <button onClick={() => signInSocial("github")} disabled={!!loading} style={{ ...Bg2, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+          <button onClick={() => signInSocial("github")} disabled={!!loading} style={{ ...Bg, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
             {loading === "github" ? "Redirecting…" : "Continue with GitHub"}
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
@@ -72,8 +71,8 @@ export default function SignIn() {
             <span style={{ fontSize: 11, color: "#3a4550" }}>or</span>
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
           </div>
-          <button onClick={() => { setErr(""); setMode("sign-in"); }} style={{ ...Bg2, width: "100%", marginBottom: 8 }}>Sign in with email</button>
-          <button onClick={() => { setErr(""); setMode("sign-up"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>Create account</button>
+          <button onClick={() => { setErr(""); setMode("sign-in"); }} style={{ ...Bg, width: "100%", marginBottom: 8 }}>Sign in with email</button>
+          <button onClick={() => { setErr(""); setMode("sign-up"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>Create account</button>
           {errBox}
         </>}
 
@@ -81,10 +80,10 @@ export default function SignIn() {
           <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
             onKeyDown={(e) => e.key === "Enter" && signInEmail()} />
-          <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+          <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Signing in…" : "Sign in"}
           </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
+          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>← Back</button>
           {errBox}
         </>}
 
@@ -93,10 +92,10 @@ export default function SignIn() {
           <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
             onKeyDown={(e) => e.key === "Enter" && signUpEmail()} />
-          <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp2, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+          <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Creating account…" : "Create account"}
           </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg2, width: "100%", fontSize: 13 }}>← Back</button>
+          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>← Back</button>
           {errBox}
         </>}
       </div>
