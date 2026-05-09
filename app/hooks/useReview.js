@@ -5,6 +5,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   const [revIdx, setRevIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [grading, setGrading] = useState(false);
+  const [isRepeat, setIsRepeat] = useState(false);
 
   // Self-correct if the current queue entry refers to a word no longer in
   // dbWords (e.g. deleted in another tab). Without this the review screen
@@ -21,7 +22,15 @@ export function useReview({ dbWords, updateWord, stage }) {
   }, [stage, revIdx, queue, dbWords]);
 
   const startReview = (dueWords) => {
+    setIsRepeat(false);
     setQueue(dueWords.map((w) => w.id));
+    setRevIdx(0);
+    setShowAnswer(false);
+  };
+
+  const startRepeat = (words) => {
+    setIsRepeat(true);
+    setQueue(words.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
   };
@@ -35,6 +44,12 @@ export function useReview({ dbWords, updateWord, stage }) {
         setQueue((q) => q.filter((qid) => qid !== wordId));
         if (adjust > 0) setRevIdx((i) => i - adjust);
       }
+      setShowAnswer(false);
+      return;
+    }
+    if (isRepeat) {
+      if (grade < 3) setQueue((q) => [...q, wordId]);
+      setRevIdx((i) => i + 1);
       setShowAnswer(false);
       return;
     }
@@ -82,10 +97,11 @@ export function useReview({ dbWords, updateWord, stage }) {
     setRevIdx(0);
     setShowAnswer(false);
     setGrading(false);
+    setIsRepeat(false);
   };
 
   return {
-    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading,
-    startReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, isRepeat,
+    startReview, startRepeat, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }

@@ -61,10 +61,20 @@ export default function Luku() {
 
   const dueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const savedBases = new Set(words.dbWords.map((w) => w.base));
+  const repeatWords = dueWords.length === 0
+    ? [...words.dbWords].sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0)).slice(0, 5)
+    : [];
 
   const handleStartReview = () => {
     if (words.loadingWords) return;
     review.startReview(dueWords);
+    setPopup(null);
+    setStage(2);
+  };
+
+  const handleStartRepeat = () => {
+    if (words.loadingWords || repeatWords.length === 0) return;
+    review.startRepeat(repeatWords);
     setPopup(null);
     setStage(2);
   };
@@ -153,7 +163,7 @@ export default function Luku() {
         </div>
       </div>
 
-      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} />}
+      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} />}
       {stage === 1 && (
         <ReadStage
           tokens={tokens}
@@ -181,10 +191,13 @@ export default function Luku() {
           showAnswer={review.showAnswer}
           setShowAnswer={review.setShowAnswer}
           grading={review.grading}
+          isRepeat={review.isRepeat}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
           onScanAnother={handleScanAnother}
+          repeatWords={repeatWords}
+          onStartRepeat={handleStartRepeat}
         />
       )}
 
