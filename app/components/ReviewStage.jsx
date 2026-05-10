@@ -3,9 +3,10 @@ import { Bp, Bg } from "../lib/styles.js";
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
 export default function ReviewStage({
-  queue, revIdx, showAnswer, setShowAnswer, grading, isRepeat,
+  queue, revIdx, showAnswer, setShowAnswer, grading,
   dbWords, loadingWords,
-  onGrade, onScanAnother, repeatWords, onStartRepeat,
+  onGrade, onScanAnother,
+  isRepeat, repeatWords, onStartRepeat,
 }) {
   if (loadingWords) {
     return (
