@@ -73,8 +73,15 @@ export default function Luku() {
   };
 
   const handleStartRepeat = () => {
-    if (words.loadingWords || repeatWords.length === 0) return;
-    review.startRepeat(repeatWords);
+    if (words.loadingWords || words.dbWords.length === 0) return;
+    const pool = [...words.dbWords]
+      .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
+      .slice(0, 15);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    review.startRepeat(pool.slice(0, 5));
     setPopup(null);
     setStage(2);
   };
