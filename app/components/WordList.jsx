@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { wordForms } from "../lib/utils.js";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -35,10 +36,7 @@ export default function WordList({ words, onClose, onDelete }) {
               <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span style={{ fontSize: 15, color: "#e8e0d5" }}>{w.word}</span>
-                    {w.base && w.base.toLowerCase() !== w.word?.toLowerCase() && (
-                      <span style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace" }}>{w.base}</span>
-                    )}
+                    <span style={{ fontSize: 15, color: "#e8e0d5" }}>{w.base || w.word}</span>
                     {w.pos && (
                       <span style={{ fontSize: 9, color: POS_CLR[w.pos] ?? "#666", fontFamily: "monospace" }}>{w.pos}</span>
                     )}
@@ -46,6 +44,11 @@ export default function WordList({ words, onClose, onDelete }) {
                   <div style={{ fontSize: 12, color: "#6b645e", marginTop: 2 }}>
                     {(w.translations || []).slice(0, 2).join(", ")}
                   </div>
+                  {wordForms(w).length > 0 && (
+                    <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace", marginTop: 2 }}>
+                      {wordForms(w).map((f) => f.translation ? `${f.word} — ${f.translation}` : f.word).join(" · ")}
+                    </div>
+                  )}
                 </div>
                 {pendingId === w.id
                   ? <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 5, flexShrink: 0 }}>

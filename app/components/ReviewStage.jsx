@@ -1,4 +1,5 @@
 import { Bp, Bg } from "../lib/styles.js";
+import { wordForms } from "../lib/utils.js";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -52,6 +53,7 @@ export default function ReviewStage({
 
   const w = dbWords.find((dw) => dw.id === queue[revIdx]);
   if (!w) return null;
+  const forms = wordForms(w);
 
   return (
     <div style={{ padding: "24px 18px 36px", maxWidth: 460, margin: "0 auto" }}>
@@ -67,16 +69,24 @@ export default function ReviewStage({
         <div style={{ height: "100%", width: `${(revIdx / queue.length) * 100}%`, background: isRepeat ? "rgba(74,124,158,0.5)" : "#4a7c9e", transition: "width 0.3s" }} />
       </div>
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 32, marginBottom: 4 }}>{w.word}</div>
-        {w.base && w.base !== w.word?.toLowerCase() && (
-          <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace", marginBottom: 4 }}>base: {w.base}</div>
-        )}
+        <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base || w.word}</div>
         {showAnswer && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
             {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 10 }}>{w.pos}</div>}
             {(w.translations || []).map((t, i) => (
               <div key={i} style={{ fontSize: i === 0 ? 18 : 13, color: i === 0 ? "#c8c0b5" : "#6b645e", marginBottom: 4 }}>{t}</div>
             ))}
+            {forms.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginBottom: 6 }}>seen in text</div>
+                {forms.map((f, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "#6b645e", marginBottom: 2 }}>
+                    <span style={{ color: "#a89f93" }}>{f.word}</span>
+                    {f.translation && <span> — {f.translation}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
