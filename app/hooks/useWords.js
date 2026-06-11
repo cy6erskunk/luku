@@ -19,7 +19,7 @@ export function useWords(userId) {
     const r = await fetch("/api/words", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos }),
+      body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos, formTranslation: entry.formTranslation }),
     });
     if (!r.ok) throw new Error(`Failed to save word (${r.status})`);
     const { word: saved } = await r.json();

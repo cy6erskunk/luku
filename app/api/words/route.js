@@ -38,14 +38,26 @@ export async function POST(request) {
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { word, base, translations, pos } = await request.json();
+  const { word, base, translations, pos, formTranslation } = await request.json();
   const sql = getDb();
 
+  const baseForm = base ?? word;
+  const forms = word && baseForm && word.toLowerCase() !== baseForm.toLowerCase()
+    ? [{ word, translation: formTranslation ?? null }]
+    : [];
+
   const rows = await sql`
-    INSERT INTO words (user_id, word, base, translations, pos)
-    VALUES (${user.id}, ${word}, ${base ?? word}, ${translations}, ${pos ?? "other"})
+    INSERT INTO words (user_id, word, base, translations, pos, forms)
+    VALUES (${user.id}, ${word}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb)
     ON CONFLICT (user_id, base) DO UPDATE
-      SET word = EXCLUDED.word, translations = EXCLUDED.translations, pos = EXCLUDED.pos
+      SET word = EXCLUDED.word, translations = EXCLUDED.translations, pos = EXCLUDED.pos,
+          forms = CASE
+            WHEN EXISTS (
+              SELECT 1 FROM jsonb_array_elements(words.forms) AS f
+              WHERE lower(f->>'word') = lower(EXCLUDED.word)
+            ) THEN words.forms
+            ELSE words.forms || EXCLUDED.forms
+          END
     RETURNING *
   `;
   return Response.json({ word: rows[0] ?? null });

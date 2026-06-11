@@ -89,15 +89,28 @@ describe("TranslationPopup – translation branch", () => {
     expect(screen.getByText("verb")).toBeTruthy();
   });
 
-  it("hides the base form when it matches the word (case-insensitive)", () => {
+  it("hides the in-text block when the word matches the base (case-insensitive)", () => {
     setup(popup, { juosta: SESSION_ENTRY });
-    expect(screen.queryByText(/base: juosta/)).toBeNull();
+    expect(screen.queryByText(/in text/i)).toBeNull();
   });
 
-  it("shows the base form when it differs from the word", () => {
+  it("uses the base form as the headline when the tapped word is inflected", () => {
     const p = { ...popup, word: "juoksin", base: "juosta" };
     setup(p, { juosta: SESSION_ENTRY });
-    expect(screen.getByText(/base: juosta/)).toBeTruthy();
+    expect(screen.getByText("juosta")).toBeTruthy();
+  });
+
+  it("shows the tapped form in the in-text block when it differs from the base", () => {
+    const p = { ...popup, word: "juoksin", base: "juosta" };
+    setup(p, { juosta: SESSION_ENTRY });
+    expect(screen.getByText(/in text/i)).toBeTruthy();
+    expect(screen.getByText(/juoksin/)).toBeTruthy();
+  });
+
+  it("shows the form translation next to the tapped form when available", () => {
+    const p = { ...popup, word: "juoksin", base: "juosta", formTranslation: "I ran" };
+    setup(p, { juosta: SESSION_ENTRY });
+    expect(screen.getByText(/I ran/)).toBeTruthy();
   });
 
   it("shows Add button when session has an entry and word is not added", () => {

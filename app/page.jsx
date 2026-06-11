@@ -106,7 +106,7 @@ export default function Luku() {
     setXlating(tok.k); setPopup({ word: tok.v, k: tok.k, x, y, loading: true });
     try {
       const d = await translateWord(savedKey, tok.v, sentenceOf(text, tok.v));
-      const entry = { base: d.base, translations: d.translations, pos: d.pos, original: tok.v, added: false };
+      const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, original: tok.v, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       setPopup({ ...entry, word: tok.v, k: tok.k, x, y });
     } catch (e) { setPopup((p) => ({ ...p, loading: false, translations: [`(${e.message || "error"})`] })); }

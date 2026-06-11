@@ -32,10 +32,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 19, color: "#e8e0d5", fontWeight: 600 }}>{popup.word}</div>
-                {popup.base && popup.base !== popup.word?.toLowerCase() && (
-                  <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace" }}>base: {popup.base}</div>
-                )}
+                <div style={{ fontSize: 19, color: "#e8e0d5", fontWeight: 600 }}>{popup.base || popup.word}</div>
               </div>
               {popup.pos && (
                 <div style={{ fontSize: 9, padding: "2px 6px", borderRadius: 8, marginTop: 2, fontFamily: "monospace", color: POS_CLR[popup.pos] ?? "#666", background: "rgba(255,255,255,0.05)", border: `1px solid ${(POS_CLR[popup.pos] ?? "#666")}44` }}>
@@ -50,6 +47,15 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
                 </div>
               ))}
             </div>
+            {popup.base && popup.base !== popup.word?.toLowerCase() && (
+              <div style={{ marginBottom: 12, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginBottom: 3 }}>in text</div>
+                <div style={{ fontSize: 12, color: "#c8c0b5" }}>
+                  {popup.word}
+                  {popup.formTranslation && <span style={{ color: "#6b645e" }}> — {popup.formTranslation}</span>}
+                </div>
+              </div>
+            )}
             {session[popup.k] && (
               (popup.added || session[popup.k]?.added)
                 ? <div style={{ fontSize: 11, color: "#4a7c9e", textAlign: "center", padding: 5, background: "rgba(74,124,158,0.1)", borderRadius: 6 }}>✓ Added to review</div>

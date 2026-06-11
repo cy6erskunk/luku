@@ -89,6 +89,20 @@ describe("useWords – saveWord", () => {
       act(() => result.current.saveWord({ original: "juosta", base: "juosta", translations: [], pos: "verb" }))
     ).rejects.toThrow("Failed to save word (500)");
   });
+
+  it("sends the form translation in the request body", async () => {
+    mockFetchJson({ words: [] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let body;
+    vi.stubGlobal("fetch", vi.fn((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: WORD_A }) });
+    }));
+    await act(() => result.current.saveWord({ original: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" }));
+    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" });
+  });
 });
 
 describe("useWords – updateWord", () => {
