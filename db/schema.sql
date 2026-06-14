@@ -26,10 +26,20 @@ CREATE INDEX IF NOT EXISTS words_user_due ON words (user_id, next_review_at);
 -- Migration for deployments created before the forms column existed.
 -- Seeds forms from the previously saved inflection; its old translations
 -- were contextual, so the first one doubles as the form translation.
+-- Wrapped in an existence check so fresh installs (which never had a word
+-- column) don't trip on the UPDATE referencing it.
 ALTER TABLE words ADD COLUMN IF NOT EXISTS forms JSONB NOT NULL DEFAULT '[]';
-UPDATE words
-  SET forms = jsonb_build_array(jsonb_build_object('word', word, 'translation', translations[1]))
-  WHERE forms = '[]'::jsonb AND lower(word) <> lower(base);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'words' AND column_name = 'word'
+  ) THEN
+    UPDATE words
+      SET forms = jsonb_build_array(jsonb_build_object('word', word, 'translation', translations[1]))
+      WHERE forms = '[]'::jsonb AND lower(word) <> lower(base);
+  END IF;
+END $$;
 
 -- The word column is now redundant: every inflection lives in forms.
 ALTER TABLE words DROP COLUMN IF EXISTS word;
