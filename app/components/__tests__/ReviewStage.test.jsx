@@ -5,8 +5,8 @@ import ReviewStage from "../ReviewStage.jsx";
 
 afterEach(cleanup);
 
-const WORD = { id: 1, word: "juosta", base: "juosta", translations: ["to run", "run"], pos: "verb", interval_days: 3, ease_factor: "2.5" };
-const WORD_NO_BASE = { id: 2, word: "koira", base: "koira", translations: ["dog"], pos: "noun", interval_days: 0, ease_factor: "2.5" };
+const WORD = { id: 1, base: "juosta", translations: ["to run", "run"], pos: "verb", interval_days: 3, ease_factor: "2.5" };
+const WORD_NO_BASE = { id: 2, base: "koira", translations: ["dog"], pos: "noun", interval_days: 0, ease_factor: "2.5" };
 
 function setup(props = {}) {
   const defaults = {
@@ -97,27 +97,21 @@ describe("ReviewStage – card in progress", () => {
   });
 
   it("shows the base form as the card front for an inflected word", () => {
-    const inflected = { ...WORD, id: 3, word: "juoksin", base: "juosta", forms: [{ word: "juoksin", translation: "I ran" }] };
+    const inflected = { ...WORD, id: 3, base: "juosta", forms: [{ word: "juoksin", translation: "I ran" }] };
     setup({ queue: [3], dbWords: [inflected] });
     expect(screen.getByText("juosta")).toBeTruthy();
     expect(screen.queryByText(/juoksin/)).toBeNull();
   });
 
   it("shows scanned forms with their translations after the answer is revealed", () => {
-    const inflected = { ...WORD, id: 3, word: "juoksin", base: "juosta", forms: [{ word: "juoksin", translation: "I ran" }] };
+    const inflected = { ...WORD, id: 3, base: "juosta", forms: [{ word: "juoksin", translation: "I ran" }] };
     setup({ queue: [3], dbWords: [inflected], showAnswer: true });
     expect(screen.getByText(/seen in text/i)).toBeTruthy();
     expect(screen.getByText("juoksin")).toBeTruthy();
     expect(screen.getByText(/I ran/)).toBeTruthy();
   });
 
-  it("falls back to the stored inflection when forms are missing (pre-migration row)", () => {
-    const legacy = { ...WORD, id: 4, word: "juoksin", base: "juosta" };
-    setup({ queue: [4], dbWords: [legacy], showAnswer: true });
-    expect(screen.getByText("juoksin")).toBeTruthy();
-  });
-
-  it("hides the seen-in-text block when the word matches the base", () => {
+  it("hides the seen-in-text block when no inflections are recorded", () => {
     setup({ queue: [2], dbWords: [WORD_NO_BASE], showAnswer: true });
     expect(screen.queryByText(/seen in text/i)).toBeNull();
   });

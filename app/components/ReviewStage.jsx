@@ -69,7 +69,7 @@ export default function ReviewStage({
         <div style={{ height: "100%", width: `${(revIdx / queue.length) * 100}%`, background: isRepeat ? "rgba(74,124,158,0.5)" : "#4a7c9e", transition: "width 0.3s" }} />
       </div>
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base || w.word}</div>
+        <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base}</div>
         {showAnswer && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
             {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 10 }}>{w.pos}</div>}

@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useWords } from "../useWords.js";
 
-const WORD_A = { id: 1, word: "juosta", base: "juosta", translations: ["to run"], pos: "verb" };
-const WORD_B = { id: 2, word: "koira", base: "koira", translations: ["dog"], pos: "noun" };
+const WORD_A = { id: 1, base: "juosta", translations: ["to run"], pos: "verb" };
+const WORD_B = { id: 2, base: "koira", translations: ["dog"], pos: "noun" };
 
 function mockFetch(response) {
   vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(response)));

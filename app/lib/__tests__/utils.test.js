@@ -4,15 +4,12 @@ import { hasApiKey, tokenize, sentenceOf, wordForms, SKIP_KEY } from "../utils.j
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
     const forms = [{ word: "juoksin", translation: "I ran" }];
-    expect(wordForms({ word: "juoksin", base: "juosta", forms })).toEqual(forms);
+    expect(wordForms({ base: "juosta", forms })).toEqual(forms);
   });
 
-  it("falls back to the stored inflection for pre-migration rows", () => {
-    expect(wordForms({ word: "juoksin", base: "juosta" })).toEqual([{ word: "juoksin", translation: null }]);
-  });
-
-  it("returns empty array when the word matches the base (case-insensitive)", () => {
-    expect(wordForms({ word: "Koira", base: "koira", forms: [] })).toEqual([]);
+  it("returns empty array when forms is missing or empty", () => {
+    expect(wordForms({ base: "juosta" })).toEqual([]);
+    expect(wordForms({ base: "juosta", forms: [] })).toEqual([]);
   });
 
   it("returns empty array for null/undefined input", () => {

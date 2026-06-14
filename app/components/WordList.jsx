@@ -36,7 +36,7 @@ export default function WordList({ words, onClose, onDelete }) {
               <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span style={{ fontSize: 15, color: "#e8e0d5" }}>{w.base || w.word}</span>
+                    <span style={{ fontSize: 15, color: "#e8e0d5" }}>{w.base}</span>
                     {w.pos && (
                       <span style={{ fontSize: 9, color: POS_CLR[w.pos] ?? "#666", fontFamily: "monospace" }}>{w.pos}</span>
                     )}

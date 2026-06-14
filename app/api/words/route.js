@@ -47,14 +47,15 @@ export async function POST(request) {
     : [];
 
   const rows = await sql`
-    INSERT INTO words (user_id, word, base, translations, pos, forms)
-    VALUES (${user.id}, ${word}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb)
+    INSERT INTO words (user_id, base, translations, pos, forms)
+    VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb)
     ON CONFLICT (user_id, base) DO UPDATE
-      SET word = EXCLUDED.word, translations = EXCLUDED.translations, pos = EXCLUDED.pos,
+      SET translations = EXCLUDED.translations, pos = EXCLUDED.pos,
           forms = CASE
+            WHEN jsonb_array_length(EXCLUDED.forms) = 0 THEN words.forms
             WHEN EXISTS (
               SELECT 1 FROM jsonb_array_elements(words.forms) AS f
-              WHERE lower(f->>'word') = lower(EXCLUDED.word)
+              WHERE lower(f->>'word') = lower(EXCLUDED.forms->0->>'word')
             ) THEN words.forms
             ELSE words.forms || EXCLUDED.forms
           END
