@@ -104,6 +104,17 @@ describe("tokenize", () => {
     const tokens = tokenize("a—b");
     expect(tokens.find((t) => t.t === "pu")?.v).toBe("—");
   });
+
+  it("splits wrapping parens, brackets, and braces from words", () => {
+    expect(tokenize("(talo)").map((t) => t.v)).toEqual(["(", "talo", ")"]);
+    expect(tokenize("[koira]").map((t) => t.v)).toEqual(["[", "koira", "]"]);
+    expect(tokenize("{kissa}").map((t) => t.v)).toEqual(["{", "kissa", "}"]);
+  });
+
+  it("splits wrapping curly quotes from words", () => {
+    expect(tokenize("“talo”").map((t) => t.v)).toEqual(["“", "talo", "”"]);
+    expect(tokenize("‘koira’").map((t) => t.v)).toEqual(["‘", "koira", "’"]);
+  });
 });
 
 describe("sentenceOf", () => {
