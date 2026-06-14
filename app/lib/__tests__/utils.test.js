@@ -105,13 +105,13 @@ describe("tokenize", () => {
     expect(tokens.find((t) => t.t === "pu")?.v).toBe("—");
   });
 
-  it("splits trailing parentheses and brackets from words", () => {
+  it("splits wrapping parens, brackets, and braces from words", () => {
     expect(tokenize("(talo)").map((t) => t.v)).toEqual(["(", "talo", ")"]);
     expect(tokenize("[koira]").map((t) => t.v)).toEqual(["[", "koira", "]"]);
     expect(tokenize("{kissa}").map((t) => t.v)).toEqual(["{", "kissa", "}"]);
   });
 
-  it("splits trailing curly quotes from words", () => {
+  it("splits wrapping curly quotes from words", () => {
     expect(tokenize("“talo”").map((t) => t.v)).toEqual(["“", "talo", "”"]);
     expect(tokenize("‘koira’").map((t) => t.v)).toEqual(["‘", "koira", "’"]);
   });
