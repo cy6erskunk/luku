@@ -6,9 +6,9 @@ import WordList from "../WordList.jsx";
 afterEach(cleanup);
 
 const WORDS = [
-  { id: 1, word: "juoksin", base: "juosta", pos: "verb", translations: ["I ran", "ran"] },
-  { id: 2, word: "koira", base: "koira", pos: "noun", translations: ["dog"] },
-  { id: 3, word: "nopea", base: "nopea", pos: "adjective", translations: ["fast", "quick", "rapid"] },
+  { id: 1, base: "juosta", pos: "verb", translations: ["I ran", "ran"], forms: [{ word: "juoksin", translation: "I ran" }] },
+  { id: 2, base: "koira", pos: "noun", translations: ["dog"], forms: [] },
+  { id: 3, base: "nopea", pos: "adjective", translations: ["fast", "quick", "rapid"], forms: [] },
 ];
 
 const setup = (props = {}) => {
@@ -22,21 +22,19 @@ const setup = (props = {}) => {
 describe("WordList", () => {
   it("renders a row for each word", () => {
     setup();
-    expect(screen.getByText("juoksin")).toBeTruthy();
+    expect(screen.getByText("juosta")).toBeTruthy();
     expect(screen.getByText("koira")).toBeTruthy();
     expect(screen.getByText("nopea")).toBeTruthy();
   });
 
-  it("shows base form when it differs from the word", () => {
+  it("shows scanned inflections under the base form", () => {
     setup();
-    expect(screen.getByText("juosta")).toBeTruthy();
+    expect(screen.getByText(/juoksin — I ran/)).toBeTruthy();
   });
 
-  it("does not show base form when it matches the word (case-insensitive)", () => {
+  it("renders only the base when no inflections are recorded", () => {
     setup();
-    // koira base === koira — should not appear twice
-    const matches = screen.getAllByText("koira");
-    expect(matches).toHaveLength(1);
+    expect(screen.getAllByText("koira")).toHaveLength(1);
   });
 
   it("shows part of speech for each word", () => {
