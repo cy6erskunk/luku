@@ -38,7 +38,7 @@ export async function POST(request) {
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { word, base, translations, pos, formTranslation } = await request.json();
+  const { word, base, translations, pos, formTranslation, example, example_translation } = await request.json();
   const sql = getDb();
 
   const baseForm = base ?? word;
@@ -47,8 +47,8 @@ export async function POST(request) {
     : [];
 
   const rows = await sql`
-    INSERT INTO words (user_id, base, translations, pos, forms)
-    VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb)
+    INSERT INTO words (user_id, base, translations, pos, forms, example, example_translation)
+    VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb, ${example ?? null}, ${example_translation ?? null})
     ON CONFLICT (user_id, base) DO UPDATE
       SET translations = EXCLUDED.translations, pos = EXCLUDED.pos,
           forms = CASE
@@ -58,7 +58,9 @@ export async function POST(request) {
               WHERE lower(f->>'word') = lower(EXCLUDED.forms->0->>'word')
             ) THEN words.forms
             ELSE words.forms || EXCLUDED.forms
-          END
+          END,
+          example = COALESCE(EXCLUDED.example, words.example),
+          example_translation = COALESCE(EXCLUDED.example_translation, words.example_translation)
     RETURNING *
   `;
   return Response.json({ word: rows[0] ?? null });
