@@ -101,7 +101,7 @@ describe("useWords – saveWord", () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: WORD_A }) });
     }));
     await act(() => result.current.saveWord({ original: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" }));
-    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" });
+    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null });
   });
 });
 

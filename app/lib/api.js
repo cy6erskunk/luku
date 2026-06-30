@@ -25,13 +25,20 @@ export async function ocrImage(apiKey, base64, mediaType) {
 export async function translateWord(apiKey, word, context) {
   const raw = await callClaude(
     apiKey,
-    [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English of the dictionary form","alt1","alt2"],"form_translation":"English of \\"${word}\\" exactly as inflected in the sentence","pos":"noun/verb/adj/adv/other"}` }],
+    [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English of the dictionary form","alt1","alt2"],"form_translation":"English of \\"${word}\\" exactly as inflected in the sentence","pos":"noun/verb/adj/adv/other","example":"short 2-3 word Finnish sentence using the base form","example_translation":"English translation of example"}` }],
     "You are a Finnish linguist. Return only raw JSON, no markdown.",
-    300
+    400
   );
   try {
     const d = JSON.parse(raw.replace(/```json|```/g, "").trim());
-    return { base: d.base, translations: d.translations, formTranslation: d.form_translation ?? null, pos: d.pos };
+    return {
+      base: d.base,
+      translations: d.translations,
+      formTranslation: d.form_translation ?? null,
+      pos: d.pos,
+      example: d.example ?? null,
+      example_translation: d.example_translation ?? null,
+    };
   }
-  catch { return { base: word, translations: ["(unavailable)"], formTranslation: null, pos: "?" }; }
+  catch { return { base: word, translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null }; }
 }
