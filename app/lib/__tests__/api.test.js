@@ -90,7 +90,7 @@ describe("translateWord", () => {
       json: () => Promise.resolve({ content: [{ type: "text", text: '{"base":"koira","translations":["dog"],"form_translation":"dog\'s","pos":"noun"}' }] }),
     }));
     const result = await translateWord("sk-test", "koiran", "Koiran nimi on Musti.");
-    expect(result).toEqual({ base: "koira", translations: ["dog"], formTranslation: "dog's", pos: "noun" });
+    expect(result).toEqual({ base: "koira", translations: ["dog"], formTranslation: "dog's", pos: "noun", example: null, example_translation: null });
   });
 
   it("defaults formTranslation to null when the response omits it", async () => {
@@ -117,6 +117,6 @@ describe("translateWord", () => {
       json: () => Promise.resolve({ content: [{ type: "text", text: "not json" }] }),
     }));
     const result = await translateWord("sk-test", "talo", "Talo on iso.");
-    expect(result).toEqual({ base: "talo", translations: ["(unavailable)"], formTranslation: null, pos: "?" });
+    expect(result).toEqual({ base: "talo", translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null });
   });
 });
