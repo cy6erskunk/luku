@@ -116,6 +116,25 @@ describe("ReviewStage – card in progress", () => {
     expect(screen.queryByText(/seen in text/i)).toBeNull();
   });
 
+  it("shows the example sentence and its translation after the answer is revealed", () => {
+    const withExample = { ...WORD, example: "Minä juoksen.", example_translation: "I run." };
+    setup({ dbWords: [withExample], showAnswer: true });
+    expect(screen.getByText(/example/i)).toBeTruthy();
+    expect(screen.getByText("Minä juoksen.")).toBeTruthy();
+    expect(screen.getByText("I run.")).toBeTruthy();
+  });
+
+  it("hides the example block when no example is recorded", () => {
+    setup({ showAnswer: true });
+    expect(screen.queryByText("example")).toBeNull();
+  });
+
+  it("does not show the example before the answer is revealed", () => {
+    const withExample = { ...WORD, example: "Minä juoksen.", example_translation: "I run." };
+    setup({ dbWords: [withExample], showAnswer: false });
+    expect(screen.queryByText("Minä juoksen.")).toBeNull();
+  });
+
   it("shows Show answer button before answer is revealed", () => {
     setup();
     expect(screen.getByRole("button", { name: /show answer/i })).toBeTruthy();

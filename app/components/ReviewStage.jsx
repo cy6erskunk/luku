@@ -76,6 +76,13 @@ export default function ReviewStage({
             {(w.translations || []).map((t, i) => (
               <div key={i} style={{ fontSize: i === 0 ? 18 : 13, color: i === 0 ? "#c8c0b5" : "#6b645e", marginBottom: 4 }}>{t}</div>
             ))}
+            {w.example && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginBottom: 6 }}>example</div>
+                <div style={{ fontSize: 13, color: "#a89f93", marginBottom: 2 }}>{w.example}</div>
+                {w.example_translation && <div style={{ fontSize: 12, color: "#6b645e" }}>{w.example_translation}</div>}
+              </div>
+            )}
             {forms.length > 0 && (
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginBottom: 6 }}>seen in text</div>
