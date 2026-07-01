@@ -116,6 +116,25 @@ describe("ReviewStage – card in progress", () => {
     expect(screen.queryByText(/seen in text/i)).toBeNull();
   });
 
+  it("shows the Finnish example sentence on the card front before answer is revealed", () => {
+    const withExample = { ...WORD, example: "Minä juoksen.", example_translation: "I run." };
+    setup({ dbWords: [withExample], showAnswer: false });
+    expect(screen.getByText("Minä juoksen.")).toBeTruthy();
+    expect(screen.queryByText("I run.")).toBeNull();
+  });
+
+  it("shows the example translation on the answer side after reveal", () => {
+    const withExample = { ...WORD, example: "Minä juoksen.", example_translation: "I run." };
+    setup({ dbWords: [withExample], showAnswer: true });
+    expect(screen.getByText("Minä juoksen.")).toBeTruthy();
+    expect(screen.getByText("I run.")).toBeTruthy();
+  });
+
+  it("hides the example block when no example is recorded", () => {
+    setup({ showAnswer: false });
+    expect(screen.queryByText(/Minä/)).toBeNull();
+  });
+
   it("shows Show answer button before answer is revealed", () => {
     setup();
     expect(screen.getByRole("button", { name: /show answer/i })).toBeTruthy();
