@@ -70,12 +70,18 @@ export default function ReviewStage({
       </div>
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base}</div>
+        {w.example && (
+          <div style={{ marginTop: 10, fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>
+        )}
         {showAnswer && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
             {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 10 }}>{w.pos}</div>}
             {(w.translations || []).map((t, i) => (
               <div key={i} style={{ fontSize: i === 0 ? 18 : 13, color: i === 0 ? "#c8c0b5" : "#6b645e", marginBottom: 4 }}>{t}</div>
             ))}
+            {w.example_translation && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#6b645e", fontStyle: "italic" }}>{w.example_translation}</div>
+            )}
             {forms.length > 0 && (
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginBottom: 6 }}>seen in text</div>
