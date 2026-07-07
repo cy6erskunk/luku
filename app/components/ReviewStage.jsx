@@ -6,7 +6,7 @@ const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb
 export default function ReviewStage({
   queue, revIdx, showAnswer, setShowAnswer, grading,
   dbWords, loadingWords,
-  onGrade, onScanAnother, onRemoveNew,
+  onGrade, onScanAnother, onRemoveNew, onKeepNew,
   isRepeat, isNewReview,
   repeatWords, onStartRepeat,
   dueWords, onStartReview,
@@ -119,7 +119,7 @@ export default function ReviewStage({
         ? (
           <div style={{ display: "flex", gap: 8, opacity: grading ? 0.5 : 1 }}>
             <button onClick={() => onRemoveNew?.(w.id)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Remove</button>
-            <button onClick={() => onGrade(5)} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
+            <button onClick={() => onKeepNew?.(w.id)} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
           </div>
         )
         : (

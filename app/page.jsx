@@ -84,6 +84,16 @@ export default function Luku() {
     setStage(2);
   };
 
+  const handleKeepNew = (id) => {
+    setNewWordIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    review.gradeWord(5);
+  };
+
   const handleStartRepeat = () => {
     if (words.loadingWords || words.dbWords.length === 0) return;
     const pool = [...words.dbWords]
@@ -255,6 +265,7 @@ export default function Luku() {
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
+          onKeepNew={handleKeepNew}
           onRemoveNew={handleDeleteWord}
           onScanAnother={handleScanAnother}
           dueWords={dueWords}

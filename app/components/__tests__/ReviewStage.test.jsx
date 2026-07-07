@@ -227,11 +227,13 @@ describe("ReviewStage – new-review mode", () => {
     expect(screen.queryByRole("button", { name: /easy/i })).toBeNull();
   });
 
-  it("calls onGrade(5) when Keep is clicked", () => {
+  it("calls onKeepNew with the word id when Keep is clicked", () => {
+    const onKeepNew = vi.fn();
     const onGrade = vi.fn();
-    setup({ isNewReview: true, showAnswer: true, onGrade });
+    setup({ isNewReview: true, showAnswer: true, onKeepNew, onGrade });
     fireEvent.click(screen.getByRole("button", { name: /keep/i }));
-    expect(onGrade).toHaveBeenCalledWith(5);
+    expect(onKeepNew).toHaveBeenCalledWith(WORD.id);
+    expect(onGrade).not.toHaveBeenCalled();
   });
 
   it("calls onRemoveNew with the word id when Remove is clicked", () => {
