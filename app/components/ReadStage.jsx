@@ -6,8 +6,8 @@ export default function ReadStage({
   tokens, session, savedBases, xlating,
   popup,
   ocrSource, busy, err,
-  loadingWords, dueWords,
-  onWord, onAddWord, onRescanWithAI, onStartReview, onAddApiKey,
+  loadingWords, dueWords, newWords = [],
+  onWord, onAddWord, onRescanWithAI, onStartReview, onStartNewReview, onAddApiKey,
 }) {
   const containerRef = useRef();
 
@@ -81,9 +81,16 @@ export default function ReadStage({
         ))}
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 18px", background: "linear-gradient(to top,#0f1117 60%,transparent)", zIndex: 50 }}>
-        <button onClick={onStartReview} disabled={loadingWords} style={{ ...Bp, width: "100%", maxWidth: 480, margin: "0 auto", display: "block", opacity: loadingWords ? 0.5 : 1 }}>
-          Done Reading → Review{loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 18px", background: "linear-gradient(to top,#0f1117 60%,transparent)", zIndex: 50, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+        {newWords.length > 0 && (
+          <button onClick={onStartNewReview} disabled={loadingWords} style={{ ...Bp, width: "100%", maxWidth: 480, display: "block", opacity: loadingWords ? 0.5 : 1 }}>
+            Done Reading → Review {newWords.length} new word{newWords.length !== 1 ? "s" : ""}
+          </button>
+        )}
+        <button onClick={onStartReview} disabled={loadingWords} style={{ ...(newWords.length > 0 ? Bg : Bp), width: "100%", maxWidth: 480, display: "block", opacity: loadingWords ? 0.5 : 1 }}>
+          {newWords.length > 0
+            ? `Skip to due review${dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}`
+            : `Done Reading → Review${loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}`}
         </button>
       </div>
 

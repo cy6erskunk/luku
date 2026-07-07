@@ -161,6 +161,37 @@ describe("ReadStage – Done Reading button", () => {
   });
 });
 
+describe("ReadStage – new words review", () => {
+  it("does not show a new-words button when there are no new words", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: /review \d+ new word/i })).toBeNull();
+  });
+
+  it("shows a Review N new words button when new words exist", () => {
+    setup({ newWords: [{ id: 10 }, { id: 11 }] });
+    expect(screen.getByRole("button", { name: /review 2 new words/i })).toBeTruthy();
+  });
+
+  it("calls onStartNewReview when the new-words button is clicked", () => {
+    const onStartNewReview = vi.fn();
+    setup({ newWords: [{ id: 10 }], onStartNewReview });
+    fireEvent.click(screen.getByRole("button", { name: /review 1 new word/i }));
+    expect(onStartNewReview).toHaveBeenCalled();
+  });
+
+  it("shows a Skip to due review button as the secondary action when new words exist", () => {
+    setup({ newWords: [{ id: 10 }], dueWords: [{ id: 1 }, { id: 2 }] });
+    expect(screen.getByRole("button", { name: /skip to due review \(2 due\)/i })).toBeTruthy();
+  });
+
+  it("calls onStartReview when Skip to due review is clicked", () => {
+    const onStartReview = vi.fn();
+    setup({ newWords: [{ id: 10 }], dueWords: [{ id: 1 }], onStartReview });
+    fireEvent.click(screen.getByRole("button", { name: /skip to due review/i }));
+    expect(onStartReview).toHaveBeenCalled();
+  });
+});
+
 describe("ReadStage – translating indicator", () => {
   it("shows translating spinner when xlating is set", () => {
     setup({ xlating: "koira" });

@@ -169,6 +169,68 @@ describe("useReview – reset", () => {
   });
 });
 
+describe("useReview – startNewReview", () => {
+  it("populates queue with the given word ids and marks isNewReview", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startNewReview(WORDS));
+    expect(result.current.queue).toEqual([1, 2, 3]);
+    expect(result.current.isNewReview).toBe(true);
+    expect(result.current.isRepeat).toBe(false);
+    expect(result.current.mode).toBe("new");
+  });
+
+  it("resets revIdx and showAnswer", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => {
+      result.current.startNewReview(WORDS);
+      result.current.setShowAnswer(true);
+    });
+    act(() => result.current.startNewReview([WORDS[0]]));
+    expect(result.current.revIdx).toBe(0);
+    expect(result.current.showAnswer).toBe(false);
+  });
+
+  it("switching from new to due review flips flags", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startNewReview(WORDS));
+    act(() => result.current.startReview(WORDS));
+    expect(result.current.isNewReview).toBe(false);
+    expect(result.current.mode).toBe("due");
+  });
+});
+
+describe("useReview – gradeWord in new-review mode", () => {
+  it("advances without calling the SRS API", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ word: null }) })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startNewReview(WORDS));
+    await act(() => result.current.gradeWord(5));
+    expect(result.current.revIdx).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("never re-queues, regardless of grade", async () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startNewReview(WORDS));
+    await act(() => result.current.gradeWord(1));
+    expect(result.current.queue.length).toBe(3);
+  });
+
+  it("hides the answer after keeping a word", async () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => {
+      result.current.startNewReview(WORDS);
+      result.current.setShowAnswer(true);
+    });
+    await act(() => result.current.gradeWord(5));
+    expect(result.current.showAnswer).toBe(false);
+  });
+});
+
 describe("useReview – self-correction effect", () => {
   it("drops the current word from queue when it disappears from dbWords", () => {
     let dbWords = WORDS;
