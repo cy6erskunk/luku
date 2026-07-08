@@ -8,6 +8,16 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
   const left = Math.max(Math.min((popup.x ?? 150) - 125, containerWidth - 258), 4);
   const top = Math.max((popup.y ?? 80) - 155, 8);
 
+  const inListBadge = (
+    <div
+      aria-label="already in your list"
+      title="Already in your list"
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, letterSpacing: "0.05em", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.3)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}
+    >
+      <span aria-hidden="true">✓</span>in your list
+    </div>
+  );
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -26,6 +36,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
           <div style={{ textAlign: "center", padding: "18px 0", color: "#4a7c9e" }}>
             <div style={{ fontSize: 22, animation: "spin 1s linear infinite", marginBottom: 6 }}>⟳</div>
             <div style={{ fontSize: 12 }}>Analysing "{popup.word}"…</div>
+            {popup.existsInDb && <div style={{ marginTop: 8, display: "flex", justifyContent: "center" }}>{inListBadge}</div>}
           </div>
         )
         : (
@@ -33,6 +44,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
               <div>
                 <div style={{ fontSize: 19, color: "#e8e0d5", fontWeight: 600 }}>{popup.base || popup.word}</div>
+                {popup.existsInDb && <div style={{ marginTop: 6 }}>{inListBadge}</div>}
               </div>
               {popup.pos && (
                 <div style={{ fontSize: 9, padding: "2px 6px", borderRadius: 8, marginTop: 2, fontFamily: "monospace", color: POS_CLR[popup.pos] ?? "#666", background: "rgba(255,255,255,0.05)", border: `1px solid ${(POS_CLR[popup.pos] ?? "#666")}44` }}>

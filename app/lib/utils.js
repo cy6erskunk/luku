@@ -22,3 +22,24 @@ export function wordForms(w) {
 export function sentenceOf(text, word) {
   return (text.match(/[^.!?\n]+[.!?]*/g) || [text]).find((s) => s.toLowerCase().includes(word.toLowerCase())) || text.slice(0, 120);
 }
+
+// Returns the existing DB word that matches either the tapped form or the
+// resolved base (case-insensitive), or null. Matches against a word's own
+// base and any recorded inflection in its forms array.
+export function findExistingWord(dbWords, { form, base } = {}) {
+  const f = (form || "").toLowerCase();
+  const b = (base || "").toLowerCase();
+  if (!f && !b) return null;
+  if (!Array.isArray(dbWords)) return null;
+  for (const w of dbWords) {
+    const wb = (w?.base || "").toLowerCase();
+    if (b && wb && wb === b) return w;
+    if (f && wb && wb === f) return w;
+    if (f && Array.isArray(w?.forms)) {
+      for (const fx of w.forms) {
+        if ((fx?.word || "").toLowerCase() === f) return w;
+      }
+    }
+  }
+  return null;
+}
