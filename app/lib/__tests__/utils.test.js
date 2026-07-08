@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, sentenceOf, wordForms, SKIP_KEY } from "../utils.js";
+import { hasApiKey, tokenize, sentenceOf, wordForms, findExistingWord, SKIP_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -111,6 +111,50 @@ describe("tokenize", () => {
   it("splits wrapping curly quotes from words", () => {
     expect(tokenize("“talo”").map((t) => t.v)).toEqual(["“", "talo", "”"]);
     expect(tokenize("‘koira’").map((t) => t.v)).toEqual(["‘", "koira", "’"]);
+  });
+});
+
+describe("findExistingWord", () => {
+  const DB = [
+    { id: 1, base: "juosta", forms: [{ word: "juoksin", translation: "I ran" }] },
+    { id: 2, base: "koira", forms: [] },
+    { id: 3, base: "talo" },
+  ];
+
+  it("returns null when neither form nor base is provided", () => {
+    expect(findExistingWord(DB, {})).toBeNull();
+    expect(findExistingWord(DB, { form: "", base: "" })).toBeNull();
+  });
+
+  it("returns null when dbWords is not an array", () => {
+    expect(findExistingWord(null, { form: "koira" })).toBeNull();
+    expect(findExistingWord(undefined, { form: "koira" })).toBeNull();
+  });
+
+  it("matches by base case-insensitively", () => {
+    expect(findExistingWord(DB, { base: "KOIRA" })).toEqual(DB[1]);
+  });
+
+  it("matches when the tapped form equals a stored base", () => {
+    expect(findExistingWord(DB, { form: "Juosta" })).toEqual(DB[0]);
+  });
+
+  it("matches by a recorded inflection in forms", () => {
+    expect(findExistingWord(DB, { form: "Juoksin" })).toEqual(DB[0]);
+  });
+
+  it("returns null when neither the form nor base matches", () => {
+    expect(findExistingWord(DB, { form: "auto", base: "auto" })).toBeNull();
+  });
+
+  it("prefers a base match when both a base and unrelated form are provided", () => {
+    expect(findExistingWord(DB, { form: "unrelated", base: "talo" })).toEqual(DB[2]);
+  });
+
+  it("ignores words without a base and without a matching form", () => {
+    const db = [{ id: 9 }, ...DB];
+    expect(findExistingWord(db, { form: "auto" })).toBeNull();
+    expect(findExistingWord(db, { base: "koira" })).toEqual(DB[1]);
   });
 });
 

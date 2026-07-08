@@ -141,3 +141,28 @@ describe("TranslationPopup – translation branch", () => {
     expect(screen.queryByText(/added to review/i)).toBeNull();
   });
 });
+
+describe("TranslationPopup – existsInDb indicator", () => {
+  const popup = { word: "juosta", k: "juosta", x: 100, y: 80, base: "juosta", translations: ["to run"], pos: "verb" };
+
+  it("shows the 'in your list' badge when existsInDb is true", () => {
+    setup({ ...popup, existsInDb: true }, { juosta: SESSION_ENTRY });
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+  });
+
+  it("hides the badge when existsInDb is false", () => {
+    setup({ ...popup, existsInDb: false }, { juosta: SESSION_ENTRY });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+
+  it("shows the badge in the loading branch when existsInDb is true", () => {
+    setup({ word: "juosta", k: "juosta", x: 100, y: 80, loading: true, existsInDb: true });
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+    expect(screen.getByText(/analysing/i)).toBeTruthy();
+  });
+
+  it("does not show the badge in the no-key branch", () => {
+    setup({ word: "juosta", k: "juosta", x: 100, y: 80, noKey: true, existsInDb: true });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+});
