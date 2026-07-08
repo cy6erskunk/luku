@@ -18,6 +18,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [cropAspect, setCropAspect] = useState(3 / 4);
+  const [twoColumn, setTwoColumn] = useState(false);
 
   const fileRef = useRef();
   const camRef = useRef();
@@ -30,7 +31,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     const out = await ocrLocal(base64, mediaType, (label, p) => {
       setStep(label);
       setOcrProgress(p);
-    });
+    }, { twoColumn });
     setOcrProgress(1);
     return out;
   };
@@ -112,7 +113,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   return {
     busy, step, err, preview, ocrProgress, ocrSource,
     cropImage, cropFile, crop, setCrop, zoom, setZoom,
-    croppedAreaPixels, cropAspect, setCropAspect,
+    croppedAreaPixels, cropAspect, setCropAspect, twoColumn, setTwoColumn,
     onCropComplete, fileRef, camRef,
     processFile, onFile, onDrop, cropAndProcess, skipCrop, cancelCrop, rescanWithAI,
     reset,

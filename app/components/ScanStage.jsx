@@ -5,6 +5,7 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
   const {
     busy, step, err, preview, ocrProgress,
     cropImage, crop, setCrop, zoom, setZoom, croppedAreaPixels, cropAspect, setCropAspect,
+    twoColumn, setTwoColumn,
     onCropComplete, fileRef, camRef,
     onFile, onDrop, cropAndProcess, skipCrop, cancelCrop,
   } = image;
@@ -33,6 +34,10 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           <button onClick={() => setCropAspect(4 / 3)} style={{ ...Bg, flex: 1, opacity: cropAspect === 4 / 3 ? 1 : 0.5 }}>▬ Horizontal</button>
           <button onClick={() => setCropAspect(3 / 4)} style={{ ...Bg, flex: 1, opacity: cropAspect === 3 / 4 ? 1 : 0.5 }}>▮ Vertical</button>
         </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", maxWidth: 400, marginBottom: 10, cursor: "pointer", fontSize: 13, color: "#8a9aaa" }}>
+          <input type="checkbox" checked={twoColumn} onChange={(e) => setTwoColumn(e.target.checked)} style={{ accentColor: "#4a7c9e" }} />
+          Two-column layout
+        </label>
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
           <button onClick={cancelCrop} style={{ ...Bg, flex: 1 }}>Cancel</button>
           <button onClick={skipCrop} style={{ ...Bg, flex: 1 }}>Skip crop</button>
@@ -74,6 +79,10 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
       </div>
       <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
       <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+      <label style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", maxWidth: 400, marginBottom: 10, cursor: "pointer", fontSize: 13, color: "#8a9aaa" }}>
+        <input type="checkbox" checked={twoColumn} onChange={(e) => setTwoColumn(e.target.checked)} style={{ accentColor: "#4a7c9e" }} />
+        Two-column layout
+      </label>
       <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
         <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
         <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>📁 Photo Library</button>

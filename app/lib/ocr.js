@@ -52,11 +52,14 @@ export function resetTesseractWorker() {
   p.then((w) => w.terminate()).catch(() => {});
 }
 
-export function ocrLocal(base64, mediaType, onStatus) {
+export function ocrLocal(base64, mediaType, onStatus, { twoColumn = false } = {}) {
   const task = _ocrQueue.then(async () => {
     if (onStatus) onStatus("Loading OCR engine…", 0);
     _activeOnStatus = onStatus ?? null;
     const worker = await getOrCreateWorker();
+    await worker.setParameters({
+      tessedit_pageseg_mode: twoColumn ? "1" : "6",
+    });
     const dataUrl = `data:${mediaType};base64,${base64}`;
     try {
       const { data: { text } } = await worker.recognize(dataUrl);
