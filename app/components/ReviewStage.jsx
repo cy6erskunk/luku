@@ -10,6 +10,7 @@ export default function ReviewStage({
   isRepeat, isNewReview,
   repeatWords, onStartRepeat,
   dueWords, onStartReview,
+  preexistingNewIds,
 }) {
   if (loadingWords) {
     return (
@@ -70,6 +71,7 @@ export default function ReviewStage({
 
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   const heading = isNewReview ? "New words" : isRepeat ? "Extra practice" : "Review";
+  const isPreexisting = isNewReview && !!preexistingNewIds && preexistingNewIds.has(w.id);
 
   return (
     <div style={{ padding: "24px 18px 36px", maxWidth: 460, margin: "0 auto" }}>
@@ -87,6 +89,15 @@ export default function ReviewStage({
       </div>
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base}</div>
+        {isPreexisting && (
+          <div
+            aria-label="already in your list"
+            title="Already in your list — Remove keeps study history"
+            style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, letterSpacing: "0.05em", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.3)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}
+          >
+            <span aria-hidden="true">✓</span>in your list
+          </div>
+        )}
         {w.example && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>
         )}
@@ -118,7 +129,16 @@ export default function ReviewStage({
         : isNewReview
         ? (
           <div style={{ display: "flex", gap: 8, opacity: grading ? 0.5 : 1 }}>
-            <button onClick={() => onRemoveNew?.(w.id)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Remove</button>
+            <button
+              onClick={() => onRemoveNew?.(w.id)}
+              disabled={grading}
+              title={isPreexisting ? "Skip: keep study history and drop from the new-words bucket" : "Delete this word from your list"}
+              style={isPreexisting
+                ? { ...Bg, flex: 1, fontSize: 13 }
+                : { ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}
+            >
+              {isPreexisting ? "Skip" : "Remove"}
+            </button>
             <button onClick={() => onKeepNew?.(w.id)} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
           </div>
         )

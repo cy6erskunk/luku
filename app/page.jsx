@@ -35,6 +35,10 @@ export default function Luku() {
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
+  // Subset of newWordIds: words that already existed in the DB when the user
+  // re-added them this session. Kept separate so Remove can retire them from
+  // the new-words bucket without destroying their SRS history.
+  const [preexistingNewIds, setPreexistingNewIds] = useState(() => new Set());
 
   const words = useWords(user?.id);
 
@@ -84,14 +88,35 @@ export default function Luku() {
     setStage(2);
   };
 
-  const handleKeepNew = (id) => {
+  const retireFromNew = (id) => {
     setNewWordIds((prev) => {
       if (!prev.has(id)) return prev;
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
+    setPreexistingNewIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handleKeepNew = (id) => {
+    retireFromNew(id);
     review.gradeWord(5);
+  };
+
+  const handleRemoveNew = async (id) => {
+    if (preexistingNewIds.has(id)) {
+      // Word predates this session: just retire it from the new-words bucket.
+      // Its SRS history stays intact.
+      review.removeWordFromQueue(id);
+      retireFromNew(id);
+      return;
+    }
+    await handleDeleteWord(id);
   };
 
   const handleStartRepeat = () => {
@@ -112,6 +137,7 @@ export default function Luku() {
     setStage(0);
     setSession({});
     setNewWordIds(new Set());
+    setPreexistingNewIds(new Set());
     review.reset();
     image.reset();
     setText("");
@@ -150,6 +176,9 @@ export default function Luku() {
     if (!popup?.k) return;
     const entry = session[popup.k];
     if (!entry) return;
+    // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
+    // the DB" from "re-added something already there".
+    const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
     try {
@@ -161,6 +190,14 @@ export default function Luku() {
           next.add(saved.id);
           return next;
         });
+        if (wasPreexisting) {
+          setPreexistingNewIds((prev) => {
+            if (prev.has(saved.id)) return prev;
+            const next = new Set(prev);
+            next.add(saved.id);
+            return next;
+          });
+        }
       }
     } catch (e) { console.error("save word failed", e); }
   };
@@ -169,10 +206,19 @@ export default function Luku() {
     const deletedWord = words.dbWords.find((w) => w.id === id);
     if (!deletedWord) return;
     const wasNew = newWordIds.has(id);
+    const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
     words.removeWord(id);
     if (wasNew) {
       setNewWordIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+    if (wasPreexisting) {
+      setPreexistingNewIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
         next.delete(id);
@@ -188,6 +234,14 @@ export default function Luku() {
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
         setNewWordIds((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
+      if (wasPreexisting) {
+        setPreexistingNewIds((prev) => {
           if (prev.has(id)) return prev;
           const next = new Set(prev);
           next.add(id);
@@ -266,7 +320,8 @@ export default function Luku() {
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
           onKeepNew={handleKeepNew}
-          onRemoveNew={handleDeleteWord}
+          onRemoveNew={handleRemoveNew}
+          preexistingNewIds={preexistingNewIds}
           onScanAnother={handleScanAnother}
           dueWords={dueWords}
           onStartReview={handleStartReview}

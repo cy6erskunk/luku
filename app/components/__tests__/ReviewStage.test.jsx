@@ -278,3 +278,49 @@ describe("ReviewStage – new-review mode", () => {
     expect(screen.queryByRole("button", { name: /continue.*review/i })).toBeNull();
   });
 });
+
+describe("ReviewStage – new-review mode with preexisting words", () => {
+  it("shows the 'in your list' badge when the current card is preexisting", () => {
+    setup({
+      isNewReview: true,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+  });
+
+  it("does not show the badge when the current card is not preexisting", () => {
+    setup({
+      isNewReview: true,
+      preexistingNewIds: new Set(),
+    });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+
+  it("shows Skip instead of Remove for a preexisting card", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /^skip$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^remove$/i })).toBeNull();
+  });
+
+  it("Skip calls onRemoveNew with the word id (parent branches by preexistence)", () => {
+    const onRemoveNew = vi.fn();
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+      onRemoveNew,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    expect(onRemoveNew).toHaveBeenCalledWith(WORD.id);
+  });
+
+  it("hides the badge in regular due review even if preexistingNewIds includes the id", () => {
+    setup({
+      isNewReview: false,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+});
