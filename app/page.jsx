@@ -1,5 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
@@ -16,9 +17,126 @@ import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
 import { useReview } from "./hooks/useReview.js";
 import { useImageProcessing } from "./hooks/useImageProcessing.js";
-import { Bp, Bg } from "./lib/styles.js";
+import { buttonStyles, shared } from "./lib/styles.js";
 
-const D = "#0f1117";
+const s = stylex.create({
+  root: {
+    minHeight: "100vh",
+    background: "#0f1117",
+    color: "#e8e0d5",
+    fontFamily: "Georgia,serif",
+  },
+  loadingWrap: {
+    minHeight: "100vh",
+    background: "#0f1117",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: "#4a7c9e",
+    fontFamily: "Georgia,serif",
+    fontSize: 14,
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "16px 20px",
+    borderBottom: "1px solid rgba(255,255,255,0.07)",
+  },
+  logoArea: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    cursor: "pointer",
+  },
+  logoTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  logoSubSize: {
+    fontSize: 9,
+  },
+  steps: {
+    display: "flex",
+    gap: 4,
+    alignItems: "center",
+  },
+  stepItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+  },
+  stepDot: {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    fontSize: 9,
+    fontFamily: "monospace",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepDotActive: {
+    background: "#4a7c9e",
+    border: "1.5px solid #4a7c9e",
+    color: "#fff",
+  },
+  stepDotInactive: {
+    background: "rgba(255,255,255,0.05)",
+    border: "1.5px solid rgba(255,255,255,0.1)",
+    color: "#444",
+  },
+  stepLine: {
+    width: 14,
+    height: 1,
+    background: "rgba(255,255,255,0.08)",
+  },
+  actions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  wordBtnGroup: {
+    display: "flex",
+    gap: 5,
+  },
+  wordsBtn: {
+    fontSize: 11,
+    color: "#7a9e7e",
+    background: "rgba(122,158,126,0.1)",
+    padding: "3px 9px",
+    borderRadius: 20,
+    border: "1px solid rgba(122,158,126,0.2)",
+    cursor: "pointer",
+    fontFamily: "Georgia,serif",
+  },
+  newBtn: {
+    fontSize: 11,
+    color: "#7ab4d4",
+    background: "rgba(74,124,158,0.12)",
+    padding: "3px 9px",
+    borderRadius: 20,
+    border: "1px solid rgba(74,124,158,0.25)",
+    cursor: "pointer",
+    fontFamily: "Georgia,serif",
+  },
+  dueBtn: {
+    fontSize: 11,
+    color: "#9e8a7a",
+    background: "rgba(158,138,122,0.1)",
+    padding: "3px 9px",
+    borderRadius: 20,
+    border: "1px solid rgba(158,138,122,0.2)",
+    cursor: "pointer",
+    fontFamily: "Georgia,serif",
+  },
+  smallGhost: {
+    padding: "4px 10px",
+    fontSize: 11,
+  },
+});
 
 export default function Luku() {
   const authSession = authClient.useSession();
@@ -35,15 +153,7 @@ export default function Luku() {
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
-  // Subset of newWordIds: words that already existed in the DB when the user
-  // re-added them this session. Kept separate so Remove can retire them from
-  // the new-words bucket without destroying their SRS history.
   const [preexistingNewIds, setPreexistingNewIds] = useState(() => new Set());
-  // Ids with an in-flight DELETE. deletingRef is the synchronous re-entry
-  // guard (React state updates are batched, so a state Set alone can't stop
-  // a rapid second click); deletingIds mirrors it so ReviewStage can disable
-  // Remove / Skip / Keep for the card whose delete is pending. WordList runs
-  // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
 
@@ -63,8 +173,8 @@ export default function Luku() {
 
   if (authLoading) {
     return (
-      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
+      <div {...stylex.props(s.loadingWrap)}>
+        <div {...stylex.props(s.loadingText)}>Loading…</div>
       </div>
     );
   }
@@ -73,8 +183,6 @@ export default function Luku() {
 
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
-  // Words freshly added this session get their own review pass, so keep them
-  // out of the regular due queue until the user is done triaging them.
   const dueWords = allDueWords.filter((w) => !newWordIds.has(w.id));
   const savedBases = new Set(words.dbWords.map((w) => w.base));
   const repeatWords = allDueWords.length === 0
@@ -117,8 +225,6 @@ export default function Luku() {
 
   const handleRemoveNew = async (id) => {
     if (preexistingNewIds.has(id)) {
-      // Word predates this session: just retire it from the new-words bucket.
-      // Its SRS history stays intact.
       review.removeWordFromQueue(id);
       retireFromNew(id);
       return;
@@ -145,9 +251,6 @@ export default function Luku() {
     setSession({});
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
-    // Drop any in-flight delete bookkeeping. If a pending DELETE resolves
-    // after this reset, its finally block's functional setters are no-ops
-    // because the ids are already gone from both the ref and the state.
     deletingRef.current = new Set();
     setDeletingIds(new Set());
     review.reset();
@@ -169,8 +272,6 @@ export default function Luku() {
       setPopup({ ...cached, word: tok.v, k: tok.k, x, y, existsInDb: !!existing });
       return;
     }
-    // Local-DB match by the tapped form runs in parallel with the translation
-    // request, so we can flag the popup immediately when applicable.
     const existingByForm = findExistingWord(words.dbWords, { form: tok.v });
     setXlating(tok.k);
     setPopup({ word: tok.v, k: tok.k, x, y, loading: true, existsInDb: !!existingByForm });
@@ -188,8 +289,6 @@ export default function Luku() {
     if (!popup?.k) return;
     const entry = session[popup.k];
     if (!entry) return;
-    // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
-    // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
@@ -215,9 +314,6 @@ export default function Luku() {
   };
 
   const handleDeleteWord = async (id) => {
-    // Synchronous guard against rapid double-clicks: React state updates are
-    // async, so a Set stored only in useState can't stop the second click
-    // before its own render cycle. A ref lets us reject re-entry immediately.
     if (deletingRef.current.has(id)) return;
     const deletedWord = words.dbWords.find((w) => w.id === id);
     if (!deletedWord) return;
@@ -283,35 +379,35 @@ export default function Luku() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif" }} onClick={() => setPopup(null)}>
+    <div {...stylex.props(s.root)} onClick={() => setPopup(null)}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div onClick={(e) => { e.stopPropagation(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+      <div {...stylex.props(s.header)}>
+        <div onClick={(e) => { e.stopPropagation(); setStage(0); image.reset(); }} {...stylex.props(s.logoArea)}>
           <LukuLogo size={32} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
-            <div style={{ fontSize: 9, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>
+            <div {...stylex.props(s.logoTitle)}>Luku</div>
+            <div {...stylex.props(shared.logoSub, s.logoSubSize)}>AI Finnish Reader</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <div {...stylex.props(s.steps)}>
           {["Scan", "Read", "Review"].map((l, i) => (
-            <div key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 20, height: 20, borderRadius: "50%", fontSize: 9, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", background: stage === i ? "#4a7c9e" : "rgba(255,255,255,0.05)", border: `1.5px solid ${stage === i ? "#4a7c9e" : "rgba(255,255,255,0.1)"}`, color: stage === i ? "#fff" : "#444" }}>{i + 1}</div>
-              {i < 2 && <div style={{ width: 14, height: 1, background: "rgba(255,255,255,0.08)" }} />}
+            <div key={l} {...stylex.props(s.stepItem)}>
+              <div {...stylex.props(s.stepDot, stage === i ? s.stepDotActive : s.stepDotInactive)}>{i + 1}</div>
+              {i < 2 && <div {...stylex.props(s.stepLine)} />}
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div {...stylex.props(s.actions)}>
           {words.dbWords.length > 0 && (
-            <div style={{ display: "flex", gap: 5 }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{words.dbWords.length} words</button>
-              {newWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartNewReview(); }} style={{ fontSize: 11, color: "#7ab4d4", background: "rgba(74,124,158,0.12)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(74,124,158,0.25)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{newWords.length} new</button>}
-              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartReview(); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
+            <div {...stylex.props(s.wordBtnGroup)}>
+              <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} {...stylex.props(s.wordsBtn)}>{words.dbWords.length} words</button>
+              {newWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartNewReview(); }} {...stylex.props(s.newBtn)}>{newWords.length} new</button>}
+              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartReview(); }} {...stylex.props(s.dueBtn)}>{dueWords.length} due</button>}
             </div>
           )}
-          <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
-          <button onClick={() => authClient.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
+          <button onClick={() => setSavedKey("")} {...stylex.props(buttonStyles.ghost, s.smallGhost)}>Key</button>
+          <button onClick={() => authClient.signOut()} {...stylex.props(buttonStyles.ghost, s.smallGhost)}>Sign out</button>
         </div>
       </div>
 
@@ -365,13 +461,6 @@ export default function Luku() {
       {showWordList && (
         <WordList words={words.dbWords} onClose={() => setShowWordList(false)} onDelete={handleDeleteWord} />
       )}
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        input:focus { outline: 1px solid rgba(74,124,158,0.5); }
-      `}</style>
     </div>
   );
 }

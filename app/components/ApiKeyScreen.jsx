@@ -1,27 +1,58 @@
 "use client";
 import { useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import LukuLogo from "./LukuLogo.jsx";
-import { Bp, Bg } from "../lib/styles.js";
+import { buttonStyles, shared } from "../lib/styles.js";
 
-const D = "#0f1117";
+const s = stylex.create({
+  logoRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 32,
+  },
+  logoTitle: {
+    fontSize: 18,
+    fontWeight: 600,
+  },
+  logoSubSize: {
+    fontSize: 10,
+  },
+  link: {
+    color: "#4a7c9e",
+  },
+  inputMono: {
+    fontFamily: "monospace",
+    marginBottom: 12,
+  },
+  skipBtn: {
+    marginTop: 8,
+  },
+  footerNote: {
+    fontSize: 11,
+    color: "#3a4550",
+    marginTop: 16,
+    textAlign: "center",
+  },
+});
 
 export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
   const [keyInput, setKeyInput] = useState("");
   const isValid = keyInput.startsWith("sk-");
 
   return (
-    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ maxWidth: 400, width: "100%" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
+    <div {...stylex.props(shared.screenContainer)}>
+      <div {...stylex.props(shared.formContainer)}>
+        <div {...stylex.props(s.logoRow)}>
           <LukuLogo size={36} />
           <div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>Luku</div>
-            <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>
+            <div {...stylex.props(s.logoTitle)}>Luku</div>
+            <div {...stylex.props(shared.logoSub, s.logoSubSize)}>AI Finnish Reader</div>
           </div>
         </div>
-        <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>
+        <p {...stylex.props(shared.desc)}>
           Luku reads Finnish text from photos and helps you learn vocabulary. An API key from{" "}
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#4a7c9e" }}>console.anthropic.com</a>{" "}
+          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" {...stylex.props(s.link)}>console.anthropic.com</a>{" "}
           enables translations and AI-powered OCR, or skip to scan locally for free.
         </p>
         <input
@@ -31,19 +62,20 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
           value={keyInput}
           onChange={(e) => setKeyInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && isValid && onSave(keyInput)}
-          style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "monospace", boxSizing: "border-box", marginBottom: 12, outline: "none" }}
+          {...stylex.props(shared.input, s.inputMono)}
         />
         <button
           onClick={() => isValid && onSave(keyInput)}
           disabled={!isValid}
-          style={{ ...Bp, width: "100%", opacity: isValid ? 1 : 0.4 }}
+          {...stylex.props(buttonStyles.primary, shared.fullWidth)}
+          style={{ opacity: isValid ? 1 : 0.4 }}
         >
           {stage > 0 ? "Save key & continue →" : "Start reading →"}
         </button>
-        <button onClick={onSkip} style={{ ...Bg, width: "100%", marginTop: 8 }}>
+        <button onClick={onSkip} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.skipBtn)}>
           Skip — use local OCR only
         </button>
-        <p style={{ fontSize: 11, color: "#3a4550", marginTop: 16, textAlign: "center" }}>
+        <p {...stylex.props(s.footerNote)}>
           Key is stored in your browser only. Each request passes it through this app&apos;s server to reach Anthropic — it is never stored server-side.
         </p>
       </div>

@@ -1,20 +1,63 @@
 "use client";
 import { useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { authClient } from "../lib/authClient";
 import LukuLogo from "./LukuLogo.jsx";
-import { Bp, Bg } from "../lib/styles.js";
+import { buttonStyles, shared } from "../lib/styles.js";
 
-const D = "#0f1117";
+const s = stylex.create({
+  center: {
+    textAlign: "center",
+  },
+  logoTitle: {
+    fontSize: 22,
+    fontWeight: 600,
+    marginBottom: 8,
+  },
+  logoSubSize: {
+    fontSize: 11,
+    marginBottom: 24,
+  },
+  inputFont: {
+    fontFamily: "Georgia,serif",
+    marginBottom: 10,
+  },
+  primaryBtn: {
+    marginBottom: 10,
+  },
+  backBtn: {
+    fontSize: 13,
+  },
+  dividerRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    margin: "16px 0",
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    background: "rgba(255,255,255,0.08)",
+  },
+  dividerText: {
+    fontSize: 11,
+    color: "#3a4550",
+  },
+  emailBtn: {
+    marginBottom: 8,
+  },
+  errMargin: {
+    marginTop: 12,
+  },
+});
 
 export default function SignIn() {
   const [loading, setLoading] = useState(null);
   const [err, setErr] = useState("");
-  const [mode, setMode] = useState("main"); // "main" | "sign-in" | "sign-up"
+  const [mode, setMode] = useState("main");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-
-  const inp = { width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e8e0d5", fontSize: 14, fontFamily: "Georgia,serif", boxSizing: "border-box", outline: "none", marginBottom: 10 };
 
   const signInSocial = async (provider) => {
     setErr(""); setLoading(provider);
@@ -46,56 +89,56 @@ export default function SignIn() {
   const logo = (
     <>
       <LukuLogo size={48} style={{ display: "block", margin: "0 auto 20px" }} />
-      <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Luku</div>
-      <div style={{ fontSize: 11, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 24 }}>AI Finnish Reader</div>
+      <div {...stylex.props(s.logoTitle)}>Luku</div>
+      <div {...stylex.props(shared.logoSub, s.logoSubSize)}>AI Finnish Reader</div>
     </>
   );
 
-  const errBox = err && <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, fontSize: 12, color: "#c48a8a" }}>{err}</div>;
+  const errBox = err && <div {...stylex.props(shared.errorBox, s.errMargin)}>{err}</div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+    <div {...stylex.props(shared.screenContainer)}>
+      <div {...stylex.props(shared.formContainer, s.center)}>
         {logo}
 
         {mode === "main" && <>
-          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
-          <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+          <p {...stylex.props(shared.desc)}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
+          <button onClick={() => signInSocial("google")} disabled={!!loading} {...stylex.props(buttonStyles.primary, shared.fullWidth, s.primaryBtn)} style={{ opacity: loading ? 0.6 : 1 }}>
             {loading === "google" ? "Redirecting…" : "Continue with Google"}
           </button>
-          <button onClick={() => signInSocial("github")} disabled={!!loading} style={{ ...Bg, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
+          <button onClick={() => signInSocial("github")} disabled={!!loading} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.primaryBtn)} style={{ opacity: loading ? 0.6 : 1 }}>
             {loading === "github" ? "Redirecting…" : "Continue with GitHub"}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ fontSize: 11, color: "#3a4550" }}>or</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          <div {...stylex.props(s.dividerRow)}>
+            <div {...stylex.props(s.dividerLine)} />
+            <span {...stylex.props(s.dividerText)}>or</span>
+            <div {...stylex.props(s.dividerLine)} />
           </div>
-          <button onClick={() => { setErr(""); setMode("sign-in"); }} style={{ ...Bg, width: "100%", marginBottom: 8 }}>Sign in with email</button>
-          <button onClick={() => { setErr(""); setMode("sign-up"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>Create account</button>
+          <button onClick={() => { setErr(""); setMode("sign-in"); }} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.emailBtn)}>Sign in with email</button>
+          <button onClick={() => { setErr(""); setMode("sign-up"); }} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.backBtn)}>Create account</button>
           {errBox}
         </>}
 
         {mode === "sign-in" && <>
-          <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
+          <input {...stylex.props(shared.input, s.inputFont)} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input {...stylex.props(shared.input, s.inputFont)} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
             onKeyDown={(e) => e.key === "Enter" && signInEmail()} />
-          <button onClick={signInEmail} disabled={!!loading || !email || !password} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+          <button onClick={signInEmail} disabled={!!loading || !email || !password} {...stylex.props(buttonStyles.primary, shared.fullWidth, s.primaryBtn)} style={{ opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Signing in…" : "Sign in"}
           </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>← Back</button>
+          <button onClick={() => { setErr(""); setMode("main"); }} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.backBtn)}>← Back</button>
           {errBox}
         </>}
 
         {mode === "sign-up" && <>
-          <input style={inp} type="text" aria-label="Name" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-          <input style={inp} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          <input style={inp} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
+          <input {...stylex.props(shared.input, s.inputFont)} type="text" aria-label="Name" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+          <input {...stylex.props(shared.input, s.inputFont)} type="email" aria-label="Email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input {...stylex.props(shared.input, s.inputFont)} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
             onKeyDown={(e) => e.key === "Enter" && signUpEmail()} />
-          <button onClick={signUpEmail} disabled={!!loading || !email || !password} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: (loading || !email || !password) ? 0.5 : 1 }}>
+          <button onClick={signUpEmail} disabled={!!loading || !email || !password} {...stylex.props(buttonStyles.primary, shared.fullWidth, s.primaryBtn)} style={{ opacity: (loading || !email || !password) ? 0.5 : 1 }}>
             {loading === "email" ? "Creating account…" : "Create account"}
           </button>
-          <button onClick={() => { setErr(""); setMode("main"); }} style={{ ...Bg, width: "100%", fontSize: 13 }}>← Back</button>
+          <button onClick={() => { setErr(""); setMode("main"); }} {...stylex.props(buttonStyles.ghost, shared.fullWidth, s.backBtn)}>← Back</button>
           {errBox}
         </>}
       </div>
