@@ -39,8 +39,11 @@ export default function Luku() {
   // re-added them this session. Kept separate so Remove can retire them from
   // the new-words bucket without destroying their SRS history.
   const [preexistingNewIds, setPreexistingNewIds] = useState(() => new Set());
-  // Ids with an in-flight DELETE. Ref for synchronous double-click guard;
-  // mirrored to state so ReviewStage / WordList can disable their buttons.
+  // Ids with an in-flight DELETE. deletingRef is the synchronous re-entry
+  // guard (React state updates are batched, so a state Set alone can't stop
+  // a rapid second click); deletingIds mirrors it so ReviewStage can disable
+  // Remove / Skip / Keep for the card whose delete is pending. WordList runs
+  // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
 
@@ -142,6 +145,11 @@ export default function Luku() {
     setSession({});
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
+    // Drop any in-flight delete bookkeeping. If a pending DELETE resolves
+    // after this reset, its finally block's functional setters are no-ops
+    // because the ids are already gone from both the ref and the state.
+    deletingRef.current = new Set();
+    setDeletingIds(new Set());
     review.reset();
     image.reset();
     setText("");
