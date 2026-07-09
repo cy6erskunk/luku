@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
@@ -34,6 +34,18 @@ export default function Luku() {
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
+  const [newWordIds, setNewWordIds] = useState(() => new Set());
+  // Subset of newWordIds: words that already existed in the DB when the user
+  // re-added them this session. Kept separate so Remove can retire them from
+  // the new-words bucket without destroying their SRS history.
+  const [preexistingNewIds, setPreexistingNewIds] = useState(() => new Set());
+  // Ids with an in-flight DELETE. deletingRef is the synchronous re-entry
+  // guard (React state updates are batched, so a state Set alone can't stop
+  // a rapid second click); deletingIds mirrors it so ReviewStage can disable
+  // Remove / Skip / Keep for the card whose delete is pending. WordList runs
+  // its own two-step confirm flow and doesn't consume this.
+  const [deletingIds, setDeletingIds] = useState(() => new Set());
+  const deletingRef = useRef(new Set());
 
   const words = useWords(user?.id);
 
@@ -59,21 +71,63 @@ export default function Luku() {
   if (!user) return <SignIn />;
   if (!savedKey) return <ApiKeyScreen stage={stage} onSave={setSavedKey} onSkip={() => setSavedKey(SKIP_KEY)} />;
 
-  const dueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
+  // Words freshly added this session get their own review pass, so keep them
+  // out of the regular due queue until the user is done triaging them.
+  const dueWords = allDueWords.filter((w) => !newWordIds.has(w.id));
   const savedBases = new Set(words.dbWords.map((w) => w.base));
-  const repeatWords = dueWords.length === 0
+  const repeatWords = allDueWords.length === 0
     ? [...words.dbWords].sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0)).slice(0, 5)
     : [];
 
   const handleStartReview = () => {
-    if (words.loadingWords) return;
+    if (words.loadingWords || review.grading) return;
     review.startReview(dueWords);
     setPopup(null);
     setStage(2);
   };
 
+  const handleStartNewReview = () => {
+    if (words.loadingWords || review.grading || newWords.length === 0) return;
+    review.startNewReview(newWords);
+    setPopup(null);
+    setStage(2);
+  };
+
+  const retireFromNew = (id) => {
+    setNewWordIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setPreexistingNewIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const handleKeepNew = (id) => {
+    retireFromNew(id);
+    review.gradeWord(5);
+  };
+
+  const handleRemoveNew = async (id) => {
+    if (preexistingNewIds.has(id)) {
+      // Word predates this session: just retire it from the new-words bucket.
+      // Its SRS history stays intact.
+      review.removeWordFromQueue(id);
+      retireFromNew(id);
+      return;
+    }
+    await handleDeleteWord(id);
+  };
+
   const handleStartRepeat = () => {
-    if (words.loadingWords || words.dbWords.length === 0) return;
+    if (words.loadingWords || review.grading || words.dbWords.length === 0) return;
     const pool = [...words.dbWords]
       .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
       .slice(0, 15);
@@ -89,6 +143,13 @@ export default function Luku() {
   const handleScanAnother = () => {
     setStage(0);
     setSession({});
+    setNewWordIds(new Set());
+    setPreexistingNewIds(new Set());
+    // Drop any in-flight delete bookkeeping. If a pending DELETE resolves
+    // after this reset, its finally block's functional setters are no-ops
+    // because the ids are already gone from both the ref and the state.
+    deletingRef.current = new Set();
+    setDeletingIds(new Set());
     review.reset();
     image.reset();
     setText("");
@@ -127,17 +188,66 @@ export default function Luku() {
     if (!popup?.k) return;
     const entry = session[popup.k];
     if (!entry) return;
+    // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
+    // the DB" from "re-added something already there".
+    const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
-    try { await words.saveWord(entry); }
-    catch (e) { console.error("save word failed", e); }
+    try {
+      const saved = await words.saveWord(entry);
+      if (saved?.id != null) {
+        setNewWordIds((prev) => {
+          if (prev.has(saved.id)) return prev;
+          const next = new Set(prev);
+          next.add(saved.id);
+          return next;
+        });
+        if (wasPreexisting) {
+          setPreexistingNewIds((prev) => {
+            if (prev.has(saved.id)) return prev;
+            const next = new Set(prev);
+            next.add(saved.id);
+            return next;
+          });
+        }
+      }
+    } catch (e) { console.error("save word failed", e); }
   };
 
   const handleDeleteWord = async (id) => {
+    // Synchronous guard against rapid double-clicks: React state updates are
+    // async, so a Set stored only in useState can't stop the second click
+    // before its own render cycle. A ref lets us reject re-entry immediately.
+    if (deletingRef.current.has(id)) return;
     const deletedWord = words.dbWords.find((w) => w.id === id);
     if (!deletedWord) return;
+    deletingRef.current.add(id);
+    setDeletingIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    const wasNew = newWordIds.has(id);
+    const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
     words.removeWord(id);
+    if (wasNew) {
+      setNewWordIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+    if (wasPreexisting) {
+      setPreexistingNewIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -145,6 +255,30 @@ export default function Luku() {
       console.error("delete word failed", e);
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
+      if (wasNew) {
+        setNewWordIds((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
+      if (wasPreexisting) {
+        setPreexistingNewIds((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
+    } finally {
+      deletingRef.current.delete(id);
+      setDeletingIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -172,6 +306,7 @@ export default function Luku() {
           {words.dbWords.length > 0 && (
             <div style={{ display: "flex", gap: 5 }}>
               <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{words.dbWords.length} words</button>
+              {newWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartNewReview(); }} style={{ fontSize: 11, color: "#7ab4d4", background: "rgba(74,124,158,0.12)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(74,124,158,0.25)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{newWords.length} new</button>}
               {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartReview(); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
             </div>
           )}
@@ -194,10 +329,12 @@ export default function Luku() {
           err={image.err}
           loadingWords={words.loadingWords}
           dueWords={dueWords}
+          newWords={newWords}
           onWord={onWord}
           onAddWord={handleAddWord}
           onRescanWithAI={image.rescanWithAI}
           onStartReview={handleStartReview}
+          onStartNewReview={handleStartNewReview}
           onAddApiKey={() => setSavedKey("")}
         />
       )}
@@ -209,10 +346,17 @@ export default function Luku() {
           setShowAnswer={review.setShowAnswer}
           grading={review.grading}
           isRepeat={review.isRepeat}
+          isNewReview={review.isNewReview}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
+          onKeepNew={handleKeepNew}
+          onRemoveNew={handleRemoveNew}
+          preexistingNewIds={preexistingNewIds}
+          deletingIds={deletingIds}
           onScanAnother={handleScanAnother}
+          dueWords={dueWords}
+          onStartReview={handleStartReview}
           repeatWords={repeatWords}
           onStartRepeat={handleStartRepeat}
         />

@@ -209,3 +209,164 @@ describe("ReviewStage – card in progress", () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe("ReviewStage – new-review mode", () => {
+  it("shows the New words heading", () => {
+    setup({ isNewReview: true });
+    // Both the step label and the mode heading contain "New words".
+    expect(screen.getAllByText(/new words/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/keep or remove/i)).toBeTruthy();
+  });
+
+  it("shows Keep and Remove buttons after reveal", () => {
+    setup({ isNewReview: true, showAnswer: true });
+    expect(screen.getByRole("button", { name: /keep/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /remove/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /again/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /hard/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /easy/i })).toBeNull();
+  });
+
+  it("calls onKeepNew with the word id when Keep is clicked", () => {
+    const onKeepNew = vi.fn();
+    const onGrade = vi.fn();
+    setup({ isNewReview: true, showAnswer: true, onKeepNew, onGrade });
+    fireEvent.click(screen.getByRole("button", { name: /keep/i }));
+    expect(onKeepNew).toHaveBeenCalledWith(WORD.id);
+    expect(onGrade).not.toHaveBeenCalled();
+  });
+
+  it("calls onRemoveNew with the word id when Remove is clicked", () => {
+    const onRemoveNew = vi.fn();
+    setup({ isNewReview: true, showAnswer: true, onRemoveNew });
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    expect(onRemoveNew).toHaveBeenCalledWith(WORD.id);
+  });
+
+  it("hides SRS stats block regardless of interval", () => {
+    setup({ isNewReview: true, showAnswer: true });
+    expect(screen.queryByText(/last interval/)).toBeNull();
+  });
+
+  it("session complete offers Continue → Review N due when due words remain", () => {
+    const onStartReview = vi.fn();
+    setup({
+      isNewReview: true,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+      dueWords: [WORD_NO_BASE],
+      onStartReview,
+    });
+    const btn = screen.getByRole("button", { name: /continue.*review 1 due/i });
+    fireEvent.click(btn);
+    expect(onStartReview).toHaveBeenCalled();
+  });
+
+  it("session complete says 'New words triaged'", () => {
+    setup({
+      isNewReview: true,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+    });
+    expect(screen.getByText(/new words triaged/i)).toBeTruthy();
+  });
+
+  it("session complete hides Continue button when no due words remain", () => {
+    setup({
+      isNewReview: true,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+      dueWords: [],
+    });
+    expect(screen.queryByRole("button", { name: /continue.*review/i })).toBeNull();
+  });
+});
+
+describe("ReviewStage – new-review mode with preexisting words", () => {
+  it("shows the 'in your list' badge when the current card is preexisting", () => {
+    setup({
+      isNewReview: true,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+  });
+
+  it("does not show the badge when the current card is not preexisting", () => {
+    setup({
+      isNewReview: true,
+      preexistingNewIds: new Set(),
+    });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+
+  it("shows Skip instead of Remove for a preexisting card", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /^skip$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^remove$/i })).toBeNull();
+  });
+
+  it("Skip calls onRemoveNew with the word id (parent branches by preexistence)", () => {
+    const onRemoveNew = vi.fn();
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+      onRemoveNew,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
+    expect(onRemoveNew).toHaveBeenCalledWith(WORD.id);
+  });
+
+  it("hides the badge in regular due review even if preexistingNewIds includes the id", () => {
+    setup({
+      isNewReview: false,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.queryByText(/in your list/i)).toBeNull();
+  });
+});
+
+describe("ReviewStage – disables Remove/Skip while a delete is in flight", () => {
+  it("disables Remove when the current word id is in deletingIds", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      deletingIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /keep/i }).disabled).toBe(true);
+  });
+
+  it("disables Skip for a preexisting card while its delete is in flight", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+      deletingIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /skip/i }).disabled).toBe(true);
+  });
+
+  it("leaves Remove enabled when a different word's delete is in flight", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      deletingIds: new Set([WORD_NO_BASE.id]),
+    });
+    expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(false);
+  });
+});
+
+describe("ReviewStage – session-complete step label", () => {
+  it("uses 'Step 3 — New words' on the session-complete screen in new-review mode", () => {
+    setup({
+      isNewReview: true,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+    });
+    expect(screen.getByText(/step 3 — new words/i)).toBeTruthy();
+  });
+
+  it("uses 'Step 3 — Review' on the session-complete screen in due-review mode", () => {
+    setup({
+      isNewReview: false,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+    });
+    expect(screen.getByText(/step 3 — review/i)).toBeTruthy();
+  });
+});
