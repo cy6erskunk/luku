@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
@@ -39,6 +39,10 @@ export default function Luku() {
   // re-added them this session. Kept separate so Remove can retire them from
   // the new-words bucket without destroying their SRS history.
   const [preexistingNewIds, setPreexistingNewIds] = useState(() => new Set());
+  // Ids with an in-flight DELETE. Ref for synchronous double-click guard;
+  // mirrored to state so ReviewStage / WordList can disable their buttons.
+  const [deletingIds, setDeletingIds] = useState(() => new Set());
+  const deletingRef = useRef(new Set());
 
   const words = useWords(user?.id);
 
@@ -203,8 +207,19 @@ export default function Luku() {
   };
 
   const handleDeleteWord = async (id) => {
+    // Synchronous guard against rapid double-clicks: React state updates are
+    // async, so a Set stored only in useState can't stop the second click
+    // before its own render cycle. A ref lets us reject re-entry immediately.
+    if (deletingRef.current.has(id)) return;
     const deletedWord = words.dbWords.find((w) => w.id === id);
     if (!deletedWord) return;
+    deletingRef.current.add(id);
+    setDeletingIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     const wasNew = newWordIds.has(id);
     const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
@@ -248,6 +263,14 @@ export default function Luku() {
           return next;
         });
       }
+    } finally {
+      deletingRef.current.delete(id);
+      setDeletingIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -322,6 +345,7 @@ export default function Luku() {
           onKeepNew={handleKeepNew}
           onRemoveNew={handleRemoveNew}
           preexistingNewIds={preexistingNewIds}
+          deletingIds={deletingIds}
           onScanAnother={handleScanAnother}
           dueWords={dueWords}
           onStartReview={handleStartReview}

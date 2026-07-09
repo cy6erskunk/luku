@@ -324,3 +324,49 @@ describe("ReviewStage – new-review mode with preexisting words", () => {
     expect(screen.queryByText(/in your list/i)).toBeNull();
   });
 });
+
+describe("ReviewStage – disables Remove/Skip while a delete is in flight", () => {
+  it("disables Remove when the current word id is in deletingIds", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      deletingIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /keep/i }).disabled).toBe(true);
+  });
+
+  it("disables Skip for a preexisting card while its delete is in flight", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+      deletingIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /skip/i }).disabled).toBe(true);
+  });
+
+  it("leaves Remove enabled when a different word's delete is in flight", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      deletingIds: new Set([WORD_NO_BASE.id]),
+    });
+    expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(false);
+  });
+});
+
+describe("ReviewStage – session-complete step label", () => {
+  it("uses 'Step 3 — New words' on the session-complete screen in new-review mode", () => {
+    setup({
+      isNewReview: true,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+    });
+    expect(screen.getByText(/step 3 — new words/i)).toBeTruthy();
+  });
+
+  it("uses 'Step 3 — Review' on the session-complete screen in due-review mode", () => {
+    setup({
+      isNewReview: false,
+      queue: [1], revIdx: 1, dbWords: [WORD],
+    });
+    expect(screen.getByText(/step 3 — review/i)).toBeTruthy();
+  });
+});
