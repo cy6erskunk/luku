@@ -92,7 +92,7 @@ export default function ReviewStage({
         {isPreexisting && (
           <div
             aria-label="already in your list"
-            title="Already in your list — Remove keeps study history"
+            title="Already in your list — Skip keeps study history"
             style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, letterSpacing: "0.05em", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.3)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}
           >
             <span aria-hidden="true">✓</span>in your list

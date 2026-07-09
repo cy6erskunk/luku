@@ -87,11 +87,13 @@ export default function ReadStage({
             Done Reading → Review {newWords.length} new word{newWords.length !== 1 ? "s" : ""}
           </button>
         )}
-        <button onClick={onStartReview} disabled={loadingWords} style={{ ...(newWords.length > 0 ? Bg : Bp), width: "100%", maxWidth: 480, display: "block", opacity: loadingWords ? 0.5 : 1 }}>
-          {newWords.length > 0
-            ? `Skip to due review${dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}`
-            : `Done Reading → Review${loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}`}
-        </button>
+        {(newWords.length === 0 || dueWords.length > 0) && (
+          <button onClick={onStartReview} disabled={loadingWords} style={{ ...(newWords.length > 0 ? Bg : Bp), width: "100%", maxWidth: 480, display: "block", opacity: loadingWords ? 0.5 : 1 }}>
+            {newWords.length > 0
+              ? `Skip to due review (${dueWords.length} due)`
+              : `Done Reading → Review${loadingWords ? "…" : dueWords.length > 0 ? ` (${dueWords.length} due)` : ""}`}
+          </button>
+        )}
       </div>
 
       <TranslationPopup

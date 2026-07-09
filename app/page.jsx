@@ -75,14 +75,14 @@ export default function Luku() {
     : [];
 
   const handleStartReview = () => {
-    if (words.loadingWords) return;
+    if (words.loadingWords || review.grading) return;
     review.startReview(dueWords);
     setPopup(null);
     setStage(2);
   };
 
   const handleStartNewReview = () => {
-    if (words.loadingWords || newWords.length === 0) return;
+    if (words.loadingWords || review.grading || newWords.length === 0) return;
     review.startNewReview(newWords);
     setPopup(null);
     setStage(2);
@@ -120,7 +120,7 @@ export default function Luku() {
   };
 
   const handleStartRepeat = () => {
-    if (words.loadingWords || words.dbWords.length === 0) return;
+    if (words.loadingWords || review.grading || words.dbWords.length === 0) return;
     const pool = [...words.dbWords]
       .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
       .slice(0, 15);

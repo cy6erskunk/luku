@@ -28,6 +28,7 @@ export function useReview({ dbWords, updateWord, stage }) {
     setQueue(dueWords.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
+    setGrading(false);
   };
 
   const startRepeat = (words) => {
@@ -35,6 +36,7 @@ export function useReview({ dbWords, updateWord, stage }) {
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
+    setGrading(false);
   };
 
   const startNewReview = (words) => {
@@ -42,6 +44,7 @@ export function useReview({ dbWords, updateWord, stage }) {
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
+    setGrading(false);
   };
 
   const gradeWord = async (grade) => {

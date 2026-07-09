@@ -190,6 +190,15 @@ describe("ReadStage – new words review", () => {
     fireEvent.click(screen.getByRole("button", { name: /skip to due review/i }));
     expect(onStartReview).toHaveBeenCalled();
   });
+
+  it("does not show the Skip to due review button when there are no due words", () => {
+    setup({ newWords: [{ id: 10 }], dueWords: [] });
+    expect(screen.queryByRole("button", { name: /skip to due review/i })).toBeNull();
+    // The only "Done Reading" button left is the primary new-words button.
+    const doneReading = screen.getAllByRole("button", { name: /done reading/i });
+    expect(doneReading).toHaveLength(1);
+    expect(doneReading[0].textContent).toMatch(/review 1 new word/i);
+  });
 });
 
 describe("ReadStage – translating indicator", () => {

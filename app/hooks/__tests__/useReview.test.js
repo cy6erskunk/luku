@@ -169,6 +169,42 @@ describe("useReview – reset", () => {
   });
 });
 
+describe("useReview – grading is reset when starting a new session", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const drivenIntoGrading = (result) => {
+    // Fire a grade that will never resolve so `grading` sticks at true.
+    act(() => result.current.startReview(WORDS));
+    act(() => { result.current.gradeWord(5); });
+    return result;
+  };
+
+  it("startReview clears grading", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    drivenIntoGrading(result);
+    expect(result.current.grading).toBe(true);
+    act(() => result.current.startReview(WORDS));
+    expect(result.current.grading).toBe(false);
+  });
+
+  it("startRepeat clears grading", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    drivenIntoGrading(result);
+    act(() => result.current.startRepeat(WORDS));
+    expect(result.current.grading).toBe(false);
+  });
+
+  it("startNewReview clears grading", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    drivenIntoGrading(result);
+    act(() => result.current.startNewReview(WORDS));
+    expect(result.current.grading).toBe(false);
+  });
+});
+
 describe("useReview – startNewReview", () => {
   it("populates queue with the given word ids and marks isNewReview", () => {
     const { result } = renderHook(() => useReview(makeProps()));
