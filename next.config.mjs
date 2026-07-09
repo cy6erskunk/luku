@@ -1,7 +1,8 @@
+import stylexPlugin from '@stylexjs/nextjs-plugin';
 import { withSentryConfig } from '@sentry/nextjs';
 /** @type {import('next').NextConfig} */
 const nextConfig = {};
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(stylexPlugin({ rootDir: import.meta.dirname })(nextConfig), {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 

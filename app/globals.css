@@ -1,0 +1,9 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+input:focus {
+  outline: 1px solid rgba(74, 124, 158, 0.5);
+}
