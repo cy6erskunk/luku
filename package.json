@@ -18,8 +18,8 @@
     "@neondatabase/serverless": "1.1.0",
     "@sentry/nextjs": "10.67.0",
     "next": "16.2.11",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-easy-crop": "6.2.2"
   },
   "devDependencies": {
