@@ -1,0 +1,20 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cy6erskunk/pg-b2-backup@main
+        with:
+          database-url: ${{ secrets.DATABASE_URL }}
+          b2-application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          b2-application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          b2-bucket-name: ${{ secrets.B2_BUCKET_NAME }}
+          b2-region: ${{ vars.B2_REGION }}
