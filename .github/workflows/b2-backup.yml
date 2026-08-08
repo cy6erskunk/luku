@@ -1,0 +1,25 @@
+name: luku-prod-backup
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # Runs daily at 05:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  db-backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Backup Postgres to B2
+        uses: cy6erskunk/pg-b2-backup@b0825b28c806583ba9be8f2cba7c7d1ff31f8047 # v1.0.1 - fix: non-interactive pgdg install
+        with:
+          database-url: ${{ secrets.DATABASE_URL }}
+          b2-application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          b2-application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          b2-bucket-name: ${{ secrets.B2_BUCKET_NAME }}
+          b2-region: "eu-central-003"
+          folder-name: "luku-prod-backup"
+          retention-days: "7"
+          pg-version: "16"
