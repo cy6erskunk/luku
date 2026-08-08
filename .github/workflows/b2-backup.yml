@@ -22,4 +22,4 @@ jobs:
           b2-region: "eu-central-003"
           folder-name: "luku-prod-backup"
           retention-days: "7"
-          pg-version: "16"
+          pg-version: "17"
