@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Backup Postgres to B2
-        uses: cy6erskunk/pg-b2-backup@290257aea345b85f549f188b1d6d759558908e6c
+        uses: cy6erskunk/pg-b2-backup@b0825b28c806583ba9be8f2cba7c7d1ff31f8047 # v1.0.1 - fix: non-interactive pgdg install
         with:
           database-url: ${{ secrets.DATABASE_URL }}
           b2-application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
