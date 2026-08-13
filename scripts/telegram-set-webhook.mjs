@@ -50,9 +50,12 @@ async function tg(method, payload) {
 const me = await tg("getMe");
 
 // Catch a mistyped username here rather than as a dead deep link at connect time.
+// The message names the bot the token belongs to rather than echoing the configured
+// value back: the operator already knows what they set, and reflecting environment
+// variables into logs is how secrets end up in CI output.
 const expected = TELEGRAM_BOT_USERNAME.replace(/^@/, "");
 if (me.username !== expected) {
-  fail(`TELEGRAM_BOT_USERNAME is "${expected}" but this token belongs to "${me.username}"`);
+  fail(`This token belongs to @${me.username}, which does not match TELEGRAM_BOT_USERNAME`);
 }
 
 const webhookUrl = `${baseUrl.replace(/\/$/, "")}/api/telegram/webhook`;
