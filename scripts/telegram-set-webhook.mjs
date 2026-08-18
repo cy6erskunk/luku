@@ -12,6 +12,7 @@
  * Re-running is safe.
  */
 import { readFileSync } from "node:fs";
+import { redactString } from "../lib/redact.js";
 
 // Minimal .env.local loader so this works without extra dependencies.
 try {
@@ -82,10 +83,12 @@ async function tg(method, payload) {
 }
 
 function reportWebhook(info) {
-  console.log(info.url ? `  url: ${info.url}` : "  url: (none — the webhook has never been registered)");
+  // Redacted in case the URL carries a Vercel protection-bypass token, which the
+  // README documents as an option for previews that keep protection enabled.
+  console.log(info.url ? `  url: ${redactString(info.url)}` : "  url: (none — the webhook has never been registered)");
   console.log(`  pending updates: ${info.pending_update_count}`);
   if (info.last_error_message) {
-    console.log(`⚠ last delivery error: ${info.last_error_message}`);
+    console.log(`⚠ last delivery error: ${redactString(info.last_error_message)}`);
     console.log("  A 401 here means either the webhook secret differs from the deployment's,");
     console.log("  or the deployment is behind Vercel Deployment Protection.");
   }
@@ -119,7 +122,7 @@ try {
   parsed.pathname = "/api/telegram/webhook";
   webhookUrl = parsed.toString();
 } catch {
-  fail(`Not a valid URL: ${target}`);
+  fail(`Not a valid URL: ${redactString(target)}`);
 }
 
 await tg("setWebhook", {
