@@ -4,6 +4,7 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
+import { redactDeep } from "./lib/redact.js";
 
 Sentry.init({
   dsn: "https://c44fe9380348efb91442e630909b58b3@o4505843752763392.ingest.us.sentry.io/4511608689000448",
@@ -17,4 +18,9 @@ Sentry.init({
   // Enable sending user PII (Personally Identifiable Information)
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: true,
+
+  // The Telegram Bot API carries its token in the URL path, so fetch spans and
+  // transport errors would otherwise send the bot's master credential to Sentry.
+  beforeSend: (event) => redactDeep(event),
+  beforeSendTransaction: (event) => redactDeep(event),
 });

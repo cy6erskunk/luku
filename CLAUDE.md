@@ -10,7 +10,9 @@
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
 - **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
-- **No database** — all state lives in browser memory for the session
+- **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
+- **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
+- **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)
 
 ## Quick Start
 
@@ -48,12 +50,31 @@ app/
 │   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
 │   ├── ApiKeyScreen.jsx        # API key entry screen
+│   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
 │   ├── SignIn.jsx              # Auth screen
 │   └── LukuLogo.jsx            # SVG logo
 └── api/
     ├── claude/route.js         # Server proxy for Anthropic API
     ├── words/route.js          # CRUD for saved vocabulary
-    └── reviews/route.js        # SRS grading endpoint
+    ├── reviews/route.js        # SRS grading endpoint
+    ├── auth/[...path]/route.js # Neon Auth catch-all
+    └── telegram/
+        ├── webhook/route.js    # Telegram updates (secret-token authenticated)
+        ├── link/route.js       # Mint link code / status / unlink (session authenticated)
+        └── cron/route.js       # Hourly reminder pass (bearer authenticated)
+
+lib/                            # Server-only; app/lib/ is the client half
+├── db.js                       # getDb() -> neon(DATABASE_URL)
+├── srs.js                      # calcSRS() — simplified SM-2
+├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
+├── auth/server.js              # getAuth()
+└── telegram/
+    ├── api.js                  # tgCall() and message helpers
+    ├── handlers.js             # Update routing: commands and callbacks
+    ├── link.js                 # Link codes, link CRUD, hashing
+    ├── callback.js             # Signed callback_data
+    ├── render.js               # Card and message text (pure)
+    └── reminders.js            # Daily reminder selection and delivery
 ```
 
 ## Architecture
@@ -90,6 +111,32 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `getCroppedImg()` (`image.js`) | Crops a canvas region to base64 |
 | `tokenize()` (`utils.js`) | Splits text into words, punctuation, spaces, and line breaks |
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
+| `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
+| `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
+| `Bp` / `Bg` (`styles.js`) | Shared primary and ghost button styles |
+| `authClient` (`authClient.js`) | Neon Auth browser client |
+
+### Telegram bot
+
+Optional. Setup lives in the README; the security model is what matters when
+changing it:
+
+- The webhook route's `X-Telegram-Bot-Api-Secret-Token` check is the **only**
+  authentication step. It authenticates *Telegram*, not the user — which is
+  what makes `from.id` trustworthy as a lookup key downstream. Never add an
+  endpoint that accepts a Telegram user id from an untrusted caller.
+- Inline-keyboard `callback_data` is signed with an HMAC over the card's
+  *current* `next_review_at`, so grading a card invalidates its own buttons.
+  That is what makes the stateless review flow safe against Telegram's retries
+  and against taps on old messages.
+- Link codes are single-use, 10-minute, and stored hashed.
+- The webhook always returns 200 once authenticated; a non-2xx makes Telegram
+  redeliver the same update on a schedule.
+- `/help` is answered before `getDb()` is called, so it stays a database-free
+  connectivity test when a deployment is misconfigured. Keep it that way.
+- A review session keeps **no** stored state — the next card is derived from
+  SQL each turn. Consequently the web app's same-session requeue of failed
+  cards (`useReview.js`) is not reproduced in chat.
 
 ### API Key Handling
 
@@ -112,13 +159,27 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 - Claude API responses for translations are parsed as JSON with a regex fallback for markdown fences
 - Optimistic UI updates for word add/delete with server-side rollback on failure
 - `useReview` self-corrects the queue when a word is deleted externally (e.g. another tab)
+- SRS reads and writes go through `lib/reviews.js` so the web app and the bot share one path
+- Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
+  `lib/__tests__/helpers/fakeSql.js` for the tagged-template query function
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | No | Optional server-side API key for personal deployments |
+| `DATABASE_URL` | Yes | Neon pooled connection string |
+| `NEON_AUTH_BASE_URL` | Yes | Neon Auth base URL. The Vercel–Neon integration sets `VITE_NEON_AUTH_URL` instead, which `lib/auth/server.js` copies across |
+| `ANTHROPIC_API_KEY` | No | Documented for personal deployments, but `app/api/claude/route.js` does not currently read it |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram bot only. The most sensitive secret here — it grants full control of the bot |
+| `TELEGRAM_BOT_USERNAME` | No | Telegram bot only; used to build the `t.me` deep link |
+| `TELEGRAM_WEBHOOK_SECRET` | No | Telegram bot only; also derives the callback signing key |
+| `TELEGRAM_CRON_SECRET` | No | Telegram bot only; bearer token for `/api/telegram/cron` |
+| `APP_URL` | No | Public base URL, used in bot messages |
 
 ## Deployment
 
-Designed for Vercel — connect the GitHub repo and deploy. No environment variables required for the default user-provides-key flow.
+Designed for Vercel — connect the GitHub repo, add the Neon integration, and run
+`db/schema.sql` once in the Neon SQL editor. The Telegram bot additionally needs
+its webhook registered (`npm run telegram:webhook -- <url>`; `npm run
+telegram:status` shows what is currently registered) and the
+`LUKU_APP_URL` / `TELEGRAM_CRON_SECRET` GitHub secrets for the reminder cron.

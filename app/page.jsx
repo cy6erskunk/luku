@@ -7,6 +7,7 @@ import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
+import TelegramConnect from "./components/TelegramConnect.jsx";
 import LukuLogo from "./components/LukuLogo.jsx";
 import ScanStage from "./components/ScanStage.jsx";
 import ReadStage from "./components/ReadStage.jsx";
@@ -34,6 +35,7 @@ export default function Luku() {
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
+  const [showTelegram, setShowTelegram] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
@@ -310,6 +312,7 @@ export default function Luku() {
               {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartReview(); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
             </div>
           )}
+          <button onClick={() => setShowTelegram(true)} title="Telegram" aria-label="Telegram" style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>✈</button>
           <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
           <button onClick={() => authClient.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
         </div>
@@ -365,6 +368,8 @@ export default function Luku() {
       {showWordList && (
         <WordList words={words.dbWords} onClose={() => setShowWordList(false)} onDelete={handleDeleteWord} />
       )}
+
+      {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }

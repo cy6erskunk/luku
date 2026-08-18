@@ -11,7 +11,9 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "telegram:webhook": "node scripts/telegram-set-webhook.mjs",
+    "telegram:status": "node scripts/telegram-set-webhook.mjs --status"
   },
   "dependencies": {
     "@neondatabase/auth": "0.1.0-beta.21",

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { wordForms } from "../lib/utils.js";
+import { useDialog } from "../hooks/useDialog.js";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -8,6 +9,7 @@ export default function WordList({ words, onClose, onDelete }) {
   const [pendingId, setPendingId] = useState(null);
 
   const handleBackdropClick = () => { setPendingId(null); onClose(); };
+  const panelRef = useDialog(handleBackdropClick);
   const handlePanelClick = () => setPendingId(null);
 
   return (
@@ -21,6 +23,8 @@ export default function WordList({ words, onClose, onDelete }) {
       <div
         role="dialog"
         aria-modal="true"
+        ref={panelRef}
+        tabIndex={-1}
         aria-labelledby="wordlist-heading"
         onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
         style={{ background: "#181d2a", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", alignSelf: "center", animation: "wl-fadeUp 0.15s ease" }}
