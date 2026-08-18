@@ -118,6 +118,7 @@ await tg("setMyCommands", {
   commands: [
     { command: "review", description: "Start a review session" },
     { command: "due", description: "How many words are waiting" },
+    { command: "settings", description: "Show your reminder schedule" },
     { command: "pause", description: "Stop daily reminders" },
     { command: "resume", description: "Resume daily reminders" },
     { command: "settime", description: "Set reminder hour (0-23, local)" },

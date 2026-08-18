@@ -159,6 +159,7 @@ confirms with the email of the account it linked.
 |---|---|
 | `/review` | Start a review session |
 | `/due` | How many words are waiting |
+| `/settings` | Show the reminder schedule, timezone, and the current time there |
 | `/pause`, `/resume` | Turn daily reminders off and on |
 | `/settime 21` | Reminder hour, in your local time |
 | `/settz Europe/Helsinki` | Set your timezone |
