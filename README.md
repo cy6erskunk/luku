@@ -50,8 +50,8 @@ the environment you are targeting — Production, Preview, or both:
 ```
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...     # from BotFather
 TELEGRAM_BOT_USERNAME=YourLukuBot        # without the leading @
-TELEGRAM_WEBHOOK_SECRET=...              # openssl rand -base64 32
-TELEGRAM_CRON_SECRET=...                 # openssl rand -base64 32
+TELEGRAM_WEBHOOK_SECRET=...              # openssl rand -hex 32
+TELEGRAM_CRON_SECRET=...                 # openssl rand -hex 32
 APP_URL=https://your-deployment.vercel.app
 ```
 
@@ -61,6 +61,10 @@ APP_URL=https://your-deployment.vercel.app
 cp .env.local.example .env.local
 # fill in TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_WEBHOOK_SECRET
 ```
+
+Use `-hex`, not `-base64`: Telegram restricts `TELEGRAM_WEBHOOK_SECRET` to
+`A-Za-z0-9_-` (max 256 chars), and base64 output contains `+`, `/` and `=`, which
+`setWebhook` rejects.
 
 `.env.local` is gitignored. Only those three are needed locally —
 `TELEGRAM_CRON_SECRET` and `APP_URL` are read by the running app, not the script.

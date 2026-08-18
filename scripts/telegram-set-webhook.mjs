@@ -53,6 +53,19 @@ requireEnv(TELEGRAM_BOT_TOKEN, "TELEGRAM_BOT_TOKEN");
 if (!statusOnly) {
   requireEnv(TELEGRAM_BOT_USERNAME, "TELEGRAM_BOT_USERNAME");
   requireEnv(TELEGRAM_WEBHOOK_SECRET, "TELEGRAM_WEBHOOK_SECRET");
+
+  // Telegram restricts secret_token to A-Za-z0-9_- and 256 characters. Checking
+  // here turns an opaque "Bad Request: secret token contains unallowed
+  // characters" from the API into something actionable. `openssl rand -base64`
+  // is the usual culprit: its +, / and = are all rejected.
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(TELEGRAM_WEBHOOK_SECRET)) {
+    fail(
+      "TELEGRAM_WEBHOOK_SECRET has characters Telegram won't accept — it allows only " +
+        "A-Za-z0-9_- (max 256).\n" +
+        "  Generate one with: openssl rand -hex 32\n" +
+        "  Set the same value in your deployment, then re-run this script."
+    );
+  }
 }
 
 async function tg(method, payload) {
