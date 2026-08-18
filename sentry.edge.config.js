@@ -4,7 +4,7 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
-import { redactDeep } from "./lib/redact.js";
+import { redactDeep } from "./lib/redact.mjs";
 
 Sentry.init({
   dsn: "https://c44fe9380348efb91442e630909b58b3@o4505843752763392.ingest.us.sentry.io/4511608689000448",

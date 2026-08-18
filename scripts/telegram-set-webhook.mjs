@@ -12,7 +12,7 @@
  * Re-running is safe.
  */
 import { readFileSync } from "node:fs";
-import { redactString } from "../lib/redact.js";
+import { redactString } from "../lib/redact.mjs";
 
 // Minimal .env.local loader so this works without extra dependencies.
 try {
@@ -71,13 +71,44 @@ if (!statusOnly) {
   }
 }
 
+// Node's fetch has no practical default timeout, so without this the script
+// sits silently forever when api.telegram.org is unreachable — behind a VPN,
+// a corporate proxy, or with DNS blocked.
+const TIMEOUT_MS = 15000;
+
 async function tg(method, payload) {
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload ?? {}),
-  });
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    fail(
+      e?.name === "TimeoutError"
+        ? `${method}: no response from api.telegram.org within ${TIMEOUT_MS / 1000}s — check VPN, proxy or firewall`
+        : `${method}: could not reach api.telegram.org — ${e?.message ?? e}`
+    );
+  }
+
+  // A proxy or captive portal answers with HTML, not JSON. Read the body once
+  // and parse from the text, so the failure can quote what actually came back
+  // rather than ending on a SyntaxError stack trace.
+  const raw = await res.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    const body = raw.trim().replace(/\s+/g, " ").slice(0, 120);
+    fail(
+      `${method}: api.telegram.org returned ${res.status} with a non-JSON body — ` +
+        "something between you and Telegram is intercepting the request." +
+        (body ? `\n  First bytes: ${body}` : "")
+    );
+  }
+
   if (!data.ok) fail(`${method}: ${data.description}`);
   return data.result;
 }
@@ -94,10 +125,13 @@ function reportWebhook(info) {
   }
 }
 
+// Announced before the call, so a slow or blocked network is attributable
+// rather than looking like the script died on startup.
+console.log("→ Contacting api.telegram.org…");
 const me = await tg("getMe");
+console.log(`✓ Authenticated as @${me.username}`);
 
 if (statusOnly) {
-  console.log(`@${me.username}`);
   reportWebhook(await tg("getWebhookInfo"));
   process.exit(0);
 }
