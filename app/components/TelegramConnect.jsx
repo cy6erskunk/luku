@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bp, Bg } from "../lib/styles.js";
+import { useDialog } from "../hooks/useDialog.js";
 
 // The server keeps a link code claimable for 10 minutes (CODE_TTL_MINUTES in
 // lib/telegram/link.js), so watch for the whole window — giving up sooner left
@@ -20,6 +21,7 @@ export default function TelegramConnect({ onClose }) {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [expired, setExpired] = useState(false);
   const pollRef = useRef(null);
+  const panelRef = useDialog(onClose);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/telegram/link");
@@ -131,6 +133,8 @@ export default function TelegramConnect({ onClose }) {
       <div
         role="dialog"
         aria-modal="true"
+        ref={panelRef}
+        tabIndex={-1}
         aria-labelledby="telegram-heading"
         onClick={(e) => e.stopPropagation()}
         style={{ background: "#181d2a", borderRadius: 18, width: "100%", maxWidth: 440, margin: 16, overflow: "hidden" }}

@@ -177,3 +177,52 @@ describe("TelegramConnect — dismissal", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("TelegramConnect — keyboard", () => {
+  // aria-modal promises assistive technology the rest of the page is inert.
+  it("closes on Escape", async () => {
+    stubApi({ status: LINKED });
+    const onClose = vi.fn();
+    render(<TelegramConnect onClose={onClose} />);
+
+    await screen.findByText(/connected as @matti/i);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves focus into the panel on open", async () => {
+    stubApi({ status: LINKED });
+    render(<TelegramConnect onClose={() => {}} />);
+
+    await screen.findByText(/connected as @matti/i);
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+
+  it("restores focus to the trigger when it closes", async () => {
+    stubApi({ status: LINKED });
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = render(<TelegramConnect onClose={() => {}} />);
+    await screen.findByText(/connected as @matti/i);
+    unmount();
+
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
+  it("keeps Tab inside the panel", async () => {
+    stubApi({ status: LINKED });
+    render(<TelegramConnect onClose={() => {}} />);
+    await screen.findByText(/connected as @matti/i);
+
+    const dialog = screen.getByRole("dialog");
+    const items = dialog.querySelectorAll("button");
+    items[items.length - 1].focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+});

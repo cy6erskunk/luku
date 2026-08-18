@@ -23,7 +23,11 @@ const LINK = {
 beforeEach(() => {
   mocks.session = { user: { id: "u1" } };
   mocks.sql = fakeSql();
+  // A working deployment needs all three; the route reports "configured" only
+  // when the whole link flow could actually complete.
+  vi.stubEnv("TELEGRAM_BOT_TOKEN", "123:ABC");
   vi.stubEnv("TELEGRAM_BOT_USERNAME", "LukuTestBot");
+  vi.stubEnv("TELEGRAM_WEBHOOK_SECRET", "webhook-secret");
 });
 
 afterEach(() => {
@@ -59,6 +63,17 @@ describe("GET /api/telegram/link", () => {
     expect(await (await GET()).json()).toEqual({ linked: false, configured: false });
   });
 
+  it("is not configured when the username alone is set", async () => {
+    // The token sends the confirmation and the secret lets the webhook accept
+    // /start; without either, Connect would mint a code that cannot complete.
+    for (const missing of ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET"]) {
+      vi.stubEnv(missing, "");
+      mocks.sql = fakeSql([[]]);
+      expect(await (await GET()).json()).toEqual({ linked: false, configured: false });
+      vi.stubEnv(missing, "restored");
+    }
+  });
+
   it("scopes the lookup to the signed-in user", async () => {
     mocks.sql = fakeSql([[]]);
     await GET();
@@ -76,6 +91,17 @@ describe("POST /api/telegram/link", () => {
     vi.stubEnv("TELEGRAM_BOT_USERNAME", "");
     const res = await POST();
     expect(res.status).toBe(503);
+  });
+
+  it("refuses to mint a code a partial configuration could not complete", async () => {
+    for (const missing of ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET"]) {
+      vi.stubEnv(missing, "");
+      mocks.sql = fakeSql();
+      expect((await POST()).status).toBe(503);
+      // Nothing minted: a live code with no way to redeem it is worse than none.
+      expect(mocks.sql.calls).toHaveLength(0);
+      vi.stubEnv(missing, "restored");
+    }
   });
 
   it("refuses to mint a second code for an already linked account", async () => {

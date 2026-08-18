@@ -11,8 +11,20 @@ function botUsername() {
   return (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "");
 }
 
+/**
+ * Linking needs all three: the username builds the deep link, the webhook
+ * secret lets the bot receive /start, and the token lets it reply. With only
+ * some of them set the panel would offer Connect and mint a live code that
+ * cannot complete — and if the token alone is missing, the webhook still
+ * authenticates and createLink succeeds, leaving the account linked while the
+ * user sees no confirmation at all.
+ */
+function botConfigured() {
+  return Boolean(process.env.TELEGRAM_BOT_TOKEN && botUsername() && process.env.TELEGRAM_WEBHOOK_SECRET);
+}
+
 function serialize(link) {
-  const configured = Boolean(botUsername());
+  const configured = botConfigured();
   if (!link) return { linked: false, configured };
   return {
     linked: true,
@@ -40,8 +52,10 @@ export async function POST() {
   const user = await requireUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!botConfigured()) {
+    return Response.json({ error: "Telegram bot is not configured" }, { status: 503 });
+  }
   const bot = botUsername();
-  if (!bot) return Response.json({ error: "Telegram bot is not configured" }, { status: 503 });
 
   const sql = getDb();
   if (await getLinkByUserId(sql, user.id)) {
