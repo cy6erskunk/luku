@@ -41,12 +41,38 @@ gives you.
 
 ### 2. Set the environment variables
 
+These go in **two places** — the deployment runs the bot, but the setup script in
+step 3 runs on your machine and cannot see your hosting provider's variables.
+
+**In your deployment** (Vercel → Settings → Environment Variables), enabled for
+the environment you are targeting — Production, Preview, or both:
+
 ```
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...     # from BotFather
 TELEGRAM_BOT_USERNAME=YourLukuBot        # without the leading @
 TELEGRAM_WEBHOOK_SECRET=...              # openssl rand -base64 32
 TELEGRAM_CRON_SECRET=...                 # openssl rand -base64 32
 APP_URL=https://your-deployment.vercel.app
+```
+
+**On your machine**, so the setup script can reach the Bot API:
+
+```bash
+cp .env.local.example .env.local
+# fill in TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_WEBHOOK_SECRET
+```
+
+`.env.local` is gitignored. Only those three are needed locally —
+`TELEGRAM_CRON_SECRET` and `APP_URL` are read by the running app, not the script.
+`TELEGRAM_WEBHOOK_SECRET` must be **identical** to the deployment's: it is what
+Telegram echoes back on every update, and a mismatch means the app rejects every
+delivery and the bot silently does nothing.
+
+Prefer not to keep a file? Pass them for a single run instead:
+
+```bash
+TELEGRAM_BOT_TOKEN=… TELEGRAM_BOT_USERNAME=… TELEGRAM_WEBHOOK_SECRET=… \
+  npm run telegram:webhook -- https://your-deployment.vercel.app
 ```
 
 > **The bot token is the most sensitive secret in this project.** Anyone holding
@@ -56,15 +82,54 @@ APP_URL=https://your-deployment.vercel.app
 
 ### 3. Register the webhook
 
-Run once per deployment URL:
+**Deploying does not do this.** Until it runs, Telegram holds no URL for your bot
+and will never contact your app — the bot simply never replies. Run it once per
+deployment URL:
 
 ```bash
-node scripts/telegram-set-webhook.mjs https://your-deployment.vercel.app
+npm run telegram:webhook -- https://your-deployment.vercel.app
 ```
 
 This points Telegram at `/api/telegram/webhook`, attaches the secret token, and
 registers the command list. It refuses to run if `TELEGRAM_BOT_USERNAME` doesn't
 match the bot the token belongs to.
+
+To check what is currently registered, without changing anything:
+
+```bash
+npm run telegram:status
+```
+
+#### Testing against a preview deployment
+
+Three things differ from production:
+
+- **Use the branch alias**, the stable `…-git-<branch>-<scope>.vercel.app` URL —
+  not the per-deployment URL, which changes on every push and leaves the webhook
+  pointing at a dead deploy.
+- **Deployment Protection is on by default for previews**, so Telegram's POST gets
+  an authentication page instead of your route. `npm run telegram:status` reports
+  this as `401 Unauthorized`. Either disable protection for previews, or enable
+  Protection Bypass for Automation and register the webhook with the token in the
+  query string, which Telegram preserves:
+  `https://<branch-alias>/api/telegram/webhook?x-vercel-protection-bypass=<token>`
+- **Scope the variables to Preview** — a variable set only for Production is
+  absent from a preview deployment, and `DATABASE_URL` should point at the Neon
+  branch you migrated.
+
+#### When the bot doesn't answer
+
+Work down this ladder; each step isolates one layer.
+
+| Step | Proves |
+|---|---|
+| `npm run telegram:status` shows your URL and no last error | registration and reachability |
+| `/help` replies | webhook secret, bot token, outgoing messages — no database |
+| `/start` replies | `DATABASE_URL` and the migrated schema |
+
+`/help` deliberately answers before touching the database, so if `/help` works and
+`/start` is silent, the problem is the database connection. Anything that fails
+after authentication is captured in Sentry, including a mismatched secret.
 
 ### 4. Schedule the reminders
 

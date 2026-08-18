@@ -132,6 +132,8 @@ changing it:
 - Link codes are single-use, 10-minute, and stored hashed.
 - The webhook always returns 200 once authenticated; a non-2xx makes Telegram
   redeliver the same update on a schedule.
+- `/help` is answered before `getDb()` is called, so it stays a database-free
+  connectivity test when a deployment is misconfigured. Keep it that way.
 - A review session keeps **no** stored state — the next card is derived from
   SQL each turn. Consequently the web app's same-session requeue of failed
   cards (`useReview.js`) is not reproduced in chat.
@@ -178,5 +180,6 @@ changing it:
 
 Designed for Vercel — connect the GitHub repo, add the Neon integration, and run
 `db/schema.sql` once in the Neon SQL editor. The Telegram bot additionally needs
-its webhook registered (`scripts/telegram-set-webhook.mjs`) and the
+its webhook registered (`npm run telegram:webhook -- <url>`; `npm run
+telegram:status` shows what is currently registered) and the
 `LUKU_APP_URL` / `TELEGRAM_CRON_SECRET` GitHub secrets for the reminder cron.

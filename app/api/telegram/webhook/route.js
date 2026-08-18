@@ -19,6 +19,13 @@ function isFromTelegram(request) {
 
 export async function POST(request) {
   if (!isFromTelegram(request)) {
+    // A request carrying the header but the wrong value is not a passing
+    // scanner — it is Telegram with a stale secret, which is otherwise
+    // invisible: the bot simply goes quiet. Requests with no header at all
+    // stay silent so scanners add no noise.
+    if (request.headers.get(SECRET_HEADER)) {
+      Sentry.captureMessage("Telegram webhook secret mismatch", "warning");
+    }
     return new Response(null, { status: 401 });
   }
 

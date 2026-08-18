@@ -9,7 +9,7 @@ vi.mock("@/lib/telegram/handlers", () => ({
     return Promise.resolve();
   },
 }));
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 
 const { POST } = await import("../route.js");
 const Sentry = await import("@sentry/nextjs");
@@ -50,6 +50,17 @@ describe("POST /api/telegram/webhook", () => {
   it("rejects a secret that only shares a prefix", async () => {
     const res = await POST(makeRequest(UPDATE, SECRET.slice(0, -1)));
     expect(res.status).toBe(401);
+  });
+
+  it("reports a wrong secret, which is otherwise invisible", async () => {
+    await POST(makeRequest(UPDATE, "wrong-token"));
+    expect(Sentry.captureMessage).toHaveBeenCalledWith("Telegram webhook secret mismatch", "warning");
+  });
+
+  it("stays quiet for a request with no secret header at all", async () => {
+    // Scanners hitting the path should not fill Sentry.
+    await POST(makeRequest(UPDATE, undefined));
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
   });
 
   it("refuses everything when the server has no secret configured", async () => {
