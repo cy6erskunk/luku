@@ -102,8 +102,10 @@ if (statusOnly) {
 // Catch a mistyped username here rather than as a dead deep link at connect time.
 // The message names the bot the token belongs to rather than echoing the configured
 // value back, for the same reason requireEnv does not print values.
-const expected = TELEGRAM_BOT_USERNAME.replace(/^@/, "");
-if (me.username !== expected) {
+// Telegram usernames are case-insensitive, so compare normalized while still
+// reporting the canonical spelling the API returned.
+const expected = TELEGRAM_BOT_USERNAME.replace(/^@/, "").toLowerCase();
+if (me.username.toLowerCase() !== expected) {
   fail(`This token belongs to @${me.username}, which does not match TELEGRAM_BOT_USERNAME`);
 }
 

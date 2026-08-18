@@ -12,9 +12,11 @@ function botUsername() {
 }
 
 function serialize(link) {
-  if (!link) return { linked: false };
+  const configured = Boolean(botUsername());
+  if (!link) return { linked: false, configured };
   return {
     linked: true,
+    configured,
     username: link.username ?? null,
     remindersEnabled: link.reminders_enabled,
     reminderHour: link.reminder_hour,

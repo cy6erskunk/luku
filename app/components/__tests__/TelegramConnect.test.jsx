@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import TelegramConnect from "../TelegramConnect.jsx";
 
-const UNLINKED = { linked: false };
+const UNLINKED = { linked: false, configured: true };
 const LINKED = {
   linked: true,
+  configured: true,
   username: "matti",
   remindersEnabled: true,
   reminderHour: 9,
@@ -28,8 +29,13 @@ function stubApi({ status = UNLINKED, post, del } = {}) {
 
 const jsonOk = (body) => ({ ok: true, json: () => Promise.resolve(body) });
 
+let popup;
+
 beforeEach(() => {
-  vi.stubGlobal("open", vi.fn());
+  // handleConnect opens a placeholder synchronously and navigates it later, so
+  // the stub has to hand back a usable window handle.
+  popup = { location: { replace: vi.fn() }, close: vi.fn(), opener: {} };
+  vi.stubGlobal("open", vi.fn(() => popup));
 });
 
 afterEach(() => {
@@ -44,13 +50,34 @@ describe("TelegramConnect — unlinked", () => {
     expect(await screen.findByRole("button", { name: /connect telegram/i })).toBeTruthy();
   });
 
-  it("opens the deep link returned by the server", async () => {
+  it("opens the window synchronously, then navigates it to the deep link", async () => {
     stubApi({ post: jsonOk({ url: "https://t.me/LukuTestBot?start=abc", code: "abc" }) });
     render(<TelegramConnect onClose={() => {}} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /connect telegram/i }));
 
-    await waitFor(() => expect(window.open).toHaveBeenCalledWith("https://t.me/LukuTestBot?start=abc", "_blank", "noopener"));
+    // Opened during the click, before any await, so popup blockers see the
+    // user activation; the URL is only known after the POST resolves.
+    expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
+    await waitFor(() => expect(popup.location.replace).toHaveBeenCalledWith("https://t.me/LukuTestBot?start=abc"));
+    expect(popup.opener).toBeNull();
+  });
+
+  it("closes the placeholder window when minting fails", async () => {
+    stubApi({ post: { ok: false, status: 503, json: () => Promise.resolve({ error: "nope" }) } });
+    render(<TelegramConnect onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /connect telegram/i }));
+
+    await waitFor(() => expect(popup.close).toHaveBeenCalled());
+  });
+
+  it("says so when the deployment has no bot configured", async () => {
+    stubApi({ status: { linked: false, configured: false } });
+    render(<TelegramConnect onClose={() => {}} />);
+
+    expect(await screen.findByText(/isn't configured for this deployment/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /connect telegram/i })).toBeNull();
   });
 
   it("shows the /link fallback once a code is outstanding", async () => {
@@ -70,7 +97,7 @@ describe("TelegramConnect — unlinked", () => {
     fireEvent.click(await screen.findByRole("button", { name: /connect telegram/i }));
 
     expect(await screen.findByText(/not configured/i)).toBeTruthy();
-    expect(window.open).not.toHaveBeenCalled();
+    expect(popup.location.replace).not.toHaveBeenCalled();
   });
 
   it("flips to connected when polling sees the bot claim the code", async () => {

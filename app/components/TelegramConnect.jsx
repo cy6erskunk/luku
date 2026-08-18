@@ -82,14 +82,25 @@ export default function TelegramConnect({ onClose }) {
   const handleConnect = async () => {
     setErr("");
     setBusy(true);
+
+    // Opened synchronously, while the click's transient activation is still
+    // live: Safari and strict blockers reject a window.open that happens after
+    // an awaited fetch, which would mint a code the user never gets to use.
+    // (`noopener` would make this return null, so the handle is severed after.)
+    const popup = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+    if (popup) popup.opener = null;
+
     try {
       const res = await fetch("/api/telegram/link", { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Failed to start connection (${res.status})`);
       setExpired(false);
       setPendingCode(json.code);
-      window.open(json.url, "_blank", "noopener");
+
+      if (popup) popup.location.replace(json.url);
+      else window.open(json.url, "_blank", "noopener");
     } catch (e) {
+      popup?.close();
       setErr(e.message);
     } finally {
       setBusy(false);
@@ -158,7 +169,14 @@ export default function TelegramConnect({ onClose }) {
             </>
           )}
 
-          {!loading && !status?.linked && (
+          {!loading && !status?.linked && status?.configured === false && (
+            <div style={{ fontSize: 13, color: "#6b645e", lineHeight: 1.6 }}>
+              The Telegram bot isn't configured for this deployment, so there's nothing to
+              connect to yet. See the Telegram section of the README to set it up.
+            </div>
+          )}
+
+          {!loading && !status?.linked && status?.configured !== false && (
             <>
               <div style={{ fontSize: 13, color: "#c8c0b5", lineHeight: 1.6 }}>
                 Review your words from Telegram and get a daily reminder when something is due.

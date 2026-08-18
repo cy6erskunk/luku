@@ -38,18 +38,25 @@ describe("GET /api/telegram/link", () => {
 
   it("reports an unlinked account", async () => {
     mocks.sql = fakeSql([[]]);
-    expect(await (await GET()).json()).toEqual({ linked: false });
+    expect(await (await GET()).json()).toEqual({ linked: false, configured: true });
   });
 
   it("reports the link and its reminder settings", async () => {
     mocks.sql = fakeSql([[LINK]]);
     expect(await (await GET()).json()).toEqual({
       linked: true,
+      configured: true,
       username: "matti",
       remindersEnabled: true,
       reminderHour: 9,
       timezone: "Europe/Helsinki",
     });
+  });
+
+  it("reports an unconfigured deployment so the panel can say so", async () => {
+    vi.stubEnv("TELEGRAM_BOT_USERNAME", "");
+    mocks.sql = fakeSql([[]]);
+    expect(await (await GET()).json()).toEqual({ linked: false, configured: false });
   });
 
   it("scopes the lookup to the signed-in user", async () => {

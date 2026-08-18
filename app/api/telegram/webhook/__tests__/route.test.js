@@ -23,7 +23,13 @@ const makeRequest = (body, secret) => ({
 
 const UPDATE = { update_id: 1, message: { chat: { id: 42, type: "private" }, text: "/help" } };
 
+// Mismatch reporting is throttled with module-level state, so each test starts
+// an hour later than the last and always begins outside the throttle window.
+let clock = Date.parse("2026-01-01T00:00:00Z");
+
 beforeEach(() => {
+  clock += 60 * 60 * 1000;
+  vi.spyOn(Date, "now").mockReturnValue(clock);
   vi.stubEnv("TELEGRAM_WEBHOOK_SECRET", SECRET);
   mocks.handled = [];
   mocks.throwOnHandle = null;
@@ -31,6 +37,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -55,6 +62,19 @@ describe("POST /api/telegram/webhook", () => {
   it("reports a wrong secret, which is otherwise invisible", async () => {
     await POST(makeRequest(UPDATE, "wrong-token"));
     expect(Sentry.captureMessage).toHaveBeenCalledWith("Telegram webhook secret mismatch", "warning");
+  });
+
+  it("throttles mismatch reports so the endpoint cannot be used to flood Sentry", async () => {
+    // The path is guessable and the header is free to forge, so one report per
+    // window per instance is the bound.
+    await POST(makeRequest(UPDATE, "wrong-token"));
+    await POST(makeRequest(UPDATE, "wrong-token"));
+    await POST(makeRequest(UPDATE, "wrong-token"));
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+
+    vi.spyOn(Date, "now").mockReturnValue(clock + 6 * 60 * 1000);
+    await POST(makeRequest(UPDATE, "wrong-token"));
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(2);
   });
 
   it("stays quiet for a request with no secret header at all", async () => {

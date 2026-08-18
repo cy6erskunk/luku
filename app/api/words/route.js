@@ -1,5 +1,6 @@
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
+import { isValidWordId } from "@/lib/reviews";
 
 export async function GET() {
   const { data: session } = await getAuth().getSession();
@@ -23,7 +24,7 @@ export async function DELETE(request) {
   if (!idParam) return Response.json({ error: "Missing id" }, { status: 400 });
 
   const id = Number.parseInt(idParam, 10);
-  if (!Number.isSafeInteger(id) || String(id) !== idParam) {
+  if (!isValidWordId(id) || String(id) !== idParam) {
     return Response.json({ error: "Invalid id" }, { status: 400 });
   }
 

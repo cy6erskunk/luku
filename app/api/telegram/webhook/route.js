@@ -4,6 +4,12 @@ import { sha256, timingSafeEqualHex } from "@/lib/telegram/link";
 
 const SECRET_HEADER = "x-telegram-bot-api-secret-token";
 
+// Anyone who finds this path can send a bogus secret header, so reporting every
+// mismatch would hand out an unbounded Sentry bill. One per interval per
+// instance is enough to surface a genuinely stale secret.
+const MISMATCH_REPORT_INTERVAL_MS = 5 * 60 * 1000;
+let lastMismatchReport = 0;
+
 /**
  * Authenticates Telegram itself. Everything downstream trusts `from.id`
  * because of this check, so it is the one place that must not be lenient.
@@ -24,7 +30,11 @@ export async function POST(request) {
     // invisible: the bot simply goes quiet. Requests with no header at all
     // stay silent so scanners add no noise.
     if (request.headers.get(SECRET_HEADER)) {
-      Sentry.captureMessage("Telegram webhook secret mismatch", "warning");
+      const now = Date.now();
+      if (now - lastMismatchReport > MISMATCH_REPORT_INTERVAL_MS) {
+        lastMismatchReport = now;
+        Sentry.captureMessage("Telegram webhook secret mismatch", "warning");
+      }
     }
     return new Response(null, { status: 401 });
   }
