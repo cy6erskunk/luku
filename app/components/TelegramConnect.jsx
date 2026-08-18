@@ -2,8 +2,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bp, Bg } from "../lib/styles.js";
 
-const POLL_MS = 2000;
-const POLL_TIMEOUT_MS = 60000;
+// The server keeps a link code claimable for 10 minutes (CODE_TTL_MINUTES in
+// lib/telegram/link.js), so watch for the whole window — giving up sooner left
+// the panel offering a fresh connection while the outstanding code was still
+// valid, and minting a new one invalidates the code the user is about to send.
+const CODE_TTL_MS = 10 * 60 * 1000;
+const POLL_FAST_MS = 2000;
+const POLL_SLOW_MS = 6000;
+const POLL_FAST_WINDOW_MS = 60000;
 
 export default function TelegramConnect({ onClose }) {
   const [status, setStatus] = useState(null);
@@ -12,6 +18,7 @@ export default function TelegramConnect({ onClose }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [expired, setExpired] = useState(false);
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -30,30 +37,46 @@ export default function TelegramConnect({ onClose }) {
   }, [load]);
 
   // While a code is outstanding, watch for the bot to claim it so the panel
-  // flips to connected without the user having to refresh.
+  // flips to connected without the user having to refresh. Polls quickly at
+  // first — most people tap START straight away — then eases off for the rest
+  // of the code's lifetime.
   useEffect(() => {
     if (!pendingCode) return undefined;
 
     const startedAt = Date.now();
-    pollRef.current = setInterval(async () => {
-      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        clearInterval(pollRef.current);
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const elapsed = Date.now() - startedAt;
+
+      if (elapsed > CODE_TTL_MS) {
+        setExpired(true);
         setPendingCode(null);
         return;
       }
+
       try {
         const s = await load();
+        if (cancelled) return;
         if (s.linked) {
-          clearInterval(pollRef.current);
           setStatus(s);
           setPendingCode(null);
+          return;
         }
       } catch {
         // Transient failure; the next tick will try again.
       }
-    }, POLL_MS);
 
-    return () => clearInterval(pollRef.current);
+      pollRef.current = setTimeout(tick, elapsed < POLL_FAST_WINDOW_MS ? POLL_FAST_MS : POLL_SLOW_MS);
+    };
+
+    pollRef.current = setTimeout(tick, POLL_FAST_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(pollRef.current);
+    };
   }, [pendingCode, load]);
 
   const handleConnect = async () => {
@@ -63,6 +86,7 @@ export default function TelegramConnect({ onClose }) {
       const res = await fetch("/api/telegram/link", { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Failed to start connection (${res.status})`);
+      setExpired(false);
       setPendingCode(json.code);
       window.open(json.url, "_blank", "noopener");
     } catch (e) {
@@ -155,9 +179,16 @@ export default function TelegramConnect({ onClose }) {
                   <div style={{ fontSize: 11, color: "#555", marginTop: 10 }}>This code expires in 10 minutes.</div>
                 </>
               ) : (
-                <button onClick={handleConnect} disabled={busy} style={{ ...Bp, width: "100%", marginTop: 18, opacity: busy ? 0.5 : 1 }}>
-                  {busy ? "Opening Telegram…" : "Connect Telegram"}
-                </button>
+                <>
+                  {expired && (
+                    <div style={{ fontSize: 12, color: "#9e8a7a", marginTop: 14, lineHeight: 1.6 }}>
+                      That code expired before it was used. Connect again to get a new one.
+                    </div>
+                  )}
+                  <button onClick={handleConnect} disabled={busy} style={{ ...Bp, width: "100%", marginTop: 18, opacity: busy ? 0.5 : 1 }}>
+                    {busy ? "Opening Telegram…" : expired ? "Connect Telegram again" : "Connect Telegram"}
+                  </button>
+                </>
               )}
             </>
           )}

@@ -26,8 +26,10 @@ try {
 }
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, TELEGRAM_WEBHOOK_SECRET } = process.env;
-const target = process.argv[2];
-const statusOnly = target === "--status";
+const args = process.argv.slice(2);
+const reset = args.includes("--reset");
+const target = args.find((a) => !a.startsWith("--"));
+const statusOnly = args.includes("--status");
 
 function fail(message) {
   console.error(`✗ ${message}`);
@@ -42,8 +44,8 @@ function requireEnv(value, name) {
   }
 }
 
-if (!target) {
-  fail("Usage: node scripts/telegram-set-webhook.mjs <public-base-url> | --status");
+if (!target && !statusOnly) {
+  fail("Usage: node scripts/telegram-set-webhook.mjs <public-base-url> [--reset] | --status");
 }
 if (!statusOnly && !/^https:\/\//.test(target)) {
   fail("Telegram only accepts https webhook URLs");
@@ -105,13 +107,26 @@ if (me.username !== expected) {
   fail(`This token belongs to @${me.username}, which does not match TELEGRAM_BOT_USERNAME`);
 }
 
-const webhookUrl = `${target.replace(/\/$/, "")}/api/telegram/webhook`;
+// Built through URL rather than concatenated: the preview-deployment setup in
+// the README passes a protection-bypass query string, and appending a path to
+// that would fold "/api/telegram/webhook" into the query value. Assigning
+// pathname also makes passing the full endpoint URL idempotent.
+let webhookUrl;
+try {
+  const parsed = new URL(target);
+  parsed.pathname = "/api/telegram/webhook";
+  webhookUrl = parsed.toString();
+} catch {
+  fail(`Not a valid URL: ${target}`);
+}
 
 await tg("setWebhook", {
   url: webhookUrl,
   secret_token: TELEGRAM_WEBHOOK_SECRET,
   allowed_updates: ["message", "callback_query"],
-  drop_pending_updates: true,
+  // Off by default: this command is documented as safe to re-run, and dropping
+  // pending updates would silently discard taps queued while it ran.
+  drop_pending_updates: reset,
 });
 
 await tg("setMyCommands", {

@@ -23,7 +23,7 @@ Open http://localhost:3000
 
 ## How it works
 
-- Users enter their Anthropic API key on first load (kept in `localStorage`, never sent anywhere but Anthropic)
+- Users enter their Anthropic API key on first load, kept in `localStorage`. It is sent to this deployment's own `/api/claude` route, which forwards it to Anthropic — so the server handling your traffic does see the key in transit; it is never stored server-side.
 - The key is sent to `/api/claude` — a Next.js server route that forwards requests to Anthropic
 - The API key is **never exposed in the browser bundle**
 - OCR and word translation both go through this server route
@@ -98,6 +98,10 @@ This points Telegram at `/api/telegram/webhook`, attaches the secret token, and
 registers the command list. It refuses to run if `TELEGRAM_BOT_USERNAME` doesn't
 match the bot the token belongs to.
 
+Pass a base URL; the endpoint path is appended for you, and any query string —
+such as a protection-bypass token — is preserved. Re-running keeps whatever
+Telegram has already queued; add `--reset` to discard pending updates instead.
+
 To check what is currently registered, without changing anything:
 
 ```bash
@@ -116,7 +120,7 @@ Three things differ from production:
   this as `401 Unauthorized`. Either disable protection for previews, or enable
   Protection Bypass for Automation and register the webhook with the token in the
   query string, which Telegram preserves:
-  `https://<branch-alias>/api/telegram/webhook?x-vercel-protection-bypass=<token>`
+  `npm run telegram:webhook -- "https://<branch-alias>?x-vercel-protection-bypass=<token>"`
 - **Scope the variables to Preview** — a variable set only for Production is
   absent from a preview deployment, and `DATABASE_URL` should point at the Neon
   branch you migrated.

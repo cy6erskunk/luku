@@ -85,3 +85,17 @@ CREATE TABLE IF NOT EXISTS telegram_link_codes (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS telegram_link_codes_user ON telegram_link_codes (user_id);
+
+-- At most one claimable code per user, enforced here rather than by a
+-- delete-then-insert pair: the HTTP driver has no transactions, so two
+-- concurrent mint requests could otherwise both delete before either inserted
+-- and leave two redeemable deep links. Drop any duplicates a pre-index
+-- deployment accumulated before adding the constraint.
+DELETE FROM telegram_link_codes a
+  USING telegram_link_codes b
+  WHERE a.user_id = b.user_id
+    AND a.used_at IS NULL AND b.used_at IS NULL
+    AND (a.created_at, a.code_hash) < (b.created_at, b.code_hash);
+
+CREATE UNIQUE INDEX IF NOT EXISTS telegram_link_codes_active
+  ON telegram_link_codes (user_id) WHERE used_at IS NULL;
