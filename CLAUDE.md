@@ -109,7 +109,8 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |
 | `fileToBase64()` (`image.js`) | Client-side image resize/compress (max 1024px, ≤400KB) |
 | `getCroppedImg()` (`image.js`) | Crops a canvas region to base64 |
-| `tokenize()` (`utils.js`) | Splits text into words, punctuation, spaces, and line breaks |
+| `tokenize()` (`utils.js`) | Splits text into words, punctuation, spaces, and line breaks. A word hyphenated across a line break keeps both halves visible but gives each the whole word in `w` and a shared key, so tapping either translates the whole word |
+| `dehyphenate()` (`utils.js`) | Rejoins words split across lines; `sentenceOf()` runs it first so context is a whole sentence |
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |

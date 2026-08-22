@@ -64,6 +64,7 @@ export default function ReadStage({
             <span
               key={i}
               onClick={(e) => onWord(e, tok, containerRef)}
+              title={tok.w}
               style={{ cursor: "pointer", borderRadius: 3, padding: "1px 2px", background: loading ? "rgba(74,124,158,0.3)" : added ? "rgba(74,124,158,0.15)" : seen ? "rgba(122,158,126,0.1)" : "transparent", color: added ? "#7ab4d4" : seen ? "#8eba92" : "#e0d8cf", borderBottom: !added && !seen && !loading ? "1px dotted rgba(232,224,213,0.12)" : "none", transition: "all 0.12s" }}
             >
               {tok.v}
