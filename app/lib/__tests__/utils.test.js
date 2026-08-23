@@ -77,6 +77,20 @@ describe("tokenize", () => {
     expect(tokens[1]).toMatchObject({ t: "br", v: "\n\n" });
   });
 
+  it("keeps the line break when the line ends with a space", () => {
+    expect(tokenize("talo \nkoira").map((t) => [t.t, t.v])).toEqual([
+      ["wd", "talo"], ["sp", " "], ["br", "\n"], ["wd", "koira"],
+    ]);
+  });
+
+  it("keeps the line break when the next line is indented", () => {
+    expect(tokenize("talo\n  koira").map((t) => t.t)).toEqual(["wd", "br", "sp", "wd"]);
+  });
+
+  it("keeps both breaks when a blank line carries a space", () => {
+    expect(tokenize("a\n \nb").map((t) => t.t)).toEqual(["wd", "br", "sp", "br", "wd"]);
+  });
+
   it("tokenizes a Finnish sentence correctly", () => {
     const tokens = tokenize("Hyvää päivää!");
     const types = tokens.map((t) => t.t);
@@ -129,6 +143,8 @@ describe("tokenize", () => {
     const tokens = tokenize("sanakir- \n  jassa");
     expect(tokens.find((t) => t.v === "sanakir")?.w).toBe("sanakirjassa");
     expect(tokens.find((t) => t.v === "jassa")?.w).toBe("sanakirjassa");
+    // …without swallowing the line break the halves are printed on.
+    expect(tokens.some((t) => t.t === "br")).toBe(true);
   });
 
   it("keeps the hyphen for acronym, numeric, and proper-noun compounds", () => {
@@ -145,6 +161,7 @@ describe("tokenize", () => {
 
   it("does not join across a paragraph break", () => {
     expect(tokenize("sanakir-\n\njassa")[0].w).toBeUndefined();
+    expect(tokenize("sanakir- \n \njassa")[0].w).toBeUndefined();
   });
 
   it("does not join a dash between words", () => {

@@ -28,8 +28,8 @@ function linkHyphenatedLineBreaks(tokens) {
     let j = i + 1;
     if (tokens[j]?.t !== "pu" || !HYPHEN.test(tokens[j].v)) continue;
     j++;
-    // Exactly one newline between the halves — trailing or leading spaces may
-    // ride along with it, but a blank line is a paragraph break, not a wrap.
+    // Exactly one newline between the halves — a space may sit either side of
+    // it, but a blank line is a paragraph break, not a wrap.
     let breaks = 0;
     while (tokens[j]?.t === "sp" || tokens[j]?.t === "br") {
       breaks += (tokens[j].v.match(/\n/g) || []).length;
@@ -46,12 +46,16 @@ function linkHyphenatedLineBreaks(tokens) {
 }
 
 export function tokenize(text) {
-  const out = [], re = /(\n+|\s+|[.,!?;:"'“”‘’«»()[\]{}—–\-‐‑]+|[^\s.,!?;:"'“”‘’«»()[\]{}—–\-‐‑]+)/g;
+  const out = [], re = /(\s+|[.,!?;:"'“”‘’«»()[\]{}—–\-‐‑]+|[^\s.,!?;:"'“”‘’«»()[\]{}—–\-‐‑]+)/g;
   let m;
   while ((m = re.exec(text))) {
     const v = m[0];
-    if (/^\n+$/.test(v)) out.push({ t: "br", v });
-    else if (/^\s+$/.test(v)) out.push({ t: "sp", v });
+    // A whitespace run can mix spaces and newlines (a line ending in a space,
+    // or an indented next line). Split it so every line break gets its own
+    // token and the rendered text keeps the layout it was scanned with.
+    if (/^\s+$/.test(v)) {
+      for (const [ws] of v.matchAll(/\n+|[^\S\n]+/g)) out.push({ t: ws.includes("\n") ? "br" : "sp", v: ws });
+    }
     else if (/^[.,!?;:"'“”‘’«»()[\]{}—–\-‐‑]+$/.test(v)) out.push({ t: "pu", v });
     else out.push({ t: "wd", v, k: v.toLowerCase() });
   }
