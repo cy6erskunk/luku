@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, sentenceOf, wordForms, findExistingWord, SKIP_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, SKIP_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -77,6 +77,20 @@ describe("tokenize", () => {
     expect(tokens[1]).toMatchObject({ t: "br", v: "\n\n" });
   });
 
+  it("keeps the line break when the line ends with a space", () => {
+    expect(tokenize("talo \nkoira").map((t) => [t.t, t.v])).toEqual([
+      ["wd", "talo"], ["sp", " "], ["br", "\n"], ["wd", "koira"],
+    ]);
+  });
+
+  it("keeps the line break when the next line is indented", () => {
+    expect(tokenize("talo\n  koira").map((t) => t.t)).toEqual(["wd", "br", "sp", "wd"]);
+  });
+
+  it("keeps both breaks when a blank line carries a space", () => {
+    expect(tokenize("a\n \nb").map((t) => t.t)).toEqual(["wd", "br", "sp", "br", "wd"]);
+  });
+
   it("tokenizes a Finnish sentence correctly", () => {
     const tokens = tokenize("Hyvää päivää!");
     const types = tokens.map((t) => t.t);
@@ -111,6 +125,76 @@ describe("tokenize", () => {
   it("splits wrapping curly quotes from words", () => {
     expect(tokenize("“talo”").map((t) => t.v)).toEqual(["“", "talo", "”"]);
     expect(tokenize("‘koira’").map((t) => t.v)).toEqual(["‘", "koira", "’"]);
+  });
+
+  it("links a word hyphenated across a line break", () => {
+    const tokens = tokenize("Hän luki sanakir-\njassa uuden sanan.");
+    const head = tokens.find((t) => t.v === "sanakir");
+    const tail = tokens.find((t) => t.v === "jassa");
+    expect(head).toMatchObject({ v: "sanakir", w: "sanakirjassa", k: "sanakirjassa" });
+    expect(tail).toMatchObject({ v: "jassa", w: "sanakirjassa", k: "sanakirjassa" });
+  });
+
+  it("keeps the halves and the hyphen visible in the rendered text", () => {
+    expect(tokenize("sanakir-\njassa").map((t) => t.v)).toEqual(["sanakir", "-", "\n", "jassa"]);
+  });
+
+  it("tolerates trailing and leading spaces around the break", () => {
+    const tokens = tokenize("sanakir- \n  jassa");
+    expect(tokens.find((t) => t.v === "sanakir")?.w).toBe("sanakirjassa");
+    expect(tokens.find((t) => t.v === "jassa")?.w).toBe("sanakirjassa");
+    // …without swallowing the line break the halves are printed on.
+    expect(tokens.some((t) => t.t === "br")).toBe(true);
+  });
+
+  it("keeps the hyphen for acronym, numeric, and proper-noun compounds", () => {
+    expect(tokenize("EU-\nmaat")[0].w).toBe("EU-maat");
+    expect(tokenize("1990-\nluvulla")[0].w).toBe("1990-luvulla");
+    expect(tokenize("Helsinki-\nVantaa")[0].w).toBe("Helsinki-Vantaa");
+  });
+
+  it("leaves a hyphenated word that fits on one line alone", () => {
+    const tokens = tokenize("EU-maat");
+    expect(tokens.map((t) => t.v)).toEqual(["EU", "-", "maat"]);
+    expect(tokens[0].w).toBeUndefined();
+  });
+
+  it("does not join across a paragraph break", () => {
+    expect(tokenize("sanakir-\n\njassa")[0].w).toBeUndefined();
+    expect(tokenize("sanakir- \n \njassa")[0].w).toBeUndefined();
+  });
+
+  it("does not join a dash between words", () => {
+    expect(tokenize("talo —\nkoira").find((t) => t.v === "talo")?.w).toBeUndefined();
+    expect(tokenize("talo-\n").find((t) => t.v === "talo")?.w).toBeUndefined();
+  });
+
+  it("treats unicode and non-breaking hyphens like a plain hyphen", () => {
+    expect(tokenize("sanakir\u2010\njassa")[0].w).toBe("sanakirjassa");
+    expect(tokenize("sanakir\u2011\njassa")[0].w).toBe("sanakirjassa");
+  });
+});
+
+describe("dehyphenate", () => {
+  it("rejoins a word split across two lines", () => {
+    expect(dehyphenate("Hän luki sanakir-\njassa sanan.")).toBe("Hän luki sanakirjassa sanan.");
+  });
+
+  it("keeps a real compound's hyphen", () => {
+    expect(dehyphenate("EU-\nmaat")).toBe("EU-maat");
+  });
+
+  it("leaves unhyphenated line breaks untouched", () => {
+    expect(dehyphenate("talo\nkoira")).toBe("talo\nkoira");
+  });
+
+  it("leaves a paragraph break untouched", () => {
+    expect(dehyphenate("sanakir-\n\njassa")).toBe("sanakir-\n\njassa");
+  });
+
+  it("handles null and undefined", () => {
+    expect(dehyphenate(null)).toBe("");
+    expect(dehyphenate(undefined)).toBe("");
   });
 });
 
@@ -159,6 +243,11 @@ describe("findExistingWord", () => {
 });
 
 describe("sentenceOf", () => {
+  it("rejoins a word hyphenated across a line break and returns its sentence", () => {
+    const text = "Hän luki sanakir-\njassa uuden sanan. Toinen lause.";
+    expect(sentenceOf(text, "sanakirjassa")).toBe("Hän luki sanakirjassa uuden sanan.");
+  });
+
   it("returns the sentence containing the word", () => {
     const text = "Minä olen opiskelija. Hän on opettaja. Me olemme suomalaisia.";
     expect(sentenceOf(text, "opettaja")).toContain("opettaja");

@@ -161,27 +161,30 @@ export default function Luku() {
 
   const onWord = async (e, tok, containerRef) => {
     e.stopPropagation(); if (xlating) return;
+    // A word hyphenated across a line break is two tokens on screen but one
+    // word to look up; both halves carry the whole word in `w`.
+    const form = tok.w || tok.v;
     const r = e.target.getBoundingClientRect();
     const pr = containerRef?.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const x = r.left - pr.left + r.width / 2, y = r.top - pr.top;
-    if (!hasApiKey(savedKey)) { setPopup({ word: tok.v, k: tok.k, x, y, noKey: true }); return; }
+    if (!hasApiKey(savedKey)) { setPopup({ word: form, k: tok.k, x, y, noKey: true }); return; }
     if (session[tok.k]) {
       const cached = session[tok.k];
-      const existing = findExistingWord(words.dbWords, { form: tok.v, base: cached.base });
-      setPopup({ ...cached, word: tok.v, k: tok.k, x, y, existsInDb: !!existing });
+      const existing = findExistingWord(words.dbWords, { form, base: cached.base });
+      setPopup({ ...cached, word: form, k: tok.k, x, y, existsInDb: !!existing });
       return;
     }
     // Local-DB match by the tapped form runs in parallel with the translation
     // request, so we can flag the popup immediately when applicable.
-    const existingByForm = findExistingWord(words.dbWords, { form: tok.v });
+    const existingByForm = findExistingWord(words.dbWords, { form });
     setXlating(tok.k);
-    setPopup({ word: tok.v, k: tok.k, x, y, loading: true, existsInDb: !!existingByForm });
+    setPopup({ word: form, k: tok.k, x, y, loading: true, existsInDb: !!existingByForm });
     try {
-      const d = await translateWord(savedKey, tok.v, sentenceOf(text, tok.v));
-      const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: tok.v, added: false };
+      const d = await translateWord(savedKey, form, sentenceOf(text, form));
+      const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
-      const existing = findExistingWord(words.dbWords, { form: tok.v, base: d.base });
-      setPopup({ ...entry, word: tok.v, k: tok.k, x, y, existsInDb: !!existing });
+      const existing = findExistingWord(words.dbWords, { form, base: d.base });
+      setPopup({ ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing });
     } catch (e) { setPopup((p) => ({ ...p, loading: false, translations: [`(${e.message || "error"})`] })); }
     finally { setXlating(null); }
   };
