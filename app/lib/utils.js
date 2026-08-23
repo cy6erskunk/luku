@@ -52,7 +52,8 @@ export function tokenize(text) {
     const v = m[0];
     // A whitespace run can mix spaces and newlines (a line ending in a space,
     // or an indented next line). Split it so every line break gets its own
-    // token and the rendered text keeps the layout it was scanned with.
+    // token and survives rendering; ReadStage still collapses each run of
+    // spaces to one, so indentation is not preserved.
     if (/^\s+$/.test(v)) {
       for (const [ws] of v.matchAll(/\n+|[^\S\n]+/g)) out.push({ t: ws.includes("\n") ? "br" : "sp", v: ws });
     }
