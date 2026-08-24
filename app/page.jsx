@@ -9,6 +9,7 @@ import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
 import TelegramConnect from "./components/TelegramConnect.jsx";
 import LukuLogo from "./components/LukuLogo.jsx";
+import HeaderMenu from "./components/HeaderMenu.jsx";
 import ScanStage from "./components/ScanStage.jsx";
 import ReadStage from "./components/ReadStage.jsx";
 import ReviewStage from "./components/ReviewStage.jsx";
@@ -17,7 +18,6 @@ import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
 import { useReview } from "./hooks/useReview.js";
 import { useImageProcessing } from "./hooks/useImageProcessing.js";
-import { Bp, Bg } from "./lib/styles.js";
 
 const D = "#0f1117";
 
@@ -291,33 +291,37 @@ export default function Luku() {
     <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif" }} onClick={() => setPopup(null)}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div onClick={(e) => { e.stopPropagation(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+        <div onClick={(e) => { e.stopPropagation(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
           <LukuLogo size={32} />
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
-            <div style={{ fontSize: 9, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>AI Finnish Reader</div>
+            <div className="luku-tagline" style={{ fontSize: 9, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>AI Finnish Reader</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <div className="luku-steps" style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
           {["Scan", "Read", "Review"].map((l, i) => (
             <div key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <div style={{ width: 20, height: 20, borderRadius: "50%", fontSize: 9, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", background: stage === i ? "#4a7c9e" : "rgba(255,255,255,0.05)", border: `1.5px solid ${stage === i ? "#4a7c9e" : "rgba(255,255,255,0.1)"}`, color: stage === i ? "#fff" : "#444" }}>{i + 1}</div>
-              {i < 2 && <div style={{ width: 14, height: 1, background: "rgba(255,255,255,0.08)" }} />}
+              {i < 2 && <div className="luku-step-line" style={{ width: 14, height: 1, background: "rgba(255,255,255,0.08)" }} />}
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {words.dbWords.length > 0 && (
             <div style={{ display: "flex", gap: 5 }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{words.dbWords.length} words</button>
-              {newWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartNewReview(); }} style={{ fontSize: 11, color: "#7ab4d4", background: "rgba(74,124,158,0.12)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(74,124,158,0.25)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{newWords.length} new</button>}
-              {dueWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartReview(); }} style={{ fontSize: 11, color: "#9e8a7a", background: "rgba(158,138,122,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(158,138,122,0.2)", cursor: "pointer", fontFamily: "Georgia,serif" }}>{dueWords.length} due</button>}
+              <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif", whiteSpace: "nowrap" }}>{words.dbWords.length} words</button>
+              {/* The due-review launcher used to live here too; it is dropped in
+                  favour of the ScanStage entry point, which the header had no
+                  room for on a phone. */}
+              {newWords.length > 0 && <button onClick={(e) => { e.stopPropagation(); handleStartNewReview(); }} style={{ fontSize: 11, color: "#7ab4d4", background: "rgba(74,124,158,0.12)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(74,124,158,0.25)", cursor: "pointer", fontFamily: "Georgia,serif", whiteSpace: "nowrap" }}>{newWords.length} new</button>}
             </div>
           )}
-          <button onClick={() => setShowTelegram(true)} title="Telegram" aria-label="Telegram" style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>✈</button>
-          <button onClick={() => setSavedKey("")} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Key</button>
-          <button onClick={() => authClient.signOut()} style={{ ...Bg, padding: "4px 10px", fontSize: 11 }}>Sign out</button>
+          <HeaderMenu
+            onTelegram={() => setShowTelegram(true)}
+            onChangeKey={() => setSavedKey("")}
+            onSignOut={() => authClient.signOut()}
+          />
         </div>
       </div>
 
@@ -378,6 +382,16 @@ export default function Luku() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* The header carries a logo, a stage indicator, word-count chips and
+           the menu; on a phone the first two give way so the chips and the
+           menu never collide. */
+        @media (max-width: 460px) {
+          .luku-tagline { display: none; }
+          .luku-step-line { width: 8px !important; }
+        }
+        @media (max-width: 400px) {
+          .luku-steps { display: none !important; }
+        }
         input:focus { outline: 1px solid rgba(74,124,158,0.5); }
       `}</style>
     </div>
