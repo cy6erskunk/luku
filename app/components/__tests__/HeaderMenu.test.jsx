@@ -39,6 +39,9 @@ describe("HeaderMenu", () => {
 
     expect(handlers[prop]).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
+    // The activated item unmounts with the menu, so focus has to be handed
+    // back rather than left on <body>.
+    expect(document.activeElement).toBe(toggle());
   });
 
   it("closes on an outside press but not on a press inside the menu", () => {

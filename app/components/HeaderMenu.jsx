@@ -32,7 +32,16 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
     };
   }, [open]);
 
-  const run = (fn) => (e) => { e.stopPropagation(); setOpen(false); fn?.(); };
+  // Focus goes back to the toggle before the action runs: the item that was
+  // clicked is about to unmount, and a keyboard user should not be dropped
+  // onto <body>. Telegram and API key open something else from here, so the
+  // toggle is the sensible place to land.
+  const run = (fn) => (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    btnRef.current?.focus();
+    fn?.();
+  };
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
