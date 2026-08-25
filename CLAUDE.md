@@ -51,6 +51,7 @@ app/
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
 │   ├── ApiKeyScreen.jsx        # API key entry screen
 │   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
+│   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / key / sign out)
 │   ├── SignIn.jsx              # Auth screen
 │   └── LukuLogo.jsx            # SVG logo
 └── api/
