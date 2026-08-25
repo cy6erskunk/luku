@@ -12,7 +12,17 @@ const { POST } = await import("../route.js");
 
 const makeRequest = (body) => ({ json: () => Promise.resolve(body) });
 
-const CARD = { id: 7, user_id: "u1", base: "juosta", ease_factor: 2.5, interval_days: 6, review_count: 2 };
+// next_review_at is NOT NULL in the schema, and the guarded update compares
+// against it, so a fixture without one is not a row this route can see.
+const CARD = {
+  id: 7,
+  user_id: "u1",
+  base: "juosta",
+  ease_factor: 2.5,
+  interval_days: 6,
+  review_count: 2,
+  next_review_at: new Date("2026-08-13T06:00:00.123456Z"),
+};
 
 describe("POST /api/reviews", () => {
   beforeEach(() => {
@@ -62,7 +72,8 @@ describe("POST /api/reviews", () => {
 
     const res = await POST(makeRequest({ wordId: 7, grade: 5 }));
     expect(res.status).toBe(200);
-    expect((await res.json()).word).toEqual(updated);
+    // Compared after a JSON round-trip: timestamps reach the client as strings.
+    expect((await res.json()).word).toEqual(JSON.parse(JSON.stringify(updated)));
   });
 
   it("scopes both queries to the signed-in user", async () => {
