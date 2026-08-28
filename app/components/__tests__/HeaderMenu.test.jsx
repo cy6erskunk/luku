@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import HeaderMenu from "../HeaderMenu.jsx";
 
@@ -53,6 +53,55 @@ describe("HeaderMenu", () => {
 
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  // jsdom does not run the browser's own focus default action for a press, so
+  // these two spell it out: `settle` stands in for "the press has finished and
+  // focus has landed wherever the browser put it".
+  const settle = () => { vi.advanceTimersByTime(0); };
+
+  describe("after an outside press", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("takes focus back when the press drops it on <body>", () => {
+      setup();
+      fireEvent.click(toggle());
+      expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Telegram" }));
+
+      fireEvent.mouseDown(document.body);
+      settle();
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(toggle());
+    });
+
+    it("leaves focus alone when the press lands on another control", () => {
+      render(<button type="button">Elsewhere</button>);
+      setup();
+      fireEvent.click(toggle());
+      const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+
+      fireEvent.mouseDown(elsewhere);
+      elsewhere.focus(); // what the browser's default action does for us
+      settle();
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(elsewhere);
+    });
+
+    it("does not reach for the toggle when focus was never in the menu", () => {
+      render(<input aria-label="Somewhere else" />);
+      setup();
+      fireEvent.click(toggle());
+      const input = screen.getByLabelText("Somewhere else");
+      input.focus();
+
+      fireEvent.mouseDown(document.body);
+      settle();
+
+      expect(document.activeElement).toBe(input);
+    });
   });
 
   it("closes on Escape and returns focus to the toggle", () => {

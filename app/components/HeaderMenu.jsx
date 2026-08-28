@@ -27,6 +27,7 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
   const itemsRef = useRef([]);
+  const restoreRef = useRef(0);
   const menuId = useId();
   const btnId = useId();
 
@@ -41,7 +42,23 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
     if (!open) return;
     // mousedown rather than click: the root element closes the translation
     // popup on click, and we want the menu gone before that re-render.
-    const onDocDown = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
+    const onDocDown = (e) => {
+      if (wrapRef.current?.contains(e.target)) return;
+      const hadFocus = wrapRef.current?.contains(document.activeElement);
+      setOpen(false);
+      // The focused item is about to unmount, so focus would fall to <body>
+      // unless the press takes it somewhere. Where it lands is the browser's
+      // call, and its default action runs after this listener — so the check
+      // waits for the press to finish and only steps in if focus was dropped.
+      // Reclaiming it here instead would fight the press for a control the
+      // user actually clicked.
+      if (hadFocus) {
+        restoreRef.current = setTimeout(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) btnRef.current?.focus();
+        }, 0);
+      }
+    };
     const onKey = (e) => { if (e.key === "Escape") { setOpen(false); btnRef.current?.focus(); } };
     document.addEventListener("mousedown", onDocDown);
     document.addEventListener("keydown", onKey);
@@ -50,6 +67,11 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  // Closing is what schedules that check, so clearing it belongs to unmount
+  // rather than to the effect above — whose cleanup runs on the very close
+  // that armed it.
+  useEffect(() => () => clearTimeout(restoreRef.current), []);
 
   // Focus follows `active` for as long as the menu is open — on opening, and
   // on every arrow press after it.
