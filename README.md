@@ -141,15 +141,34 @@ after authentication is captured in Sentry, including a mismatched secret.
 
 ### 4. Schedule the reminders
 
-Add two GitHub repository secrets — `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET` —
-and the `telegram-reminders` workflow will call the reminder endpoint hourly. It
-runs hourly rather than daily so each user can pick their own reminder time and
-timezone; the endpoint itself decides who is actually due and won't message
-anyone twice in the same local day.
+The reminder endpoint is called hourly rather than daily so each user can pick
+their own reminder time and timezone. The endpoint decides who is actually due
+and stamps `last_reminded_on`, so it won't message anyone twice in the same
+local day — which means **extra or overlapping triggers are harmless**, and
+running more than one is the recommended setup.
 
-Prefer Vercel Cron? Add a `vercel.json` pointing at `/api/telegram/cron`
-instead — but note the Hobby plan allows only one run per day, which means a
-single reminder time for everyone.
+**Val Town (primary).** GitHub Actions drops scheduled runs under load; gaps of
+9–11 hours on an hourly schedule have been observed in this repo, long enough to
+skip a user's entire reminder window. Val Town runs crons on a dedicated
+scheduler and emails you when one throws, so a broken deployment is visible
+rather than silent.
+
+1. Create a new val at [val.town](https://val.town) and paste in
+   [`scripts/valtown-reminder-cron.ts`](scripts/valtown-reminder-cron.ts).
+2. Set its type to **Cron** with the schedule `7 * * * *`.
+3. Under *Settings → Environment Variables*, add `LUKU_APP_URL` (your
+   deployment's base URL) and `TELEGRAM_CRON_SECRET` (the same value the
+   deployment has).
+
+**GitHub Actions (fallback).** Add `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET` as
+repository secrets and the `telegram-reminders` workflow calls the same endpoint
+on its own hourly schedule. Keep it enabled alongside Val Town: two unreliable
+triggers miss far less than one, and the per-day claim makes the overlap a
+no-op. Its runs are best-effort — do not treat a green history as proof the
+reminders went out, since a *skipped* run leaves no record at all.
+
+**Vercel Cron** is a poor fit here: the Hobby plan allows only one run per day,
+which collapses everyone onto a single reminder time.
 
 ### 5. Connect an account
 

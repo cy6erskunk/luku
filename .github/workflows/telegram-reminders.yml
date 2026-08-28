@@ -1,11 +1,17 @@
 name: telegram-reminders
 
-# Hourly rather than daily so each user's reminder_hour and timezone can be
-# honoured; the endpoint itself decides who is due and is idempotent per
-# local day, so an extra or delayed run cannot double-message anyone.
+# Fallback trigger. A Val Town cron (scripts/valtown-reminder-cron.ts) is the
+# primary one, because GitHub deprioritizes scheduled workflows under load and
+# drops runs outright — gaps of 9-11 hours have been observed here, long enough
+# to skip a user's whole reminder window. This stays enabled anyway: the
+# endpoint is idempotent per user per local day, so the overlap is a no-op and
+# two unreliable triggers miss far less than one.
+#
+# Minute 37 rather than the contended top of the hour, and offset from the Val
+# Town cron at :07 so the two are spread across the hour.
 on:
   schedule:
-    - cron: "5 * * * *"
+    - cron: "37 * * * *"
   workflow_dispatch:
 
 permissions: {}

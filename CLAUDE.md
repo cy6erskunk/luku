@@ -183,5 +183,16 @@ changing it:
 Designed for Vercel — connect the GitHub repo, add the Neon integration, and run
 `db/schema.sql` once in the Neon SQL editor. The Telegram bot additionally needs
 its webhook registered (`npm run telegram:webhook -- <url>`; `npm run
-telegram:status` shows what is currently registered) and the
-`LUKU_APP_URL` / `TELEGRAM_CRON_SECRET` GitHub secrets for the reminder cron.
+telegram:status` shows what is currently registered) and a trigger for the
+reminder cron.
+
+The reminder cron is triggered from **two** places on purpose, because a single
+scheduler is not reliable enough to hit a user's reminder window: a Val Town
+cron (`scripts/valtown-reminder-cron.ts`, the primary — GitHub silently drops
+scheduled runs under load) and the `telegram-reminders` workflow as a fallback.
+Both need `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET`, set in the Val Town account
+and as GitHub repository secrets respectively. The overlap is safe because
+`sendReminders` claims each user via `last_reminded_on` before sending, so the
+second trigger of an hour is a no-op. When debugging a missing reminder, check
+that a run actually *happened* — a skipped GitHub schedule leaves no failed run,
+just an absence.
