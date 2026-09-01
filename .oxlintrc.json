@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  // Style is not what this is for — there is no formatter here and reviews
+  // have kept the code consistent. It is for the mistakes reading cannot
+  // reliably catch: a hook called conditionally, a dependency array that has
+  // drifted from the closure it describes, a variable that no longer exists.
+  "plugins": ["react", "unicorn", "oxc"],
+  "categories": { "correctness": "error" },
+  "env": { "es2024": true, "node": true },
+  "ignorePatterns": [".next", "coverage"],
+
+  "rules": {
+    // The two rules this is really here for. Both are clean today, so both
+    // fail CI: a rule that only warns gates nothing.
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+
+    // Off deliberately, not yet-to-be-fixed. Both flag patterns this codebase
+    // uses on purpose and documents at the call site, and both are oxlint's
+    // own opinions rather than rules the React team ships:
+    //
+    //   react/set-state-in-effect — useWords resets its list when the user
+    //     changes, and useReview self-corrects a queue that no longer matches
+    //     dbWords. Deriving those during render is not available: they are
+    //     reactions to props changing underneath, and useReview's comment
+    //     explains what breaks without it.
+    //   react/refs — useDialog keeps the latest onClose in a ref so an inline
+    //     arrow callback does not rebuild the listener every render, and
+    //     TranslationPopup measures its container to position itself. Both are
+    //     writes and reads the React team's own plugin accepts.
+    //
+    // Turn either back on with the code change that makes it pass, not on its
+    // own.
+    "react/set-state-in-effect": "off",
+    "react/refs": "off"
+  },
+
+  "overrides": [
+    {
+      // The client half; everything else is Node.
+      "files": ["app/**/*.js", "app/**/*.jsx", "instrumentation-client.js"],
+      "env": { "browser": true }
+    }
+  ]
+}
