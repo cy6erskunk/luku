@@ -181,14 +181,15 @@ just an absence. There is nothing to alert on. If you are debugging a missing
 reminder and reach for the Actions tab, note that a clean history is not
 evidence the endpoint was called.
 
-The workflow was a single `curl` step, if you want to reconstruct it:
+The workflow was a single `curl` step. This is it verbatim, on the schedule the
+measurements above were taken under:
 
 ```yaml
 name: telegram-reminders
 
 on:
   schedule:
-    - cron: "37 * * * *" # :37 rather than the contended top of the hour
+    - cron: "5 * * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -224,6 +225,13 @@ It needs `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET` as repository secrets. Since
 the endpoint is idempotent per user per local day, adding this back alongside
 Val Town would be safe — it just is not worth the maintenance for a scheduler
 that misses most of its runs.
+
+Minute `:05` is a contended slot, and moving to an odd minute is the usual
+advice. Do not expect it to rescue this: a shortfall from 24 runs to 1 is an
+order of magnitude beyond what slot contention explains, and the runs that
+survived were themselves scattered across the hour rather than landing near
+:05, which is what a queue being shed looks like rather than one being
+delayed.
 
 **Vercel Cron.** A fine fit on Pro, but the Hobby plan allows only one run per
 day, which collapses everyone onto a single reminder time and defeats the point
