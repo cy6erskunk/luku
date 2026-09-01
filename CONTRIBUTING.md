@@ -4,7 +4,9 @@
 
 1. Clone the repository and run `npm install` (Node 24 — see `engines`)
 2. Copy `.env.local.example` to `.env.local` and fill in at least
-   `DATABASE_URL` and `NEON_AUTH_BASE_URL`
+   `DATABASE_URL` and the Neon Auth URL — either `NEON_AUTH_BASE_URL`, or
+   `VITE_NEON_AUTH_URL`, which is what the Vercel–Neon integration sets and
+   which `lib/auth/server.js` copies across for you
 3. Run `db/schema.sql` once against your database
 4. `npm run dev` and open http://localhost:3000
 5. Bring an [Anthropic API key](https://console.anthropic.com) — the app asks
