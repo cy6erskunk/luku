@@ -25,7 +25,11 @@ code change that makes it pass, not on its own.
 
 **Do**
 
-- Write plain JavaScript. No TypeScript, no build-time codegen.
+- Write plain JavaScript. No TypeScript, no build-time codegen. The one
+  exception is a script written for someone else's runtime:
+  `scripts/valtown-reminder-cron.ts` is TypeScript because it is pasted into
+  Val Town, which runs Deno. Nothing here builds, lints or imports it, so it
+  costs the toolchain nothing. Code this repo actually runs stays JavaScript.
 - Use ES modules with named exports; default-export only React components.
 - Import server-side modules through the `@/` alias (`@/lib/db`), which
   `jsconfig.json` maps to the repo root and `vitest.config.js` mirrors for Vite.
@@ -386,7 +390,7 @@ do.
 | Database | Neon Postgres; `db/schema.sql` run by hand in the SQL editor | A deploy does **not** migrate anything |
 | Auth | Neon Auth; the Vercel integration sets `VITE_NEON_AUTH_URL`, which `lib/auth/server.js` copies to `NEON_AUTH_BASE_URL` | |
 | Backups | `b2-backup.yml`, daily 05:00 UTC `pg_dump` to Backblaze B2, 7-day retention | Anything stored unhashed lives in backups for a week |
-| Reminders | `telegram-reminders.yml`, hourly, calls `/api/telegram/cron` with a bearer token | Actions schedules drift and skip; the endpoint must stay idempotent per local day |
+| Reminders | A Val Town scheduled val (`scripts/valtown-reminder-cron.ts`), hourly, calls `/api/telegram/cron` with a bearer token | It lived in GitHub Actions and delivered as few as 1–2 of 24 runs a day. Do not move it back |
 | Webhook | Registered by hand: `npm run telegram:webhook -- <url>` | Deploying does not register it; a new deployment URL means re-running it |
 | Errors | Sentry, with source maps uploaded at build and a `/monitoring` tunnel route | |
 
@@ -400,6 +404,14 @@ do.
 
 **Don't** point a webhook at a per-deployment preview URL — use the branch
 alias, or it dies with the next push.
+
+**Don't** put the reminder cron back on a GitHub Actions `schedule:`. That is
+where it started, and GitHub dropped most of its runs under load — enough to
+miss a user's whole reminder window, with no failed run to show for it. A
+scheduler that skips leaves an absence, not an error, which is why the val
+throws on a non-2xx: a swallowed 401 from a rotated secret looks exactly like
+an hour with nobody due. Delivery is idempotent per user per local day, so
+adding a second trigger is safe; replacing this one with Actions is not.
 
 ---
 
