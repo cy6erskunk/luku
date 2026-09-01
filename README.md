@@ -151,9 +151,14 @@ Use **Val Town**:
 1. Create a new val at [val.town](https://val.town) and paste in
    [`scripts/valtown-reminder-cron.ts`](scripts/valtown-reminder-cron.ts).
 2. Set its type to **Cron** with the schedule `7 * * * *`.
-3. Under *Settings → Environment Variables*, add `LUKU_APP_URL` (your
-   deployment's base URL) and `TELEGRAM_CRON_SECRET` (the same value the
-   deployment has).
+3. Under *Settings → Environment Variables*, add `LUKU_APP_URL` and
+   `TELEGRAM_CRON_SECRET`.
+
+Both hold the same values the deployment already has: `LUKU_APP_URL` is the
+deployment's `APP_URL`, and `TELEGRAM_CRON_SECRET` is verbatim the same secret.
+The `LUKU_` prefix is there because a Val Town account is a single namespace
+shared by every val you own, so `APP_URL` alone would be ambiguous — inside the
+deployment the variable keeps its unprefixed name.
 
 The val throws on any non-2xx response. That matters: Val Town emails you when a
 cron throws, so a 401 from a rotated secret surfaces instead of looking exactly

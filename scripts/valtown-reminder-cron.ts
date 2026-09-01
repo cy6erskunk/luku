@@ -1,11 +1,17 @@
 /**
  * Val Town scheduled val: hourly trigger for the reminder endpoint.
  *
+ * TypeScript, unlike the rest of the repo: this file is never built, linted or
+ * imported here — it is pasted into Val Town, whose runtime is Deno and whose
+ * examples are all TS. See the exception noted in CONTRIBUTING.md.
+ *
  * Paste this into a new val at https://val.town, set its type to "Cron" with
  * the schedule `7 * * * *`, and add two environment variables to your Val Town
  * account (Settings -> Environment Variables):
  *
- *   LUKU_APP_URL          https://your-deployment.vercel.app
+ *   LUKU_APP_URL          the deployment's public base URL — the same value as
+ *                         its own APP_URL, renamed because a Val Town account
+ *                         is one shared namespace across every val
  *   TELEGRAM_CRON_SECRET  the same value the deployment has
  *
  * This replaced a GitHub Actions `schedule:` workflow, which silently dropped
@@ -44,7 +50,9 @@ export default async function () {
   if (!appUrl) throw new Error("LUKU_APP_URL is not set");
   if (!secret) throw new Error("TELEGRAM_CRON_SECRET is not set");
 
-  const response = await postWithRetry(`${appUrl.replace(/\/$/, "")}/api/telegram/cron`, {
+  // Strips every trailing slash, not just one: a pasted URL ending in `//`
+  // would otherwise build a `//api/...` path.
+  const response = await postWithRetry(`${appUrl.replace(/\/+$/, "")}/api/telegram/cron`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}` },
   });

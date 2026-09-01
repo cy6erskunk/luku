@@ -85,7 +85,11 @@ Neon Postgres over HTTP, no ORM and no migration tool.
 identifiers — not style. There is no formatter, so consistency still comes
 from matching the file you are in.
 
-- Plain JavaScript, ES modules, named exports (default-export components only)
+- Plain JavaScript, ES modules, named exports (default-export components only).
+  The one exception is a standalone script written for another runtime:
+  `scripts/valtown-reminder-cron.ts` is TypeScript because it is pasted into
+  Val Town, which runs Deno. Nothing here builds, lints or imports it, so it
+  costs the toolchain nothing. Code this repo actually runs stays JavaScript.
 - Server-side imports use the `@/` alias (`@/lib/db`)
 - Inline styles; no CSS files, no CSS framework
 - No state management library — hooks and props have been enough
