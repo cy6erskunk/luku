@@ -48,7 +48,7 @@ function requireEnv(value, name) {
 if (!target && !statusOnly) {
   fail("Usage: node scripts/telegram-set-webhook.mjs <public-base-url> [--reset] | --status");
 }
-if (!statusOnly && !/^https:\/\//.test(target)) {
+if (!statusOnly && !target.startsWith("https://")) {
   fail("Telegram only accepts https webhook URLs");
 }
 
