@@ -27,6 +27,11 @@ describe("hasApiKey", () => {
     expect(hasApiKey(SKIP_KEY)).toBe(false);
   });
 
+  it("treats the deployment-key sentinel as having a key", () => {
+    // AI features are available with it; only the route knows the real key.
+    expect(hasApiKey(SERVER_KEY)).toBe(true);
+  });
+
   it("returns falsy for empty string", () => {
     expect(hasApiKey("")).toBeFalsy();
   });
