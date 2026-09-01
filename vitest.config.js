@@ -18,7 +18,10 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["app/**/*.{js,jsx}"],
-      exclude: ["app/page.jsx", "app/layout.jsx", "app/**/__tests__/**"],
+      // layout.jsx is the metadata shell and has no behaviour to cover.
+      // page.jsx is not excluded: it owns the cross-hook actions, which are
+      // exactly the part no single hook's suite can reach.
+      exclude: ["app/layout.jsx", "app/**/__tests__/**"],
     },
   },
 });
