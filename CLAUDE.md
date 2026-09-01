@@ -28,6 +28,7 @@ npm run dev
 npm run dev    # Start dev server
 npm run build  # Production build
 npm start      # Start production server (run build first)
+npm run lint   # ESLint (correctness and hook rules, not formatting)
 npm test       # Run test suite (Vitest)
 ```
 
