@@ -1,18 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
 
-  // Style is not what this is for — there is no formatter here and reviews
-  // have kept the code consistent. It is for the mistakes reading cannot
-  // reliably catch: a hook called conditionally, a dependency array that has
-  // drifted from the closure it describes, a variable that no longer exists.
   "plugins": ["react", "unicorn", "oxc"],
   "categories": { "correctness": "error" },
   "env": { "es2024": true, "node": true },
   "ignorePatterns": [".next", "coverage"],
 
   "rules": {
-    // The two rules this is really here for. Both are clean today, so both
-    // fail CI: a rule that only warns gates nothing.
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "error",
 
