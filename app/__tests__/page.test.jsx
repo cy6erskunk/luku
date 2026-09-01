@@ -105,11 +105,25 @@ describe("page gates", () => {
     mockApi();
     render(<Luku />);
 
-    fireEvent.change(screen.getByLabelText("Anthropic API key"), { target: { value: "sk-ant-test" } });
+    fireEvent.change(await screen.findByLabelText("Anthropic API key"), { target: { value: "sk-ant-test" } });
     fireEvent.click(screen.getByRole("button", { name: /Start reading/ }));
 
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
     expect(localStorage.getItem("luku_api_key")).toBe("sk-ant-test");
+  });
+
+  it("does not make a user who has a key wait for the deployment probe", () => {
+    // The probe only decides whether to offer the deployment's key. Someone
+    // who already has one of their own must not sit behind a spinner for an
+    // answer that cannot change what they see.
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+
+    render(<Luku />);
+
+    expect(screen.getByText("Photograph a Finnish page")).toBeTruthy();
+    expect(screen.queryByText("Loading…")).toBeNull();
   });
 
   it("lets a user skip the key and scan locally", async () => {
@@ -117,7 +131,7 @@ describe("page gates", () => {
     mockApi();
     render(<Luku />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Skip — use local OCR only/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Skip — use local OCR only/ }));
 
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
   });
@@ -219,6 +233,7 @@ describe("reading a scanned page", () => {
     ocr.mockResolvedValue(SCANNED);
     const file = new File(["x"], "page.jpg", { type: "image/jpeg" });
     const input = document.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
 
     await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
     fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));

@@ -78,8 +78,11 @@ export default function Luku() {
   }
   if (!user) return <SignIn />;
   // Held until the probe answers, so a deployment with its own key never
-  // flashes a key screen the user does not need.
-  if (checkingServerKey) {
+  // flashes a key screen the user does not need. Only when there is no saved
+  // key: someone who already has one is not waiting on an answer that cannot
+  // change what they see, and blocking them on a network round-trip would put
+  // a spinner in front of every visit.
+  if (checkingServerKey && !savedKey) {
     return (
       <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
