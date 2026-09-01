@@ -269,7 +269,6 @@ describe("useReview – gradeWord in new-review mode", () => {
 
 describe("useReview – self-correction effect", () => {
   it("drops the current word from queue when it disappears from dbWords", () => {
-    let dbWords = WORDS;
     const { result, rerender } = renderHook(
       ({ words }) => useReview(makeProps({ dbWords: words })),
       { initialProps: { words: WORDS } }
