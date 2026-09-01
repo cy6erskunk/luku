@@ -8,16 +8,16 @@
  *   LUKU_APP_URL          https://your-deployment.vercel.app
  *   TELEGRAM_CRON_SECRET  the same value the deployment has
  *
- * This exists because GitHub Actions silently drops scheduled runs under load —
- * observed gaps of 9-11 hours on an hourly schedule, which is long enough to
- * skip a user's whole reminder window. Val Town runs crons on a dedicated
- * scheduler and emails you when one throws, so a failure is visible instead of
- * being an absence of logs.
+ * This replaced a GitHub Actions `schedule:` workflow, which silently dropped
+ * most of its runs — as few as 1-2 of 24 a day, with gaps long enough to skip a
+ * user's whole reminder window and no failed run to show for it. Val Town runs
+ * crons on a dedicated scheduler and notifies when one throws, which is why the
+ * non-2xx path below throws rather than logging: a swallowed 401 from a rotated
+ * secret looks exactly like an hour with nobody due.
  *
- * The endpoint is idempotent per user per local day (`last_reminded_on`), so
- * running this alongside the GitHub Actions workflow cannot double-message
- * anyone. Belt and braces is the point: two unreliable triggers miss far less
- * than one.
+ * The endpoint is idempotent per user per local day (`last_reminded_on`), so a
+ * second trigger can be added alongside this one without double-messaging
+ * anyone if one scheduler ever proves not to be enough.
  */
 
 /** Retries transport failures only. An HTTP error is a real answer — surface it. */

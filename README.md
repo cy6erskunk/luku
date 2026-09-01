@@ -144,14 +144,9 @@ after authentication is captured in Sentry, including a mismatched secret.
 The reminder endpoint is called hourly rather than daily so each user can pick
 their own reminder time and timezone. The endpoint decides who is actually due
 and stamps `last_reminded_on`, so it won't message anyone twice in the same
-local day — which means **extra or overlapping triggers are harmless**, and
-running more than one is the recommended setup.
+local day — which means extra or overlapping triggers are harmless.
 
-**Val Town (primary).** GitHub Actions drops scheduled runs under load; gaps of
-9–11 hours on an hourly schedule have been observed in this repo, long enough to
-skip a user's entire reminder window. Val Town runs crons on a dedicated
-scheduler and emails you when one throws, so a broken deployment is visible
-rather than silent.
+Use **Val Town**:
 
 1. Create a new val at [val.town](https://val.town) and paste in
    [`scripts/valtown-reminder-cron.ts`](scripts/valtown-reminder-cron.ts).
@@ -160,15 +155,76 @@ rather than silent.
    deployment's base URL) and `TELEGRAM_CRON_SECRET` (the same value the
    deployment has).
 
-**GitHub Actions (fallback).** Add `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET` as
-repository secrets and the `telegram-reminders` workflow calls the same endpoint
-on its own hourly schedule. Keep it enabled alongside Val Town: two unreliable
-triggers miss far less than one, and the per-day claim makes the overlap a
-no-op. Its runs are best-effort — do not treat a green history as proof the
-reminders went out, since a *skipped* run leaves no record at all.
+The val throws on any non-2xx response. That matters: Val Town emails you when a
+cron throws, so a 401 from a rotated secret surfaces instead of looking exactly
+like a quiet hour with nobody due.
 
-**Vercel Cron** is a poor fit here: the Hobby plan allows only one run per day,
-which collapses everyone onto a single reminder time.
+<details>
+<summary>Alternatives that were tried and rejected</summary>
+
+**GitHub Actions — do not use.** This repo ran the reminder cron from a
+`schedule:` workflow and it did not work. GitHub deprioritizes scheduled
+workflows on the shared runner pool and, past a point, drops runs outright
+rather than queueing them. Measured over three days on an hourly schedule: 15
+runs one day, **2** the next, **1** by mid-afternoon of the third — against 24
+requested. One 9.6-hour gap covered a user's entire reminder window, so no
+reminder was sent at all that day.
+
+The failure mode is worse than the rate. Every run that *did* execute finished
+green, and a skipped run leaves no record whatsoever — no failed job, no log,
+just an absence. There is nothing to alert on. If you are debugging a missing
+reminder and reach for the Actions tab, note that a clean history is not
+evidence the endpoint was called.
+
+The workflow was a single `curl` step, if you want to reconstruct it:
+
+```yaml
+name: telegram-reminders
+
+on:
+  schedule:
+    - cron: "37 * * * *" # :37 rather than the contended top of the hour
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger reminder run
+        env:
+          APP_URL: ${{ secrets.LUKU_APP_URL }}
+          CRON_SECRET: ${{ secrets.TELEGRAM_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "LUKU_APP_URL or TELEGRAM_CRON_SECRET is not configured" >&2
+            exit 1
+          fi
+
+          status=$(curl -sS --fail-with-body \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            -o response.json -w '%{http_code}' \
+            -X POST "${APP_URL%/}/api/telegram/cron" \
+            -H "Authorization: Bearer ${CRON_SECRET}")
+
+          echo "HTTP ${status}"
+          cat response.json
+```
+
+It needs `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET` as repository secrets. Since
+the endpoint is idempotent per user per local day, adding this back alongside
+Val Town would be safe — it just is not worth the maintenance for a scheduler
+that misses most of its runs.
+
+**Vercel Cron.** A fine fit on Pro, but the Hobby plan allows only one run per
+day, which collapses everyone onto a single reminder time and defeats the point
+of per-user `reminder_hour` and timezone.
+
+</details>
 
 ### 5. Connect an account
 

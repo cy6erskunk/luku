@@ -187,13 +187,18 @@ its webhook registered (`npm run telegram:webhook -- <url>`; `npm run
 telegram:status` shows what is currently registered) and a trigger for the
 reminder cron.
 
-The reminder cron is triggered from **two** places on purpose, because a single
-scheduler is not reliable enough to hit a user's reminder window: a Val Town
-cron (`scripts/valtown-reminder-cron.ts`, the primary — GitHub silently drops
-scheduled runs under load) and the `telegram-reminders` workflow as a fallback.
-Both need `LUKU_APP_URL` and `TELEGRAM_CRON_SECRET`, set in the Val Town account
-and as GitHub repository secrets respectively. The overlap is safe because
-`sendReminders` claims each user via `last_reminded_on` before sending, so the
-second trigger of an hour is a no-op. When debugging a missing reminder, check
-that a run actually *happened* — a skipped GitHub schedule leaves no failed run,
-just an absence.
+The reminder cron is triggered by a Val Town scheduled val
+(`scripts/valtown-reminder-cron.ts`), which needs `LUKU_APP_URL` and
+`TELEGRAM_CRON_SECRET` set in the Val Town account. **Do not move this back to a
+GitHub Actions `schedule:` workflow** — that is where it used to live and it
+failed badly: GitHub drops scheduled runs under load, delivering as few as 1-2
+of 24 requested runs a day, which is enough to miss a user's reminder window
+entirely. The README records the measurements and the old workflow. The val
+throws on a non-2xx so Val Town's failure notification fires; keep that, because
+a swallowed 401 is indistinguishable from an hour with nobody due.
+
+When debugging a missing reminder, first establish that a run actually
+*happened*. Reminder delivery is idempotent per user per local day
+(`sendReminders` claims each user via `last_reminded_on` before sending), so
+extra triggers are safe to add, but a scheduler that skipped leaves no failed
+run — just an absence.
