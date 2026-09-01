@@ -18,6 +18,7 @@
 ```bash
 npm run dev            # dev server
 npm run build          # production build
+npm run lint           # oxlint
 npm test               # Vitest, single run
 npm run test:watch     # Vitest, watch mode
 npm run test:coverage  # coverage report
@@ -80,8 +81,9 @@ Neon Postgres over HTTP, no ORM and no migration tool.
 
 ## Code style
 
-There is no linter or formatter, so consistency comes from matching the file
-you are in.
+`npm run lint` is oxlint, and it checks correctness — hook rules, unused
+identifiers — not style. There is no formatter, so consistency still comes
+from matching the file you are in.
 
 - Plain JavaScript, ES modules, named exports (default-export components only)
 - Server-side imports use the `@/` alias (`@/lib/db`)
@@ -121,9 +123,9 @@ Vitest, with `@testing-library/react` for components.
 
 ## Commits and pull requests
 
-- Everything lands on `main` through a pull request. CI runs `npm ci &&
-  npm test` on every PR.
-- Run `npm test` and `npm run build` before pushing.
+- Everything lands on `main` through a pull request. CI runs `npm ci`,
+  `npm run lint` and `npm test` on every PR.
+- Run `npm run lint`, `npm test` and `npm run build` before pushing.
 - Commit subjects are imperative sentences describing the effect, with no type
   prefix and no trailing period — *"Stop 'Hard' pushing cards months into the
   future"*. Write a body for anything non-trivial: what was wrong, why the
