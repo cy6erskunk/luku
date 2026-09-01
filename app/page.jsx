@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -14,6 +14,7 @@ import ScanStage from "./components/ScanStage.jsx";
 import ReadStage from "./components/ReadStage.jsx";
 import ReviewStage from "./components/ReviewStage.jsx";
 import { useApiKey } from "./hooks/useApiKey.js";
+import { useServerKey } from "./hooks/useServerKey.js";
 import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
 import { useReview } from "./hooks/useReview.js";
@@ -27,6 +28,11 @@ export default function Luku() {
   const authLoading = authSession.isPending;
 
   const { savedKey, setSavedKey } = useApiKey();
+  const { serverKey, checking: checkingServerKey } = useServerKey(user?.id);
+  // A key the user typed wins over the deployment's own, so someone who wants
+  // to spend their own credit still can.
+  const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
+  const [changingKey, setChangingKey] = useState(false);
   const { session, setSession } = useSession();
 
   const [stage, setStage] = useState(0);
@@ -58,7 +64,7 @@ export default function Luku() {
     if (resetSession) { setSession({}); setPopup(null); }
   }, [setSession]);
 
-  const image = useImageProcessing({ savedKey, onTextReady: handleTextReady });
+  const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
   const review = useReview({ dbWords: words.dbWords, updateWord: words.updateWord, stage });
 
   useEffect(() => () => resetTesseractWorker(), []);
@@ -71,7 +77,26 @@ export default function Luku() {
     );
   }
   if (!user) return <SignIn />;
-  if (!savedKey) return <ApiKeyScreen stage={stage} onSave={setSavedKey} onSkip={() => setSavedKey(SKIP_KEY)} />;
+  // Held until the probe answers, so a deployment with its own key never
+  // flashes a key screen the user does not need.
+  if (checkingServerKey) {
+    return (
+      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
+      </div>
+    );
+  }
+  if (changingKey || !effectiveKey) {
+    return (
+      <ApiKeyScreen
+        stage={stage}
+        serverKey={serverKey}
+        onSave={(k) => { setSavedKey(k); setChangingKey(false); }}
+        onSkip={() => { setSavedKey(SKIP_KEY); setChangingKey(false); }}
+        onUseServerKey={() => { setSavedKey(""); setChangingKey(false); }}
+      />
+    );
+  }
 
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
@@ -167,7 +192,7 @@ export default function Luku() {
     const r = e.target.getBoundingClientRect();
     const pr = containerRef?.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const x = r.left - pr.left + r.width / 2, y = r.top - pr.top;
-    if (!hasApiKey(savedKey)) { setPopup({ word: form, k: tok.k, x, y, noKey: true }); return; }
+    if (!hasApiKey(effectiveKey)) { setPopup({ word: form, k: tok.k, x, y, noKey: true }); return; }
     if (session[tok.k]) {
       const cached = session[tok.k];
       const existing = findExistingWord(words.dbWords, { form, base: cached.base });
@@ -180,7 +205,7 @@ export default function Luku() {
     setXlating(tok.k);
     setPopup({ word: form, k: tok.k, x, y, loading: true, existsInDb: !!existingByForm });
     try {
-      const d = await translateWord(savedKey, form, sentenceOf(text, form));
+      const d = await translateWord(effectiveKey, form, sentenceOf(text, form));
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
@@ -319,7 +344,7 @@ export default function Luku() {
           )}
           <HeaderMenu
             onTelegram={() => setShowTelegram(true)}
-            onChangeKey={() => setSavedKey("")}
+            onChangeKey={() => setChangingKey(true)}
             onSignOut={() => authClient.signOut()}
           />
         </div>
@@ -345,7 +370,7 @@ export default function Luku() {
           onRescanWithAI={image.rescanWithAI}
           onStartReview={handleStartReview}
           onStartNewReview={handleStartNewReview}
-          onAddApiKey={() => setSavedKey("")}
+          onAddApiKey={() => setChangingKey(true)}
         />
       )}
       {stage === 2 && (

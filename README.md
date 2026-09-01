@@ -171,16 +171,18 @@ confirms with the email of the account it linked.
 
 ## Personal use (skip the key screen)
 
-If you want to hardcode your own key so you don't have to enter it each time, set an environment variable in Vercel:
+If you don't want to enter a key each time, set one environment variable in
+Vercel:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Then update `app/api/claude/route.js` to fall back to it:
+That is the whole setup. `/api/claude` falls back to it, and the app skips the
+key screen for signed-in users. A key someone enters in the UI still wins over
+it, and the key screen stays reachable from the header menu.
 
-```js
-const key = apiKey || process.env.ANTHROPIC_API_KEY;
-```
-
-And update `app/page.js` to skip the key screen when no input is needed (e.g. auto-set savedKey on load).
+The route requires a signed-in session, so the key is spendable only by people
+who can sign into your deployment — but everyone who can sign in shares your
+credit. On a deployment open to others, leave it unset and let people bring
+their own key.
