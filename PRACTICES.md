@@ -12,8 +12,16 @@ applying, change the rule rather than working around it.
 
 ## 1. Code style
 
-The project has no linter and no formatter. Consistency comes from matching the
-surrounding file, not from a tool.
+`npm run lint` is oxlint, and it checks correctness, not style: hook rules,
+unused identifiers, the mistakes that survive careful reading. There is no
+formatter, so consistency still comes from matching the surrounding file rather
+than from a tool.
+
+Two React rules are deliberately off in `.oxlintrc.json` —
+`react/set-state-in-effect` and `react/refs` — because they flag four call
+sites this codebase chose and documents. The config says which and why, since
+that is where someone would otherwise "fix" them. Turn either back on with the
+code change that makes it pass, not on its own.
 
 **Do**
 
@@ -245,7 +253,9 @@ Documented in `CLAUDE.md` and repeated here because they are easy to break:
 ## 9. Testing
 
 Vitest, run with `npm test`. Coverage is collected for `app/**` excluding
-`page.jsx`, `layout.jsx` and test directories.
+`layout.jsx` — the metadata shell — and test directories. `page.jsx` is
+included: it owns the cross-hook actions, which is exactly the part no single
+hook's suite can reach.
 
 **Do**
 
@@ -327,10 +337,13 @@ dependency change, and don't mix a refactor into a fix.
   Feature branches are merged rather than squashed, so the individual commits
   and their messages survive — which is only worth doing if each commit was
   written to be read. Renovate's PRs are squashed.
-- CI (`.github/workflows/test.yml`) runs `npm ci && npm test` on Node 24.19.0
-  for every PR and every push to `main`. A red PR is not ready.
-- Run `npm test` and `npm run build` before pushing. There is no linter to catch
-  what the build won't.
+- CI (`.github/workflows/test.yml`) runs `npm ci`, `npm run lint` and
+  `npm test` on Node 24.19.0 for every PR and every push to `main`. A red PR is
+  not ready.
+- Run `npm run lint`, `npm test` and `npm run build` before pushing.
+- Never commit generated output. `coverage/` and `.next/` are ignored for a
+  reason: a coverage report committed by accident is unreadable in review and
+  carries its own vendored code, which the security scanner will rightly flag.
 - Review findings get fixed in follow-up commits on the same branch, each with
   its own explanatory message, rather than an amend that hides the exchange.
 - Each PR gets a Neon preview branch; `delete-neon-branch.yaml` removes it when
@@ -343,7 +356,7 @@ dependency change, and don't mix a refactor into a fix.
 
 ## 13. Dependencies
 
-Seven runtime dependencies and five dev dependencies. That is the point.
+Seven runtime dependencies and six dev dependencies. That is the point.
 
 **Do**
 
@@ -353,10 +366,12 @@ Seven runtime dependencies and five dev dependencies. That is the point.
   presets. Everything larger is reviewed by hand.
 - Pin GitHub Actions to a version tag, and third-party actions to a commit SHA
   with a comment naming the version (see `b2-backup.yml`).
-- Justify a new dependency in the PR body. The Telegram client is a thin `fetch`
-  wrapper rather than a bot framework because long polling, middleware and
-  session storage — the bulk of what a framework provides — would go unused on
-  a serverless webhook.
+- Justify a new dependency in the PR body, and say what it costs. The Telegram
+  client is a thin `fetch` wrapper rather than a bot framework because long
+  polling, middleware and session storage — the bulk of what a framework
+  provides — would go unused on a serverless webhook. oxlint was chosen over
+  ESLint on the same grounds: 20 packages against 55 for the rules that
+  actually matter here.
 
 **Don't** add a dependency for something a dozen lines of standard library can
 do.
@@ -393,6 +408,11 @@ alias, or it dies with the next push.
 - `CLAUDE.md` is the architectural map and is expected to stay accurate; update
   it in the same PR that changes structure, adds an environment variable, or
   changes a security property.
+- `CONTRIBUTING.md` is the short path in for a new contributor — layout, the
+  database constraints, the secret rules, testing and commit conventions. It
+  drifted badly once, describing a single-file app long after that stopped
+  being true; a claim about how the project works belongs there only while
+  someone keeps it honest.
 - `README.md` carries setup and the debugging ladders. When a step has a failure
   mode, document the symptom, not just the step ("a mismatched secret means the
   bot silently does nothing").
@@ -403,19 +423,26 @@ alias, or it dies with the next push.
 
 ## 16. Known gaps
 
-Honest list, so nobody mistakes these for intent:
+Honest list, so nobody mistakes these for intent. Accurate as of the current
+`main`; three of them have open pull requests.
 
-- **`CONTRIBUTING.md` is stale.** It describes a single-file `app/page.js`
-  architecture that no longer exists, points at constants that have moved, and
-  says there are no tests. It should be rewritten or replaced by this document.
-- **No linter or formatter.** Style is maintained by hand and by review.
 - **`ANTHROPIC_API_KEY` is documented but unread.** `app/api/claude/route.js`
   requires a key in the request body; the README's personal-deployment section
-  asks you to patch the route yourself.
-- **`telegram_links.secret_hash` is written but unused**, reserved for a future
-  second channel.
-- **`app/page.jsx` and `app/layout.jsx` are excluded from coverage** and are the
-  least directly tested parts of the client.
+  asks you to patch the route yourself. (PR #88 implements it, and adds the
+  session check that keeps the fallback from becoming an open proxy.)
+- **`telegram_links.secret_hash` is written but unused**, reserved for a second
+  channel that was never built, and carried into every nightly backup. (PR #89
+  drops it.)
 - **Sentry's `tracesSampleRate: 1` and `sendDefaultPii: true`** are development
   defaults carried into production; the redactor is what makes them tolerable.
-- Stray `.DS_Store` files are checked in under `app/`.
+  (PR #91 makes the sampling configurable and leaves the PII decision alone.)
+- **`app/layout.jsx` is excluded from coverage.** Deliberate — it is the
+  metadata shell — but it does mean the app's outermost frame is untested.
+- **`/api/claude` is unauthenticated and unthrottled.** On `main` it requires
+  no session, so anyone who finds the path can relay through it — with their
+  own key, so the cost is theirs, but the deployment is the relay. PR #88 adds
+  the session check; nothing adds a rate limit.
+
+Recently closed, in case this document is read next to an older copy: the stale
+`CONTRIBUTING.md`, the absence of a linter, `page.jsx` being excluded from
+coverage, and the `.DS_Store` files that were tracked under `app/`.
