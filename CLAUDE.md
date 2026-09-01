@@ -177,6 +177,8 @@ changing it:
 | `TELEGRAM_WEBHOOK_SECRET` | No | Telegram bot only; also derives the callback signing key |
 | `TELEGRAM_CRON_SECRET` | No | Telegram bot only; bearer token for `/api/telegram/cron` |
 | `APP_URL` | No | Public base URL, used in bot messages |
+| `SENTRY_TRACES_SAMPLE_RATE` | No | Server/edge trace sampling, 0–1. Defaults to 1 outside production, 0.1 in it |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | No | The browser's copy of the same, inlined at build time |
 
 ## Deployment
 
