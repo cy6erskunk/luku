@@ -438,6 +438,12 @@ adding a second trigger is safe; replacing this one with Actions is not.
 Honest list, so nobody mistakes these for intent. Accurate as of the current
 `main`; one has an open pull request.
 
+There is a standing cost that is not a gap but belongs next to them: schema
+changes are run by hand, so a merged migration is not a done migration. #89's
+`ALTER TABLE ... DROP COLUMN` sat between merge and execution with account
+linking broken, and the next one will too unless it is run before or with the
+deploy — which is what `db/schema.sql` tells you at each such statement.
+
 - **Sentry's `tracesSampleRate: 1` and `sendDefaultPii: true`** are development
   defaults carried into production; the redactor is what makes them tolerable.
   (PR #91 makes the sampling configurable and leaves the PII decision alone.)
@@ -446,11 +452,6 @@ Honest list, so nobody mistakes these for intent. Accurate as of the current
   the relay and nothing bounds the traffic.
 - **`app/layout.jsx` is excluded from coverage.** Deliberate — it is the
   metadata shell — but it does mean the app's outermost frame is untested.
-- **`telegram_links.secret_hash` needs its migration run by hand.** The code
-  stopped writing the column when #89 merged, and the `ALTER TABLE ... DROP
-  COLUMN` at the end of `db/schema.sql` has to be run in the Neon SQL editor.
-  Until it is, the old `NOT NULL` column rejects every new account link. This
-  is the standing cost of hand-run migrations, not an oversight in that PR.
 
 Recently closed, in case this document is read next to an older copy: the stale
 `CONTRIBUTING.md`, the absence of a linter, `page.jsx` being excluded from
