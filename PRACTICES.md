@@ -453,24 +453,17 @@ adding a second trigger is safe; replacing this one with Actions is not.
 Honest list, so nobody mistakes these for intent. Accurate as of the current
 `main`, with nothing outstanding in review.
 
-There is a standing cost that is not a gap but belongs next to them: schema
-changes are run by hand, so a merged migration is not a done migration. #89's
-`ALTER TABLE ... DROP COLUMN` sat between merge and execution with account
-linking broken, and the next one will too unless it is run before or with the
-deploy — which is what `db/schema.sql` tells you at each such statement.
+One standing cost belongs next to them without being a gap: schema changes are
+run by hand, so a merged migration is not a done migration. The window between
+the two lasts exactly as long as it takes someone to remember, and account
+linking has already broken inside it once. Run the statement before or with the
+deploy — which is what `db/schema.sql` says at each one.
 
-- **Sentry's `sendDefaultPii: true`** is a development default carried into
-  production; the redactor is what makes it tolerable. Trace sampling was the
-  other half of this and is now configurable, defaulting to 0.1 in production.
+- **Sentry's `sendDefaultPii: true`** sends headers, cookies and user identity
+  with every event, in production as well as locally. `redactDeep()` is what
+  makes that tolerable rather than a decision anyone has revisited.
 - **`/api/claude` is unthrottled.** A signed-in user can drive it as hard as
   they like. The key is theirs, so the cost is theirs, but the deployment is
   the relay and nothing bounds the traffic.
 - **`app/layout.jsx` is excluded from coverage.** Deliberate — it is the
   metadata shell — but it does mean the app's outermost frame is untested.
-
-Recently closed, in case this document is read next to an older copy: the stale
-`CONTRIBUTING.md`, the absence of a linter, `page.jsx` being excluded from
-coverage, the `.DS_Store` files tracked under `app/`, the unread
-`ANTHROPIC_API_KEY` (now development-only, with `/api/claude` requiring a
-session), the write-only `secret_hash` column, and Sentry tracing every
-production request.
