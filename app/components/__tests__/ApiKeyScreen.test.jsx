@@ -87,3 +87,22 @@ describe("ApiKeyScreen", () => {
     expect(screen.getByRole("button", { name: /save key & continue/i })).toBeTruthy();
   });
 });
+
+describe("ApiKeyScreen with a deployment key", () => {
+  it("offers the deployment's key and says one is available", () => {
+    const onUseServerKey = vi.fn();
+    render(<ApiKeyScreen onSave={vi.fn()} onSkip={vi.fn()} onUseServerKey={onUseServerKey} serverKey />);
+
+    expect(screen.getByText(/This deployment already has a key/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Use this deployment's key/ }));
+    expect(onUseServerKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the option when the deployment has no key", () => {
+    render(<ApiKeyScreen onSave={vi.fn()} onSkip={vi.fn()} onUseServerKey={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /Use this deployment's key/ })).toBeNull();
+    expect(screen.queryByText(/This deployment already has a key/)).toBeNull();
+  });
+});
+

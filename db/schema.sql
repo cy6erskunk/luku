@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS telegram_links (
   user_id           TEXT NOT NULL,             -- from Neon Auth (Stack Auth user ID)
   chat_id           BIGINT NOT NULL,
   username          TEXT,
-  secret_hash       TEXT NOT NULL,             -- reserved for a future second channel (Mini App / magic link)
   reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   reminder_hour     SMALLINT NOT NULL DEFAULT 9,  -- 0-23, in the user's local time
   timezone          TEXT NOT NULL DEFAULT 'Europe/Helsinki',
@@ -99,3 +98,15 @@ DELETE FROM telegram_link_codes a
 
 CREATE UNIQUE INDEX IF NOT EXISTS telegram_link_codes_active
   ON telegram_link_codes (user_id) WHERE used_at IS NULL;
+
+-- The link row once carried a secret_hash, reserved for a second channel
+-- (Mini App / magic link) that was never built. It was filled with a fresh
+-- random hash on every link and read by nothing, so it was a NOT NULL column
+-- whose only effect was to put an unused credential-shaped value into every
+-- nightly backup. Re-add it, with the channel that needs it, if that channel
+-- ever arrives.
+--
+-- Run this before (or with) the deploy that stops writing the column: the new
+-- claimCodeAndLink omits it, and while the old NOT NULL column is still there
+-- every attempt to link an account fails.
+ALTER TABLE telegram_links DROP COLUMN IF EXISTS secret_hash;
