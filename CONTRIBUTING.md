@@ -36,8 +36,10 @@ npm run telegram:status   # what webhook Telegram currently has registered
 - `app/components/` holds presentation, one file per component.
 - `app/lib/` is the client half of the utilities; `lib/` is **server-only**.
   Never import `lib/` from a client component — it would pull the database
-  driver and `node:crypto` into the browser bundle. `npm run lint` enforces
-  this, so you will hear about it before CI does.
+  driver and `node:crypto` into the browser bundle. `npm run lint` catches the
+  common shapes, and `lib/__tests__/serverOnlyBoundary.test.js` is the check
+  that cannot be outrun: it resolves every client import and fails on anything
+  landing in `lib/`, however deeply the file is nested.
 - `lib/shared/` is the one exception: helpers that both halves genuinely need,
   under one condition — **no imports at all**. That is what makes them safe to
   bundle, and it is the line to watch: adding an import to a file in

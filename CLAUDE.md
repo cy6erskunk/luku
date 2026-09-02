@@ -66,6 +66,7 @@ app/
         └── cron/route.js       # Hourly reminder pass (bearer authenticated)
 
 lib/                            # Server-only (except shared/); app/lib/ is the client half
+                                #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
 │   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
