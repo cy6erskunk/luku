@@ -83,7 +83,15 @@ line carries the constraint that forced it. Look at `lib/reviews.js`,
   composed in `page.jsx` — that is the only place cross-hook coupling belongs.
 - `lib/` is server-only. `app/lib/` is the client half. Never import from `lib/`
   into a client component: it would drag `node:crypto`, the database driver and
-  secrets into the browser bundle.
+  secrets into the browser bundle. `lib/shared/` is the single exception, and
+  it carries its condition — **no imports at all**, which is what makes those
+  files safe to bundle. Adding an import to a file in `lib/shared/` is what
+  would breach the boundary, not moving a file into it.
+- That boundary is enforced twice, and the split is deliberate. `.oxlintrc.json`
+  restricts the import shapes for the directory depths that exist, which is fast
+  and gives editor feedback but can be outrun by a new nesting level;
+  `lib/__tests__/serverOnlyBoundary.test.js` resolves every client import to a
+  path and is the guarantee. Prefer the test when they disagree.
 - Anything both the web app and the bot need goes in a shared module.
   `lib/reviews.js` exists precisely so a card graded in Telegram and a card
   graded in the browser move through the same code.
@@ -214,8 +222,10 @@ control of the bot, including reading every message sent to it.
 
 ## 7. Error reporting
 
-Sentry runs with `tracesSampleRate: 1` and `sendDefaultPii: true`, so request
-context — headers, full URLs — travels with every event.
+Sentry runs with `sendDefaultPii: true`, so request context — headers, full
+URLs — travels with every event. Trace sampling is a variable
+(`SENTRY_TRACES_SAMPLE_RATE`, `NEXT_PUBLIC_…` for the browser), defaulting to
+1 outside production and 0.1 in it.
 
 **Do**
 
@@ -229,6 +239,11 @@ context — headers, full URLs — travels with every event.
   the bot go silent with no other symptom, so that specific mismatch is worth a
   warning; a request with no secret header at all is just a scanner and stays
   silent.
+
+- Fall back rather than trust a configured value. `sampleRate()` treats an
+  absent, blank or nonsensical rate as unset, because `Number("")` and
+  `Number("   ")` are both `0` — which reads as "sample nothing" and looks
+  exactly like a quiet hour in the Sentry UI.
 
 **Don't** add a Sentry integration that captures request bodies without checking
 what the redactor does with them.
@@ -436,7 +451,7 @@ adding a second trigger is safe; replacing this one with Actions is not.
 ## 16. Known gaps
 
 Honest list, so nobody mistakes these for intent. Accurate as of the current
-`main`; one has an open pull request.
+`main`, with nothing outstanding in review.
 
 There is a standing cost that is not a gap but belongs next to them: schema
 changes are run by hand, so a merged migration is not a done migration. #89's
@@ -444,9 +459,9 @@ changes are run by hand, so a merged migration is not a done migration. #89's
 linking broken, and the next one will too unless it is run before or with the
 deploy — which is what `db/schema.sql` tells you at each such statement.
 
-- **Sentry's `tracesSampleRate: 1` and `sendDefaultPii: true`** are development
-  defaults carried into production; the redactor is what makes them tolerable.
-  (PR #91 makes the sampling configurable and leaves the PII decision alone.)
+- **Sentry's `sendDefaultPii: true`** is a development default carried into
+  production; the redactor is what makes it tolerable. Trace sampling was the
+  other half of this and is now configurable, defaulting to 0.1 in production.
 - **`/api/claude` is unthrottled.** A signed-in user can drive it as hard as
   they like. The key is theirs, so the cost is theirs, but the deployment is
   the relay and nothing bounds the traffic.
@@ -457,4 +472,5 @@ Recently closed, in case this document is read next to an older copy: the stale
 `CONTRIBUTING.md`, the absence of a linter, `page.jsx` being excluded from
 coverage, the `.DS_Store` files tracked under `app/`, the unread
 `ANTHROPIC_API_KEY` (now development-only, with `/api/claude` requiring a
-session), and the write-only `secret_hash` column.
+session), the write-only `secret_hash` column, and Sentry tracing every
+production request.
