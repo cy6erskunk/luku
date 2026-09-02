@@ -1,5 +1,12 @@
 export const SKIP_KEY = "__skip__";
 
+/**
+ * Stands in for "this deployment has its own ANTHROPIC_API_KEY". It is a
+ * sentinel rather than a real key because the browser never sees the key
+ * itself: callClaude() sends no apiKey at all and the route falls back.
+ */
+export const SERVER_KEY = "__server__";
+
 export const hasApiKey = (key) => key && key !== SKIP_KEY;
 
 // Hyphen-minus plus the unicode hyphen (U+2010) and non-breaking hyphen

@@ -1,8 +1,13 @@
+import { SERVER_KEY } from "./utils.js";
+
 export async function callClaude(apiKey, messages, system, maxTokens = 1500) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ apiKey, messages, system, maxTokens }),
+    // SERVER_KEY is a marker, not a credential: dropping the field is what
+    // tells the route to use the deployment's own key. JSON.stringify omits
+    // undefined for us.
+    body: JSON.stringify({ apiKey: apiKey === SERVER_KEY ? undefined : apiKey, messages, system, maxTokens }),
   });
   let data;
   try { data = await res.json(); } catch { data = {}; }

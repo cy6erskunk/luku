@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, SKIP_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -25,6 +25,11 @@ describe("hasApiKey", () => {
 
   it("returns false for the skip token", () => {
     expect(hasApiKey(SKIP_KEY)).toBe(false);
+  });
+
+  it("treats the deployment-key sentinel as having a key", () => {
+    // AI features are available with it; only the route knows the real key.
+    expect(hasApiKey(SERVER_KEY)).toBe(true);
   });
 
   it("returns falsy for empty string", () => {

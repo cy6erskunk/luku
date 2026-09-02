@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { callClaude, ocrImage, translateWord } from "../api.js";
+import { SERVER_KEY } from "../utils.js";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -10,6 +11,26 @@ afterEach(() => {
 });
 
 describe("callClaude", () => {
+  it("sends the key it was given", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ content: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await callClaude("sk-test", []);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).apiKey).toBe("sk-test");
+  });
+
+  it("omits the key entirely for the deployment-key sentinel", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ content: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callClaude(SERVER_KEY, []);
+
+    // The sentinel must never travel: an absent apiKey is what makes the
+    // route fall back to ANTHROPIC_API_KEY.
+    const body = fetchMock.mock.calls[0][1].body;
+    expect(body).not.toContain(SERVER_KEY);
+    expect("apiKey" in JSON.parse(body)).toBe(false);
+  });
+
   it("returns text content from a successful response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

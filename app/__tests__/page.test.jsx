@@ -105,11 +105,59 @@ describe("page gates", () => {
     mockApi();
     render(<Luku />);
 
-    fireEvent.change(screen.getByLabelText("Anthropic API key"), { target: { value: "sk-ant-test" } });
+    fireEvent.change(await screen.findByLabelText("Anthropic API key"), { target: { value: "sk-ant-test" } });
     fireEvent.click(screen.getByRole("button", { name: /Start reading/ }));
 
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
     expect(localStorage.getItem("luku_api_key")).toBe("sk-ant-test");
+  });
+
+  it("does not make a user who has a key wait for the deployment probe", () => {
+    // The probe only decides whether to offer the deployment's key. Someone
+    // who already has one of their own must not sit behind a spinner for an
+    // answer that cannot change what they see.
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+
+    render(<Luku />);
+
+    expect(screen.getByText("Photograph a Finnish page")).toBeTruthy();
+    expect(screen.queryByText("Loading…")).toBeNull();
+  });
+
+  it("never probes for a development key when the user has one saved", async () => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    const fetchMock = mockApi({ words: [] });
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    // The probe's answer cannot change anything here — a saved key wins over
+    // the development one — so asking is pure cost on every visit.
+    const probes = fetchMock.mock.calls.filter(([url, opts]) => String(url) === "/api/claude" && !opts?.method);
+    expect(probes).toHaveLength(0);
+  });
+
+  it("probes once the key screen is opened, so it can offer the development key", async () => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url) === "/api/claude" && !opts.method) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ serverKey: true }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "API key" }));
+
+    // Deferring the probe must not cost the option to switch back to it.
+    expect(await screen.findByRole("button", { name: /Use this deployment's key/ })).toBeTruthy();
   });
 
   it("lets a user skip the key and scan locally", async () => {
@@ -117,7 +165,7 @@ describe("page gates", () => {
     mockApi();
     render(<Luku />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Skip — use local OCR only/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Skip — use local OCR only/ }));
 
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
   });
@@ -219,6 +267,7 @@ describe("reading a scanned page", () => {
     ocr.mockResolvedValue(SCANNED);
     const file = new File(["x"], "page.jpg", { type: "image/jpeg" });
     const input = document.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
 
     await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
     fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));

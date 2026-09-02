@@ -257,18 +257,24 @@ confirms with the email of the account it linked.
 | `/settz Europe/Helsinki` | Set your timezone |
 | `/disconnect` | Unlink the chat; your words are untouched |
 
-## Personal use (skip the key screen)
+## Skipping the key screen while developing
 
-If you want to hardcode your own key so you don't have to enter it each time, set an environment variable in Vercel:
+Put your key in `.env.local` and the app stops asking for it locally:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Then update `app/api/claude/route.js` to fall back to it:
+`/api/claude` falls back to it, the key screen is skipped for signed-in users,
+and a key entered in the UI still wins over it. The key screen stays reachable
+from the header menu.
 
-```js
-const key = apiKey || process.env.ANTHROPIC_API_KEY;
-```
+**This works in development only** — `NODE_ENV=production` ignores the variable
+entirely, so setting it in Vercel does nothing. That is deliberate: a deployed
+fallback is spent by whoever is signed in rather than by whoever owns the key,
+with no per-user visibility and no limit. Locally, the key, the browser and the
+person paying are the same person.
 
-And update `app/page.js` to skip the key screen when no input is needed (e.g. auto-set savedKey on load).
+On a deployment, everyone brings their own key. If you want a shared one badly
+enough to pay for it, the honest version is a per-user quota and a bill you can
+read — not this variable.
