@@ -3,13 +3,20 @@ import { getAuth } from "@/lib/auth/server";
 /**
  * Proxy for the Anthropic API.
  *
- * A request may carry the user's own key, or rely on this deployment's
- * ANTHROPIC_API_KEY for a personal install where nobody should have to type a
- * key in. That fallback is exactly what makes the session check below
- * mandatory: without it the route would be an open proxy spending the
- * deployment owner's credit for anyone who found the path.
+ * A request carries the user's own key. The one exception is local
+ * development, where ANTHROPIC_API_KEY from .env.local stands in so nobody has
+ * to paste a key into the UI on every fresh browser profile.
+ *
+ * Deliberately not available in production. A deployed fallback would be spent
+ * by whoever is signed in rather than by whoever owns the key, and the owner
+ * would have no per-user visibility or limit — a bill, not a feature. Locally
+ * the key, the browser and the person paying are all the same.
+ *
+ * The session check below is independent of this: it stops the route being an
+ * open relay to Anthropic for anyone who finds the path.
  */
-function deploymentKey() {
+function developmentKey() {
+  if (process.env.NODE_ENV === "production") return "";
   return process.env.ANTHROPIC_API_KEY || "";
 }
 
@@ -18,12 +25,12 @@ async function requireUser() {
   return session?.user ?? null;
 }
 
-/** Lets the client skip the key screen when the deployment supplies a key. */
+/** Lets the client skip the key screen when a development key is available. */
 export async function GET() {
   const user = await requireUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  return Response.json({ serverKey: Boolean(deploymentKey()) });
+  return Response.json({ serverKey: Boolean(developmentKey()) });
 }
 
 export async function POST(request) {
@@ -33,9 +40,8 @@ export async function POST(request) {
   try {
     const { apiKey, messages, system, maxTokens = 1500 } = await request.json();
 
-    // The user's own key wins, so a personal key still works on a deployment
-    // that has one of its own.
-    const key = apiKey || deploymentKey();
+    // The user's own key always wins, so a real key works in development too.
+    const key = apiKey || developmentKey();
     if (!key) {
       return Response.json({ error: "API key required" }, { status: 400 });
     }

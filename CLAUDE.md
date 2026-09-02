@@ -146,13 +146,18 @@ changing it:
 - Users enter their Anthropic API key on first load
 - Key is persisted to `localStorage` (not server-side)
 - The server route (`route.js`) receives the key per-request and forwards it to Anthropic
-- Optional: set `ANTHROPIC_API_KEY` for a personal deployment. `/api/claude`
-  then falls back to it, and `useServerKey` (a `GET` on the same route) lets the
-  client skip the key screen. The browser never sees the key: `callClaude()`
-  simply omits `apiKey`, which the `SERVER_KEY` sentinel in `app/lib/utils.js`
-  stands for client-side.
-- **`/api/claude` requires a session.** That is what keeps the fallback from
-  turning the route into an open proxy spending the owner's credit.
+- Optional, **development only**: set `ANTHROPIC_API_KEY` in `.env.local` and
+  `/api/claude` falls back to it, while `useServerKey` (a `GET` on the same
+  route) lets the client skip the key screen. The browser never sees the key:
+  `callClaude()` simply omits `apiKey`, which the `SERVER_KEY` sentinel in
+  `app/lib/utils.js` stands for client-side.
+- `route.js` reads that variable only when `NODE_ENV !== "production"`, so a
+  deployment ignores it however it is set. Don't "fix" that: a deployed
+  fallback is spent by whoever is signed in, not by whoever owns the key, and
+  the owner gets no per-user visibility or limit. If a shared key is ever
+  wanted, it needs a per-user quota, not this variable.
+- **`/api/claude` requires a session** regardless, which stops the route being
+  an open relay to Anthropic for anyone who finds the path.
 
 ### Styling Conventions
 
@@ -178,7 +183,7 @@ changing it:
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | Neon pooled connection string |
 | `NEON_AUTH_BASE_URL` | Yes | Neon Auth base URL. The Vercel–Neon integration sets `VITE_NEON_AUTH_URL` instead, which `lib/auth/server.js` copies across |
-| `ANTHROPIC_API_KEY` | No | Deployment-wide Anthropic key. When set, `/api/claude` falls back to it and the client skips the key screen; a key the user typed still wins |
+| `ANTHROPIC_API_KEY` | No | **Development only.** `/api/claude` falls back to it and the client skips the key screen; a key the user typed still wins. Ignored when `NODE_ENV=production`, so a deployment never spends one key on every signed-in user |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot only. The most sensitive secret here — it grants full control of the bot |
 | `TELEGRAM_BOT_USERNAME` | No | Telegram bot only; used to build the `t.me` deep link |
 | `TELEGRAM_WEBHOOK_SECRET` | No | Telegram bot only; also derives the callback signing key |

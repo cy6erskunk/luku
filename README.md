@@ -257,20 +257,24 @@ confirms with the email of the account it linked.
 | `/settz Europe/Helsinki` | Set your timezone |
 | `/disconnect` | Unlink the chat; your words are untouched |
 
-## Personal use (skip the key screen)
+## Skipping the key screen while developing
 
-If you don't want to enter a key each time, set one environment variable in
-Vercel:
+Put your key in `.env.local` and the app stops asking for it locally:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-That is the whole setup. `/api/claude` falls back to it, and the app skips the
-key screen for signed-in users. A key someone enters in the UI still wins over
-it, and the key screen stays reachable from the header menu.
+`/api/claude` falls back to it, the key screen is skipped for signed-in users,
+and a key entered in the UI still wins over it. The key screen stays reachable
+from the header menu.
 
-The route requires a signed-in session, so the key is spendable only by people
-who can sign into your deployment — but everyone who can sign in shares your
-credit. On a deployment open to others, leave it unset and let people bring
-their own key.
+**This works in development only** — `NODE_ENV=production` ignores the variable
+entirely, so setting it in Vercel does nothing. That is deliberate: a deployed
+fallback is spent by whoever is signed in rather than by whoever owns the key,
+with no per-user visibility and no limit. Locally, the key, the browser and the
+person paying are the same person.
+
+On a deployment, everyone brings their own key. If you want a shared one badly
+enough to pay for it, the honest version is a per-user quota and a bill you can
+read — not this variable.
