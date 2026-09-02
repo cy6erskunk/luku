@@ -37,6 +37,78 @@
       // The client half; everything else is Node.
       "files": ["app/**/*.js", "app/**/*.jsx", "instrumentation-client.js"],
       "env": { "browser": true }
+    },
+
+    // Keep server-only lib/ out of the browser bundle. One block per directory
+    // depth, because the rule matches the import specifier as written and the
+    // same string means different things at different depths: from
+    // app/components, "../lib/x" is app/lib (the client half, fine), while from
+    // app/page.jsx it is the server's lib/. A file d levels under app/ reaches
+    // the server's lib/ with exactly d "../" steps, so each depth restricts its
+    // own prefix. app/api/** is excluded throughout: route handlers are server
+    // code and import lib/ freely.
+    //
+    // Depths 1-3 are what the tree has today; 4 and 5 are headroom. The
+    // authoritative check is lib/__tests__/serverOnlyBoundary.test.js, which
+    // resolves specifiers properly and so cannot be outrun by a new directory
+    // level — this rule is the fast feedback, not the guarantee.
+    {
+      "files": ["app/*.js", "app/*.jsx"],
+      "excludeFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../lib/**", "!../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["app/*/*.js", "app/*/*.jsx"],
+      "excludeFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../../lib/**", "!../../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["app/*/*/*.js", "app/*/*/*.jsx"],
+      "excludeFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../../../lib/**", "!../../../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["app/*/*/*/*.js", "app/*/*/*/*.jsx"],
+      "excludeFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../../../../lib/**", "!../../../../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["app/*/*/*/*/*.js", "app/*/*/*/*/*.jsx"],
+      "excludeFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../../../../../lib/**", "!../../../../../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["instrumentation-client.js"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["./lib/**", "!./lib/shared/**"], "message": "This file is the browser bundle. Only lib/shared/ may cross the boundary." }
+        ] }]
+      }
     }
   ]
 }
