@@ -5,7 +5,7 @@ import { Bp, Bg } from "../lib/styles.js";
 
 const D = "#0f1117";
 
-export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
+export default function ApiKeyScreen({ onSave, onSkip, onUseServerKey, stage = 0, serverKey = false }) {
   const [keyInput, setKeyInput] = useState("");
   const isValid = keyInput.startsWith("sk-");
 
@@ -23,6 +23,7 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
           Luku reads Finnish text from photos and helps you learn vocabulary. An API key from{" "}
           <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#4a7c9e" }}>console.anthropic.com</a>{" "}
           enables translations and AI-powered OCR, or skip to scan locally for free.
+          {serverKey && " This deployment already has a key you can use instead."}
         </p>
         <input
           type="password"
@@ -40,6 +41,11 @@ export default function ApiKeyScreen({ onSave, onSkip, stage = 0 }) {
         >
           {stage > 0 ? "Save key & continue →" : "Start reading →"}
         </button>
+        {serverKey && (
+          <button onClick={onUseServerKey} style={{ ...Bg, width: "100%", marginTop: 8 }}>
+            Use this deployment&apos;s key
+          </button>
+        )}
         <button onClick={onSkip} style={{ ...Bg, width: "100%", marginTop: 8 }}>
           Skip — use local OCR only
         </button>
