@@ -126,6 +126,40 @@ describe("page gates", () => {
     expect(screen.queryByText("Loading…")).toBeNull();
   });
 
+  it("never probes for a development key when the user has one saved", async () => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    const fetchMock = mockApi({ words: [] });
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    // The probe's answer cannot change anything here — a saved key wins over
+    // the development one — so asking is pure cost on every visit.
+    const probes = fetchMock.mock.calls.filter(([url, opts]) => String(url) === "/api/claude" && !opts?.method);
+    expect(probes).toHaveLength(0);
+  });
+
+  it("probes once the key screen is opened, so it can offer the development key", async () => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url) === "/api/claude" && !opts.method) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ serverKey: true }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "API key" }));
+
+    // Deferring the probe must not cost the option to switch back to it.
+    expect(await screen.findByRole("button", { name: /Use this deployment's key/ })).toBeTruthy();
+  });
+
   it("lets a user skip the key and scan locally", async () => {
     signedIn();
     mockApi();

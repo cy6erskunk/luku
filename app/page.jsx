@@ -28,11 +28,16 @@ export default function Luku() {
   const authLoading = authSession.isPending;
 
   const { savedKey, setSavedKey } = useApiKey();
-  const { serverKey, checking: checkingServerKey } = useServerKey(user?.id);
-  // A key the user typed wins over the deployment's own, so someone who wants
+  const [changingKey, setChangingKey] = useState(false);
+  // Probe only when the answer can change what renders: either there is no
+  // saved key, or the key screen is open and needs to know whether to offer
+  // the development one. Someone who has typed their own key and never opens
+  // that screen — the common case — costs no request at all.
+  const probeFor = user?.id && (!savedKey || changingKey) ? user.id : null;
+  const { serverKey, checking: checkingServerKey } = useServerKey(probeFor);
+  // A key the user typed wins over the development one, so someone who wants
   // to spend their own credit still can.
   const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
-  const [changingKey, setChangingKey] = useState(false);
   const { session, setSession } = useSession();
 
   const [stage, setStage] = useState(0);
