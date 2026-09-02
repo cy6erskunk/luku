@@ -36,7 +36,14 @@ npm run telegram:status   # what webhook Telegram currently has registered
 - `app/components/` holds presentation, one file per component.
 - `app/lib/` is the client half of the utilities; `lib/` is **server-only**.
   Never import `lib/` from a client component — it would pull the database
-  driver and `node:crypto` into the browser bundle.
+  driver and `node:crypto` into the browser bundle. `npm run lint` enforces
+  this, so you will hear about it before CI does.
+- `lib/shared/` is the one exception: helpers that both halves genuinely need,
+  under one condition — **no imports at all**. That is what makes them safe to
+  bundle, and it is the line to watch: adding an import to a file in
+  `lib/shared/` is what would breach the boundary, not putting a file there.
+  `lib/shared/sampleRate.js` is the current occupant, read by the server, edge
+  and browser Sentry configs alike.
 - `app/api/` holds the route handlers.
 - Code both the web app and the Telegram bot need lives in `lib/reviews.js`,
   so a card graded in either place moves through the same path.

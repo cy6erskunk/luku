@@ -4,7 +4,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { redactDeep } from "./lib/redact.js";
-import { defaultTracesSampleRate, sampleRate } from "./lib/sampleRate.js";
+import { defaultTracesSampleRate, sampleRate } from "./lib/shared/sampleRate.js";
 
 Sentry.init({
   dsn: "https://c44fe9380348efb91442e630909b58b3@o4505843752763392.ingest.us.sentry.io/4511608689000448",

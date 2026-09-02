@@ -37,6 +37,39 @@
       // The client half; everything else is Node.
       "files": ["app/**/*.js", "app/**/*.jsx", "instrumentation-client.js"],
       "env": { "browser": true }
+    },
+
+    // The three blocks below keep server-only lib/ out of the browser bundle.
+    // They are split by directory depth because the rule matches the import
+    // specifier as written, and "../lib/x" is app/lib — the client half, which
+    // is fine — from app/components, but the server's lib/ from app/page.jsx.
+    // app/api/** is deliberately absent from all three: route handlers are
+    // server code and import lib/ freely.
+    {
+      "files": ["app/*.jsx"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../lib/**", "!../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["app/components/**", "app/hooks/**", "app/lib/**", "app/__tests__/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["@/lib/**", "!@/lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." },
+          { "group": ["../../lib/**", "!../../lib/shared/**"], "message": "lib/ is server-only. Use app/lib/ for client code, or lib/shared/ for a dependency-free helper both sides need." }
+        ] }]
+      }
+    },
+    {
+      "files": ["instrumentation-client.js"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "group": ["./lib/**", "!./lib/shared/**"], "message": "This file is the browser bundle. Only lib/shared/ may cross the boundary." }
+        ] }]
+      }
     }
   ]
 }

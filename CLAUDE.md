@@ -65,7 +65,9 @@ app/
         ├── link/route.js       # Mint link code / status / unlink (session authenticated)
         └── cron/route.js       # Hourly reminder pass (bearer authenticated)
 
-lib/                            # Server-only; app/lib/ is the client half
+lib/                            # Server-only (except shared/); app/lib/ is the client half
+├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
+│   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
