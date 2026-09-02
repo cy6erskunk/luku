@@ -436,25 +436,24 @@ adding a second trigger is safe; replacing this one with Actions is not.
 ## 16. Known gaps
 
 Honest list, so nobody mistakes these for intent. Accurate as of the current
-`main`; three of them have open pull requests.
+`main`; one has an open pull request.
 
-- **`ANTHROPIC_API_KEY` is documented but unread.** `app/api/claude/route.js`
-  requires a key in the request body; the README's personal-deployment section
-  asks you to patch the route yourself. (PR #88 implements it, and adds the
-  session check that keeps the fallback from becoming an open proxy.)
-- **`telegram_links.secret_hash` is written but unused**, reserved for a second
-  channel that was never built, and carried into every nightly backup. (PR #89
-  drops it.)
 - **Sentry's `tracesSampleRate: 1` and `sendDefaultPii: true`** are development
   defaults carried into production; the redactor is what makes them tolerable.
   (PR #91 makes the sampling configurable and leaves the PII decision alone.)
+- **`/api/claude` is unthrottled.** A signed-in user can drive it as hard as
+  they like. The key is theirs, so the cost is theirs, but the deployment is
+  the relay and nothing bounds the traffic.
 - **`app/layout.jsx` is excluded from coverage.** Deliberate — it is the
   metadata shell — but it does mean the app's outermost frame is untested.
-- **`/api/claude` is unauthenticated and unthrottled.** On `main` it requires
-  no session, so anyone who finds the path can relay through it — with their
-  own key, so the cost is theirs, but the deployment is the relay. PR #88 adds
-  the session check; nothing adds a rate limit.
+- **`telegram_links.secret_hash` needs its migration run by hand.** The code
+  stopped writing the column when #89 merged, and the `ALTER TABLE ... DROP
+  COLUMN` at the end of `db/schema.sql` has to be run in the Neon SQL editor.
+  Until it is, the old `NOT NULL` column rejects every new account link. This
+  is the standing cost of hand-run migrations, not an oversight in that PR.
 
 Recently closed, in case this document is read next to an older copy: the stale
 `CONTRIBUTING.md`, the absence of a linter, `page.jsx` being excluded from
-coverage, and the `.DS_Store` files that were tracked under `app/`.
+coverage, the `.DS_Store` files tracked under `app/`, the unread
+`ANTHROPIC_API_KEY` (now development-only, with `/api/claude` requiring a
+session), and the write-only `secret_hash` column.
