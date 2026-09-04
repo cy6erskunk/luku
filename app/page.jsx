@@ -227,13 +227,20 @@ export default function Luku() {
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
-      setPopup({ ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing });
+      // The reader may have dismissed the popup while the request was in
+      // flight; the answer belongs to the popup that asked for it, so a closed
+      // one stays closed. The session cache is written either way, which is
+      // what marks the word as seen in the text.
+      setPopup((p) => p?.k === tok.k ? { ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing } : p);
     } catch (e) {
-      // A word from the list keeps the translation it already had: the failure
-      // only concerns the extra lookup of this particular form.
-      setPopup((p) => p?.translations?.length
-        ? { ...p, loading: false, formError: e.message || "error" }
-        : { ...p, loading: false, translations: [`(${e.message || "error"})`] });
+      setPopup((p) => {
+        if (p?.k !== tok.k) return p;
+        // A word from the list keeps the translation it already had: the
+        // failure only concerns the extra lookup of this particular form.
+        return p.translations?.length
+          ? { ...p, loading: false, formError: e.message || "error" }
+          : { ...p, loading: false, translations: [`(${e.message || "error"})`] };
+      });
     }
     finally { setXlating(null); }
   };

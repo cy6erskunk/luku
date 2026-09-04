@@ -341,6 +341,49 @@ describe("reading a scanned page", () => {
     expect(screen.queryByRole("button", { name: "Add API key" })).toBeNull();
   });
 
+  it("leaves the popup closed when the reader dismisses it mid-lookup", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    let resolve;
+    mocks.translateWord.mockReturnValue(new Promise((r) => { resolve = r; }));
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    fireEvent.click(screen.getByText("Koira"));
+    await screen.findByText(/analysing/i);
+    // Tapping outside the popup closes it.
+    fireEvent.click(screen.getByText("tap any word"));
+    expect(screen.queryByText(/analysing/i)).toBeNull();
+
+    await act(async () => {
+      resolve({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    });
+
+    expect(screen.queryByText(/dog/)).toBeNull();
+    // The lookup is not wasted: it landed in the session cache, so tapping the
+    // word again answers from there without a second request.
+    fireEvent.click(screen.getByText("Koira"));
+    expect(await screen.findByText(/dog/)).toBeTruthy();
+    expect(mocks.translateWord).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the popup closed when a mid-lookup failure lands after dismissal", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    let reject;
+    mocks.translateWord.mockReturnValue(new Promise((_, r) => { reject = r; }));
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    fireEvent.click(screen.getByText("Koira"));
+    await screen.findByText(/analysing/i);
+    fireEvent.click(screen.getByText("tap any word"));
+
+    await act(async () => { reject(new Error("network down")); });
+
+    expect(screen.queryByText(/network down/)).toBeNull();
+  });
+
   it("offers the key screen instead of translating when the key was skipped", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
     localStorage.setItem("luku_api_key", "__skip__");
