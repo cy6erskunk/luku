@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -279,5 +279,42 @@ describe("sentenceOf", () => {
     const text = "Minä syön. Sinä juot. Hän nukkuu.";
     expect(sentenceOf(text, "juot")).toContain("juot");
     expect(sentenceOf(text, "juot")).not.toContain("syön");
+  });
+});
+
+describe("savedWordEntry", () => {
+  const WORD = {
+    base: "juosta",
+    translations: ["to run", "run"],
+    pos: "verb",
+    forms: [{ word: "juoksin", translation: "I ran" }],
+  };
+
+  it("carries the stored base, translations and part of speech", () => {
+    expect(savedWordEntry(WORD, "juosta")).toEqual({
+      base: "juosta", translations: ["to run", "run"], pos: "verb", formTranslation: null,
+    });
+  });
+
+  it("adds the stored translation of the tapped inflection", () => {
+    expect(savedWordEntry(WORD, "juoksin").formTranslation).toBe("I ran");
+  });
+
+  it("matches the tapped form case-insensitively", () => {
+    expect(savedWordEntry(WORD, "Juoksin").formTranslation).toBe("I ran");
+  });
+
+  it("leaves the form translation null for an inflection the list has not recorded", () => {
+    expect(savedWordEntry(WORD, "juoksemme").formTranslation).toBeNull();
+  });
+
+  it("tolerates a word with no forms and no translations", () => {
+    expect(savedWordEntry({ base: "koira", pos: "noun" }, "koira")).toEqual({
+      base: "koira", translations: [], pos: "noun", formTranslation: null,
+    });
+  });
+
+  it("returns null when there is no saved word", () => {
+    expect(savedWordEntry(null, "koira")).toBeNull();
   });
 });

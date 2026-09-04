@@ -306,6 +306,41 @@ describe("reading a scanned page", () => {
     expect(await screen.findByRole("button", { name: "1 new" })).toBeTruthy();
   });
 
+  it("shows the stored translation at once for a word already on the list", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    // Never resolves: the popup is inspected while the lookup is still in flight.
+    mocks.translateWord.mockReturnValue(new Promise(() => {}));
+    mockApi({ words: [{ ...WORD, id: 3, base: "koira", translations: ["dog"], pos: "noun" }] });
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await screen.findByRole("button", { name: "1 words" });
+    fireEvent.click(screen.getByText("Koira"));
+
+    expect(await screen.findByText(/dog/)).toBeTruthy();
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+    expect(screen.getByText(/checking this form/i)).toBeTruthy();
+    // The fresh lookup still runs — the stored entry is a head start, not a
+    // replacement for translating the form in front of the reader.
+    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED);
+  });
+
+  it("answers from the list without a key when the word is already saved", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    localStorage.setItem("luku_api_key", "__skip__");
+    mockApi({ words: [{ ...WORD, id: 3, base: "koira", translations: ["dog"], pos: "noun" }] });
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await screen.findByRole("button", { name: "1 words" });
+    fireEvent.click(screen.getByText("Koira"));
+
+    expect(await screen.findByText(/dog/)).toBeTruthy();
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+    expect(mocks.translateWord).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Add API key" })).toBeNull();
+  });
+
   it("offers the key screen instead of translating when the key was skipped", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
     localStorage.setItem("luku_api_key", "__skip__");
