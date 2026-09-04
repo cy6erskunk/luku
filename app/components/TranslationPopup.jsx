@@ -8,6 +8,12 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
   const left = Math.max(Math.min((popup.x ?? 150) - 125, containerWidth - 258), 4);
   const top = Math.max((popup.y ?? 80) - 155, 8);
 
+  // A word already on the list arrives with its stored translation attached,
+  // so the popup can show something the moment it opens — while the lookup of
+  // the tapped form is still running, or when there is no API key at all.
+  const translations = popup.translations || [];
+  const hasTranslation = translations.length > 0;
+
   const inListBadge = (
     <div
       aria-label="already in your list"
@@ -31,7 +37,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
             <button onClick={onAddApiKey} style={{ ...Bg, marginTop: 10, padding: "5px 12px", fontSize: 11, display: "block", width: "100%" }}>Add API key</button>
           </div>
         )
-        : popup.loading
+        : popup.loading && !hasTranslation
         ? (
           <div style={{ textAlign: "center", padding: "18px 0", color: "#4a7c9e" }}>
             <div style={{ fontSize: 22, animation: "spin 1s linear infinite", marginBottom: 6 }}>⟳</div>
@@ -53,7 +59,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
               )}
             </div>
             <div style={{ marginBottom: 12 }}>
-              {(popup.translations || []).map((t, i) => (
+              {translations.map((t, i) => (
                 <div key={i} style={{ fontSize: i === 0 ? 14 : 12, color: i === 0 ? "#c8c0b5" : "#6b645e", paddingBottom: 2 }}>
                   {i === 0 ? "→ " : "   "}{t}
                 </div>
@@ -66,6 +72,17 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
                   {popup.word}
                   {popup.formTranslation && <span style={{ color: "#6b645e" }}> — {popup.formTranslation}</span>}
                 </div>
+              </div>
+            )}
+            {popup.formError && (
+              <div style={{ textAlign: "center", fontSize: 11, color: "#c48a8a", paddingBottom: 4 }}>
+                Couldn't check this form ({popup.formError})
+              </div>
+            )}
+            {popup.loading && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, color: "#4a7c9e", paddingBottom: 4 }}>
+                <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
+                checking this form…
               </div>
             )}
             {session[popup.k] && (

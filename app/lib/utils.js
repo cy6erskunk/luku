@@ -108,3 +108,20 @@ export function findExistingWord(dbWords, { form, base } = {}) {
   }
   return null;
 }
+
+// Shapes a saved DB word into the fields the translation popup renders, so a
+// word already on the list can show its stored translation immediately —
+// before (or without) a round-trip to Claude. `form` is the tapped inflection:
+// when the list already records a translation for it, that is carried across
+// too.
+export function savedWordEntry(word, form) {
+  if (!word) return null;
+  const f = (form || "").toLowerCase();
+  const match = wordForms(word).find((fx) => (fx?.word || "").toLowerCase() === f);
+  return {
+    base: word.base,
+    translations: Array.isArray(word.translations) ? word.translations : [],
+    pos: word.pos,
+    formTranslation: match?.translation ?? null,
+  };
+}

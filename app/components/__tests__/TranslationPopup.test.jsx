@@ -166,3 +166,62 @@ describe("TranslationPopup – existsInDb indicator", () => {
     expect(screen.queryByText(/in your list/i)).toBeNull();
   });
 });
+
+describe("TranslationPopup – saved translation while loading", () => {
+  const popup = {
+    word: "juoksin", k: "juoksin", x: 100, y: 80, loading: true, existsInDb: true,
+    base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran",
+  };
+
+  it("shows the stored translation instead of the bare spinner", () => {
+    setup(popup);
+    expect(screen.getByText(/to run/)).toBeTruthy();
+    expect(screen.queryByText(/analysing/i)).toBeNull();
+  });
+
+  it("keeps the 'in your list' badge alongside it", () => {
+    setup(popup);
+    expect(screen.getByText(/in your list/i)).toBeTruthy();
+  });
+
+  it("says the tapped form is still being checked", () => {
+    setup(popup);
+    expect(screen.getByText(/checking this form/i)).toBeTruthy();
+  });
+
+  it("shows the stored translation of the tapped form", () => {
+    setup(popup);
+    expect(screen.getByText(/I ran/)).toBeTruthy();
+  });
+
+  it("offers no Add button while the lookup is still running", () => {
+    setup(popup);
+    expect(screen.queryByRole("button", { name: /add to review list/i })).toBeNull();
+  });
+
+  it("falls back to the spinner when there is nothing stored to show", () => {
+    setup({ word: "koira", k: "koira", x: 100, y: 80, loading: true, existsInDb: true, translations: [] });
+    expect(screen.getByText(/analysing/i)).toBeTruthy();
+    expect(screen.queryByText(/checking this form/i)).toBeNull();
+  });
+
+  it("drops the checking note once the lookup has landed", () => {
+    setup({ ...popup, loading: false });
+    expect(screen.queryByText(/checking this form/i)).toBeNull();
+    expect(screen.getByText(/to run/)).toBeTruthy();
+  });
+});
+
+describe("TranslationPopup – failed form lookup", () => {
+  const popup = {
+    word: "juoksin", k: "juoksin", x: 100, y: 80, existsInDb: true,
+    base: "juosta", translations: ["to run"], pos: "verb", formError: "network down",
+  };
+
+  it("keeps the stored translation and explains what failed", () => {
+    setup(popup);
+    expect(screen.getByText(/to run/)).toBeTruthy();
+    expect(screen.getByText(/couldn't check this form/i)).toBeTruthy();
+    expect(screen.getByText(/network down/)).toBeTruthy();
+  });
+});

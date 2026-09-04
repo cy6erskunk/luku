@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -200,25 +200,48 @@ export default function Luku() {
     const r = e.target.getBoundingClientRect();
     const pr = containerRef?.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const x = r.left - pr.left + r.width / 2, y = r.top - pr.top;
-    if (!hasApiKey(effectiveKey)) { setPopup({ word: form, k: tok.k, x, y, noKey: true }); return; }
+    // A word already on the list carries its own translation, so it can be
+    // answered from local state — no key needed, and nothing to wait for.
+    const savedByForm = findExistingWord(words.dbWords, { form });
+    if (!hasApiKey(effectiveKey)) {
+      setPopup(savedByForm
+        ? { ...savedWordEntry(savedByForm, form), word: form, k: tok.k, x, y, existsInDb: true }
+        : { word: form, k: tok.k, x, y, noKey: true });
+      return;
+    }
     if (session[tok.k]) {
       const cached = session[tok.k];
       const existing = findExistingWord(words.dbWords, { form, base: cached.base });
       setPopup({ ...cached, word: form, k: tok.k, x, y, existsInDb: !!existing });
       return;
     }
-    // Local-DB match by the tapped form runs in parallel with the translation
-    // request, so we can flag the popup immediately when applicable.
-    const existingByForm = findExistingWord(words.dbWords, { form });
+    // The saved translation shows straight away while the lookup of this
+    // particular form runs; the fresh result replaces it when it lands.
     setXlating(tok.k);
-    setPopup({ word: form, k: tok.k, x, y, loading: true, existsInDb: !!existingByForm });
+    setPopup({
+      ...(savedByForm ? savedWordEntry(savedByForm, form) : {}),
+      word: form, k: tok.k, x, y, loading: true, existsInDb: !!savedByForm,
+    });
     try {
       const d = await translateWord(effectiveKey, form, sentenceOf(text, form));
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
-      setPopup({ ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing });
-    } catch (e) { setPopup((p) => ({ ...p, loading: false, translations: [`(${e.message || "error"})`] })); }
+      // The reader may have dismissed the popup while the request was in
+      // flight; the answer belongs to the popup that asked for it, so a closed
+      // one stays closed. The session cache is written either way, which is
+      // what marks the word as seen in the text.
+      setPopup((p) => p?.k === tok.k ? { ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing } : p);
+    } catch (e) {
+      setPopup((p) => {
+        if (p?.k !== tok.k) return p;
+        // A word from the list keeps the translation it already had: the
+        // failure only concerns the extra lookup of this particular form.
+        return p.translations?.length
+          ? { ...p, loading: false, formError: e.message || "error" }
+          : { ...p, loading: false, translations: [`(${e.message || "error"})`] };
+      });
+    }
     finally { setXlating(null); }
   };
 
