@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, inBundle, shuffled } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, inBundle, isDue, shuffled } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -117,7 +117,7 @@ export default function Luku() {
   const loadError = words.wordsError || bundles.bundlesError;
   const banner = loadError || actionError;
 
-  const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  const allDueWords = words.dbWords.filter((w) => isDue(w));
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
   // out of the regular due queue until the user is done triaging them.
@@ -131,12 +131,16 @@ export default function Luku() {
   // server, so an optimistic add or delete moves them at once and a bundle
   // review always offers exactly what the review would walk.
   const bundleStats = bundles.bundles.map((b) => {
-    const inIt = words.dbWords.filter((w) => inBundle(w, b.id));
-    return {
-      ...b,
-      wordCount: inIt.length,
-      dueCount: inIt.filter((w) => new Date(w.next_review_at) <= new Date()).length,
-    };
+    // One pass, no intermediate array: this runs per bundle on every render,
+    // and the counts are only ever read together.
+    let wordCount = 0;
+    let dueCount = 0;
+    for (const w of words.dbWords) {
+      if (!inBundle(w, b.id)) continue;
+      wordCount++;
+      if (isDue(w)) dueCount++;
+    }
+    return { ...b, wordCount, dueCount };
   });
 
   const handleStartReview = () => {
@@ -205,7 +209,10 @@ export default function Luku() {
     if (!bundle) return;
     const inIt = words.dbWords.filter((w) => inBundle(w, bundleId));
     if (inIt.length === 0) return;
-    const due = inIt.filter((w) => new Date(w.next_review_at) <= new Date());
+    // One instant for the whole pass, so a card cannot fall on both sides of
+    // the line while the queue is being built.
+    const clickedAt = Date.now();
+    const due = inIt.filter((w) => isDue(w, clickedAt));
     if (due.length > 0) review.startReview(due, bundle.name);
     else review.startRepeat(shuffled(inIt).slice(0, 20), bundle.name);
     setPopup(null);

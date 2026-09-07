@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, wordBundleIds, inBundle, shuffled, responseError, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, wordBundleIds, inBundle, isDue, shuffled, responseError, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -389,5 +389,44 @@ describe("responseError", () => {
 
   it("returns an Error, so callers can throw it", async () => {
     expect(await responseError(response(500), "x")).toBeInstanceOf(Error);
+  });
+});
+
+describe("isDue", () => {
+  const at = (iso) => new Date(iso).getTime();
+
+  it("is true for a card whose schedule has passed", () => {
+    expect(isDue({ next_review_at: "2020-01-01T00:00:00.000Z" }, at("2026-01-01T00:00:00.000Z"))).toBe(true);
+  });
+
+  it("is false for a card scheduled ahead", () => {
+    expect(isDue({ next_review_at: "2999-01-01T00:00:00.000Z" }, at("2026-01-01T00:00:00.000Z"))).toBe(false);
+  });
+
+  it("counts a card due exactly now", () => {
+    const t = at("2026-01-01T00:00:00.000Z");
+    expect(isDue({ next_review_at: "2026-01-01T00:00:00.000Z" }, t)).toBe(true);
+  });
+
+  it("measures every card against the instant it is given", () => {
+    // The point of the parameter: one line for a whole pass, so the counters
+    // and the queue they describe cannot land on different sides of it.
+    const now = at("2026-01-01T00:00:00.000Z");
+    const words = [
+      { next_review_at: "2025-12-31T23:59:59.999Z" },
+      { next_review_at: "2026-01-01T00:00:00.001Z" },
+    ];
+    expect(words.map((w) => isDue(w, now))).toEqual([true, false]);
+  });
+
+  it("defaults to the current instant", () => {
+    expect(isDue({ next_review_at: "2020-01-01T00:00:00.000Z" })).toBe(true);
+    expect(isDue({ next_review_at: "2999-01-01T00:00:00.000Z" })).toBe(false);
+  });
+
+  it("is false rather than throwing for a word with no schedule", () => {
+    // NaN <= now is false, which is the safe answer: never silently due.
+    expect(isDue({})).toBe(false);
+    expect(isDue(null)).toBe(false);
   });
 });

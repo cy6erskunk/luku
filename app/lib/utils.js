@@ -109,6 +109,15 @@ export function inBundle(w, bundleId) {
   return bundleId != null && wordBundleIds(w).includes(bundleId);
 }
 
+/**
+ * Whether a card is ready to review. `now` is a parameter so a pass over the
+ * list measures every word against one instant — building a fresh Date per
+ * comparison is both wasted work and a moving line to compare against.
+ */
+export function isDue(w, now = Date.now()) {
+  return new Date(w?.next_review_at).getTime() <= now;
+}
+
 /** Fisher-Yates on a copy: practice passes want a different order each time
  *  without disturbing the caller's list. */
 export function shuffled(items) {

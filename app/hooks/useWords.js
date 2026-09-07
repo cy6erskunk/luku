@@ -61,19 +61,35 @@ export function useWords(userId) {
     setDbWords((prev) => prev.map((w) => w.id === id ? { ...w, bundle_ids: bundleIds } : w));
   };
 
+  /** Applies one membership change to whatever the list holds at the time it
+   *  runs, rather than to the copy the caller closed over. Idempotent, so
+   *  re-applying an edit that already landed is a no-op. */
+  const applyBundleChange = (id, bundleId, action) => {
+    setDbWords((prev) => prev.map((w) => {
+      if (w.id !== id) return w;
+      const ids = wordBundleIds(w);
+      if (action === "add") {
+        return ids.includes(bundleId) ? w : { ...w, bundle_ids: [...ids, bundleId].sort((a, b) => a - b) };
+      }
+      return ids.includes(bundleId) ? { ...w, bundle_ids: ids.filter((b) => b !== bundleId) } : w;
+    }));
+  };
+
   /**
-   * Add or drop one bundle membership for a saved word, optimistically. The
-   * server answers with the word's whole membership list, which wins over the
-   * guess made here; a failure puts back exactly what was there before.
+   * Add or drop one bundle membership for a saved word, optimistically.
+   *
+   * Both the update and its rollback name a single membership rather than a
+   * whole `bundle_ids` array. Two edits to the same word issued before React
+   * re-renders would otherwise compute from the same snapshot and the second
+   * would undo the first, and a rollback restoring a snapshot would take any
+   * edit made since along with it. The server answers with the word's whole
+   * membership list, which wins over the guess made here.
    */
   const changeWordBundle = async (id, bundleId, action) => {
-    const current = dbWords.find((w) => w.id === id);
-    if (!current) return;
-    const before = wordBundleIds(current);
-    const after = action === "add"
-      ? [...new Set([...before, bundleId])].sort((a, b) => a - b)
-      : before.filter((b) => b !== bundleId);
-    setWordBundles(id, after);
+    // A guard, not the update: a word that is not on the list has nothing to
+    // send, and a stale answer here only costs a request the server 404s.
+    if (!dbWords.some((w) => w.id === id)) return;
+    applyBundleChange(id, bundleId, action);
     try {
       const r = await fetch("/api/words", {
         method: "PATCH",
@@ -84,7 +100,10 @@ export function useWords(userId) {
       const { bundleIds } = await r.json();
       if (Array.isArray(bundleIds)) setWordBundles(id, bundleIds);
     } catch (e) {
-      setWordBundles(id, before);
+      // The inverse of what was applied. The UI only offers "add" for a bundle
+      // the word is not in and "remove" for one it is, so inverting restores
+      // exactly the state this call changed — and nothing else.
+      applyBundleChange(id, bundleId, action === "add" ? "remove" : "add");
       throw e;
     }
   };

@@ -221,6 +221,58 @@ describe("useWords – bundle membership", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("does not let a second edit issued from the same render undo the first", async () => {
+    // Both calls close over the same dbWords, so an update computed from that
+    // snapshot would have the second write [10] back over the first's [20].
+    const result = await loaded([{ ...WORD_A, bundle_ids: [10, 20] }]);
+
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => resolvers.push(r))));
+    let pending;
+    act(() => {
+      pending = Promise.all([
+        result.current.removeWordFromBundle(1, 10),
+        result.current.removeWordFromBundle(1, 20),
+      ]);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await act(async () => {
+      resolvers.forEach((r) => r({ ok: true, json: () => Promise.resolve({ bundleIds: [] }) }));
+      await pending;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("rolls back only the membership that failed, not the whole list", async () => {
+    // A rollback restoring the snapshot would drop the concurrent add of 20
+    // along with the failed add of 10.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => resolvers.push(r))));
+    let failing, succeeding;
+    act(() => {
+      failing = result.current.addWordToBundle(1, 10).catch(() => {});
+      succeeding = result.current.addWordToBundle(1, 20);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10, 20]);
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500 });
+      resolvers[1]({ ok: true, json: () => Promise.resolve({ bundleIds: [20] }) });
+      await Promise.all([failing, succeeding]);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([20]);
+  });
+
+  it("is idempotent, so a rollback cannot double-remove", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2] }]);
+    mockFetchJson({ bundleIds: [2] });
+    await act(() => result.current.addWordToBundle(1, 2));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
   it("drops a deleted bundle from every word that carried it", async () => {
     const result = await loaded([{ ...WORD_A, bundle_ids: [2, 3] }, { ...WORD_B, bundle_ids: [3] }]);
     act(() => result.current.forgetBundle(3));

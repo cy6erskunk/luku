@@ -192,9 +192,18 @@ describe("WordList – bundles", () => {
   });
 
   it("says so rather than looking empty when a bundle has nothing in it", () => {
-    render(<WordList words={[{ ...WORDS[0], bundle_ids: [] }]} bundles={BUNDLES} onClose={vi.fn()} onDelete={vi.fn()} />);
+    // Counts come from the caller, which derives them from this same list, so
+    // the fixture has to agree with it the way page.jsx always does.
+    const empty = [{ id: 10, name: "Kotimaa", wordCount: 0, dueCount: 0 }];
+    render(<WordList words={[{ ...WORDS[0], bundle_ids: [] }]} bundles={empty} onClose={vi.fn()} onDelete={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Kotimaa (0)" }));
     expect(screen.getByText(/no words in this bundle/i)).toBeTruthy();
+  });
+
+  it("shows the count its caller derived, without re-deriving it", () => {
+    withBundles();
+    expect(screen.getByRole("button", { name: "Kotimaa (2)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Luku 3 (1)" })).toBeTruthy();
   });
 
   it("removes a word from a bundle it is tagged with", () => {

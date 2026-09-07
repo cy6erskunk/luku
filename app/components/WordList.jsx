@@ -9,6 +9,12 @@ const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb
 const ALL = "all";
 const UNBUNDLED = "none";
 
+/**
+ * `bundles` is `bundleStats` — each bundle with the `wordCount` page.jsx
+ * already derived from this same word list. The chips read that rather than
+ * re-scanning `words` per bundle, so one definition of "how many words are in
+ * this bundle" serves the chip and the list it filters to.
+ */
 export default function WordList({ words, bundles = [], onClose, onDelete, onAddToBundle, onRemoveFromBundle, onDeleteBundle }) {
   const [pendingId, setPendingId] = useState(null);
   const [filter, setFilter] = useState(ALL);
@@ -61,7 +67,7 @@ export default function WordList({ words, bundles = [], onClose, onDelete, onAdd
             <button onClick={() => setFilter(ALL)} style={chip(filter === ALL)}>All ({words.length})</button>
             {bundles.map((b) => (
               <button key={b.id} onClick={() => setFilter(b.id)} style={chip(filter === b.id)}>
-                {b.name} ({words.filter((w) => wordBundleIds(w).includes(b.id)).length})
+                {b.name} ({b.wordCount})
               </button>
             ))}
             {unbundledCount > 0 && (
