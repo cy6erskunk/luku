@@ -39,11 +39,24 @@ describe("useBundles – loading", () => {
     expect(result.current.bundles).toEqual([]);
   });
 
-  it("survives a failed fetch with an empty list", async () => {
+  it("reports a failed load rather than looking like no bundles exist", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
     const { result } = renderHook(() => useBundles("user-1"));
     await waitFor(() => expect(result.current.loadingBundles).toBe(false));
     expect(result.current.bundles).toEqual([]);
+    expect(result.current.bundlesError).toBe("offline");
+  });
+
+  it("passes on the server's reason for refusing", async () => {
+    mockFetch({ ok: false, status: 503, json: () => Promise.resolve({ error: "Run db/schema.sql against it." }) });
+    const { result } = renderHook(() => useBundles("user-1"));
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+    expect(result.current.bundlesError).toBe("Run db/schema.sql against it.");
+  });
+
+  it("has no error after a successful load", async () => {
+    const result = await loaded([KOTIMAA]);
+    expect(result.current.bundlesError).toBeNull();
   });
 });
 

@@ -74,7 +74,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
 │   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
 │   └── bundleName.js           # Bundle-name normalisation, used by the route and the picker
-├── db.js                       # getDb() -> neon(DATABASE_URL)
+├── db.js                       # getDb() -> neon(DATABASE_URL), plus withSchemaGuard()
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
 ├── bundles.js                  # Bundle CRUD and word_bundles membership writes
@@ -104,8 +104,8 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 |------|------|
 | `useApiKey` | `savedKey` + localStorage persistence |
 | `useSession` | Per-scan translation cache + localStorage persistence |
-| `useWords` | `dbWords`, `loadingWords`, word CRUD, bundle membership |
-| `useBundles` | `bundles`, `activeBundleId` (localStorage), create/delete |
+| `useWords` | `dbWords`, `loadingWords`, `wordsError`, word CRUD, bundle membership |
+| `useBundles` | `bundles`, `loadingBundles`, `bundlesError`, `activeBundleId` (localStorage), create/delete |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
@@ -126,6 +126,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
 | `wordBundleIds()` / `inBundle()` (`utils.js`) | Array-guarded accessor for a word's bundles, and a membership test that treats "no bundle" as matching nothing |
+| `responseError()` (`utils.js`) | Turns a not-ok response into an Error carrying the server's own `error` message, or the status when there is no readable body |
 | `shuffled()` (`utils.js`) | Fisher-Yates on a copy, for the practice passes |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
 | `savedWordEntry()` (`utils.js`) | Shapes a saved word into popup fields, so tapping a word already on the list shows its stored translation immediately — while the form lookup runs, or without an API key at all |
@@ -161,6 +162,30 @@ A bundle is a named group of words — normally "the words from this page".
 - **The Telegram bot is bundle-unaware** — it reviews everything that is due,
   as before. Scoping a chat session to a bundle would need selection state the
   stateless review flow deliberately does not keep.
+
+### When the schema has not been run
+
+Nothing deploys `db/schema.sql`; it is run by hand. A deployment pointed at a
+database that predates the last appended migration is therefore a normal way to
+be wrong, and it used to be **invisible**: the query threw, Next answered 500
+with no body of ours, `useWords` swallowed it, and the app rendered an account
+with no saved words — which is exactly what a new account looks like. The only
+hint was a missing word-count chip.
+
+Two rules keep that from happening again:
+
+- **A route that can hit a not-yet-created table wraps its body in
+  `withSchemaGuard()`** (`lib/db.js`). It turns Postgres' `42P01` into a 503
+  naming `db/schema.sql`, and rethrows everything else so a real bug stays a
+  500. `/api/words` needs it on every handler because bundle membership is
+  part of the word list now — a missing `word_bundles` takes the whole
+  vocabulary down with it.
+- **A failed load is never swallowed.** `useWords` and `useBundles` expose
+  `wordsError` / `bundlesError`, read through `responseError()` so the
+  server's message is what the reader sees, and `page.jsx` renders them in one
+  banner. This matters most for lists whose empty state is unremarkable: any
+  silent failure there is indistinguishable from success. A load error is not
+  dismissible (it describes the state of the screen); a failed action is.
 
 ### Telegram bot
 

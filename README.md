@@ -44,7 +44,10 @@ Words can be grouped into named bundles — normally one per page or chapter.
 - The Telegram bot is not bundle-aware: it reviews everything that is due.
 
 An existing deployment needs `db/schema.sql` re-run once for the two new
-tables. It is idempotent, so re-running the whole file is the intended way.
+tables. It is idempotent, so re-running the whole file is the intended way. If
+you forget, the app says so in a banner rather than quietly showing an empty
+vocabulary — the routes answer a missing table with a 503 naming the file to
+run.
 
 ## Telegram review bot (optional)
 

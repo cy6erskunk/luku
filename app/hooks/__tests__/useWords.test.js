@@ -43,6 +43,47 @@ describe("useWords – initial fetch", () => {
     expect(result.current.dbWords).toEqual([]);
   });
 
+  it("reports a failed load instead of showing an empty vocabulary", async () => {
+    // The bug this covers: an empty list is the app's ordinary state, so a
+    // swallowed failure looked exactly like an account with no saved words.
+    mockFetch({ ok: false, status: 503, json: () => Promise.resolve({ error: "Run db/schema.sql against it." }) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.wordsError).toBe("Run db/schema.sql against it.");
+    expect(result.current.dbWords).toEqual([]);
+  });
+
+  it("reports a load that failed with no readable body", async () => {
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.wordsError).toBe("Could not load your saved words (500)");
+  });
+
+  it("reports a load that never reached the server", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.wordsError).toBe("offline");
+  });
+
+  it("has no error after a successful load", async () => {
+    mockFetchJson({ words: [WORD_A] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.wordsError).toBeNull();
+  });
+
+  it("clears a previous error when the user changes", async () => {
+    mockFetch({ ok: false, status: 500, json: () => Promise.resolve({}) });
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.wordsError).toBeTruthy());
+    mockFetchJson({ words: [WORD_B] });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.dbWords).toEqual([WORD_B]));
+    expect(result.current.wordsError).toBeNull();
+  });
+
   it("clears dbWords before re-fetching when userId changes", async () => {
     mockFetchJson({ words: [WORD_A] });
     const { result, rerender } = renderHook(({ uid }) => useWords(uid), {

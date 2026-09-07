@@ -2,7 +2,7 @@
  * Covers the bundle-aware parts of the words route: the membership that rides
  * along with a save, and the PATCH that edits one afterwards.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
 
 const mocks = vi.hoisted(() => ({ session: null, sql: null }));
@@ -10,11 +10,24 @@ const mocks = vi.hoisted(() => ({ session: null, sql: null }));
 vi.mock("@/lib/auth/server", () => ({
   getAuth: () => ({ getSession: () => Promise.resolve({ data: mocks.session }) }),
 }));
-vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
+// Only getDb is faked: withSchemaGuard is the behaviour under test in the
+// "schema out of date" cases below, so it has to be the real one.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDb: () => mocks.sql,
+}));
 
 const { GET, POST, PATCH } = await import("../route.js");
 
 const request = (body) => ({ json: () => Promise.resolve(body) });
+
+/** What the driver throws on a database the schema file has not been re-run
+ *  against: Postgres' undefined_table SQLSTATE on `code`. */
+function undefinedTable() {
+  const e = new Error('relation "word_bundles" does not exist');
+  e.code = "42P01";
+  return e;
+}
 const SAVED = { id: 7, base: "juosta", translations: ["to run"], bundle_ids: [] };
 
 beforeEach(() => {
@@ -122,5 +135,38 @@ describe("PATCH /api/words", () => {
     const res = await PATCH(request({ id: 7, bundleId: 3, action: "remove" }));
     expect(res.status).toBe(200);
     expect((await res.json()).bundleIds).toEqual([2]);
+  });
+});
+
+describe("a database the migration has not been run against", () => {
+  beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("answers the word list with a 503 that names the fix", async () => {
+    // The reported symptom: this used to throw, Next answered 500 with no body
+    // of ours, and the client showed an empty vocabulary and no error at all.
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.schemaOutOfDate).toBe(true);
+    expect(body.error).toMatch(/db\/schema\.sql/);
+  });
+
+  it("answers a save into a bundle the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await POST(request({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect(res.status).toBe(503);
+  });
+
+  it("answers a membership edit the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await PATCH(request({ id: 7, bundleId: 3, action: "add" }));
+    expect(res.status).toBe(503);
+  });
+
+  it("lets an unrelated database failure stay a 500", async () => {
+    mocks.sql = fakeSql([new Error("connection reset")]);
+    await expect(GET()).rejects.toThrow("connection reset");
   });
 });

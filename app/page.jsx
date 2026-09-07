@@ -60,6 +60,10 @@ export default function Luku() {
   // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
+  // A failed bundle action, shown in the same banner as a failed load. These
+  // used to reach only console.error, which on a screen whose empty state
+  // looks exactly like the failed one told the reader nothing.
+  const [actionError, setActionError] = useState(null);
 
   const words = useWords(user?.id);
   const bundles = useBundles(user?.id);
@@ -107,6 +111,11 @@ export default function Luku() {
       />
     );
   }
+
+  // A load failure wins over an action failure: it explains the empty screen
+  // the reader is looking at, and it does not go away by dismissing it.
+  const loadError = words.wordsError || bundles.bundlesError;
+  const banner = loadError || actionError;
 
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
@@ -210,21 +219,25 @@ export default function Luku() {
   const handleDeleteBundle = async (bundleId) => {
     const affected = words.dbWords.filter((w) => inBundle(w, bundleId)).map((w) => w.id);
     words.forgetBundle(bundleId);
+    setActionError(null);
     try { await bundles.deleteBundle(bundleId); }
     catch (e) {
       console.error("delete bundle failed", e);
       words.restoreBundle(bundleId, affected);
+      setActionError("Could not delete that bundle.");
     }
   };
 
   const handleAddToBundle = async (wordId, bundleId) => {
+    setActionError(null);
     try { await words.addWordToBundle(wordId, bundleId); }
-    catch (e) { console.error("add to bundle failed", e); }
+    catch (e) { console.error("add to bundle failed", e); setActionError("Could not add that word to the bundle."); }
   };
 
   const handleRemoveFromBundle = async (wordId, bundleId) => {
+    setActionError(null);
     try { await words.removeWordFromBundle(wordId, bundleId); }
-    catch (e) { console.error("remove from bundle failed", e); }
+    catch (e) { console.error("remove from bundle failed", e); setActionError("Could not take that word out of the bundle."); }
   };
 
   const handleScanAnother = () => {
@@ -432,6 +445,24 @@ export default function Luku() {
           />
         </div>
       </div>
+
+      {banner && (
+        <div
+          role="alert"
+          style={{ margin: "14px 18px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
+        >
+          <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {banner}</span>
+          {!loadError && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setActionError(null); }}
+              aria-label="Dismiss"
+              style={{ background: "none", border: "none", color: "#c48a8a", fontSize: 14, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {stage === 0 && (
         <ScanStage

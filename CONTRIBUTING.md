@@ -75,6 +75,11 @@ Neon Postgres over HTTP, no ORM and no migration tool.
   editor. Every statement must be idempotent (`IF NOT EXISTS`,
   `ADD COLUMN IF NOT EXISTS`) and safe to re-run against both a populated
   database and an empty one. Deploying does not migrate anything.
+- Because of that, **a route reading a table added by a migration wraps its
+  body in `withSchemaGuard()`** (`lib/db.js`), so a database that has not had
+  the file re-run answers 503 with the fix instead of an unexplained 500. And
+  **never swallow a failed load in a hook**: an empty list is the app's normal
+  state, so a silent failure there looks exactly like success.
 - Every query touching user data is scoped by `user.id`.
 - Interpolate values through the tagged template — never concatenate them
   into SQL.

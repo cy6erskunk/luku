@@ -1,19 +1,33 @@
 import { useState, useEffect } from "react";
-import { wordBundleIds } from "../lib/utils.js";
+import { responseError, wordBundleIds } from "../lib/utils.js";
 
 export function useWords(userId) {
   const [dbWords, setDbWords] = useState([]);
   const [loadingWords, setLoadingWords] = useState(true);
+  const [wordsError, setWordsError] = useState(null);
 
   useEffect(() => {
-    if (!userId) { setDbWords([]); setLoadingWords(false); return; }
+    if (!userId) { setDbWords([]); setWordsError(null); setLoadingWords(false); return; }
     setDbWords([]);
+    setWordsError(null);
     setLoadingWords(true);
-    fetch("/api/words")
-      .then((r) => r.json())
-      .then(({ words }) => setDbWords(words || []))
-      .catch(() => {})
-      .finally(() => setLoadingWords(false));
+    // A load that fails must not read as "you have saved no words yet". An
+    // empty list is the app's normal, unremarkable state, so swallowing the
+    // failure here hides it completely — which is how a deployment whose
+    // database was missing a table looked like a working, empty account.
+    (async () => {
+      try {
+        const r = await fetch("/api/words");
+        if (!r.ok) throw await responseError(r, "Could not load your saved words");
+        const { words } = await r.json();
+        setDbWords(words || []);
+      } catch (e) {
+        console.error("load words failed", e);
+        setWordsError(e.message || "Could not load your saved words");
+      } finally {
+        setLoadingWords(false);
+      }
+    })();
   }, [userId]);
 
   // bundleId is the bundle the reader is collecting into, or null. The server
@@ -96,7 +110,7 @@ export function useWords(userId) {
   };
 
   return {
-    dbWords, loadingWords, saveWord, updateWord, removeWord, restoreWord,
+    dbWords, loadingWords, wordsError, saveWord, updateWord, removeWord, restoreWord,
     addWordToBundle, removeWordFromBundle, forgetBundle, restoreBundle,
   };
 }

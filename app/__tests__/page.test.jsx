@@ -523,3 +523,117 @@ describe("bundles", () => {
     expect(screen.queryByRole("button", { name: /^Kotimaa \(/ })).toBeNull();
   });
 });
+
+describe("a deployment whose database is missing the migration", () => {
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  /** Both list routes 503 the way the schema guard makes them. */
+  function unmigrated() {
+    const schemaError = {
+      ok: false, status: 503,
+      json: () => Promise.resolve({
+        error: "This deployment's database is missing a table the app needs — run db/schema.sql against it.",
+        schemaOutOfDate: true,
+      }),
+    };
+    const fetchMock = vi.fn((url) => {
+      if (String(url).startsWith("/api/words") || String(url).startsWith("/api/bundles")) {
+        return Promise.resolve(schemaError);
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("says what is wrong instead of looking like an empty account", async () => {
+    // Before this, the only hint was that the word counters were missing —
+    // which is indistinguishable from having saved no words yet.
+    unmigrated();
+    render(<Luku />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/db\/schema\.sql/);
+  });
+
+  it("still lets the reader scan and read", async () => {
+    // The vocabulary is unavailable; the rest of the app is not, so it is not
+    // replaced by an error screen.
+    unmigrated();
+    render(<Luku />);
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("Photograph a Finnish page")).toBeTruthy();
+  });
+
+  it("does not offer to dismiss a failure that dismissing cannot fix", async () => {
+    unmigrated();
+    render(<Luku />);
+
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+  });
+
+  it("shows nothing once the migration has been run", async () => {
+    mockApi({ words: [WORD] });
+    render(<Luku />);
+
+    await screen.findByRole("button", { name: "1 words" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("a bundle action that fails", () => {
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  const KOTIMAA = { id: 10, name: "Kotimaa" };
+  const WORDS = [{ ...WORD, id: 5, base: "koira", translations: ["dog"], bundle_ids: [] }];
+
+  /** Loads fine, but refuses the membership edit. */
+  function patchFails() {
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "PATCH") {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      }
+      if (String(url).startsWith("/api/bundles")) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ bundles: [KOTIMAA] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: WORDS }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("reports the failure and puts the tag back", async () => {
+    patchFails();
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add koira to a bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Kotimaa" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/could not add that word/i);
+    // Rolled back: the word is offered to the bundle again, not shown in it.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add koira to a bundle" })).toBeTruthy());
+  });
+
+  it("can be dismissed, unlike a failed load", async () => {
+    patchFails();
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add koira to a bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Kotimaa" }));
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

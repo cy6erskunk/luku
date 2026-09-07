@@ -1,5 +1,5 @@
 import { getAuth } from "@/lib/auth/server";
-import { getDb } from "@/lib/db";
+import { getDb, withSchemaGuard } from "@/lib/db";
 import {
   createBundle,
   deleteBundle,
@@ -13,8 +13,10 @@ export async function GET() {
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const bundles = await listBundles(getDb(), user.id);
-  return Response.json({ bundles });
+  return withSchemaGuard(async () => {
+    const bundles = await listBundles(getDb(), user.id);
+    return Response.json({ bundles });
+  });
 }
 
 export async function POST(request) {
@@ -26,10 +28,12 @@ export async function POST(request) {
   const clean = normalizeBundleName(name);
   if (!clean) return Response.json({ error: "Invalid name" }, { status: 400 });
 
-  // Creating an existing name returns that bundle rather than 409: the picker
-  // asks for "a bundle called X", and getting it is the answer either way.
-  const bundle = await createBundle(getDb(), user.id, clean);
-  return Response.json({ bundle });
+  return withSchemaGuard(async () => {
+    // Creating an existing name returns that bundle rather than 409: the picker
+    // asks for "a bundle called X", and getting it is the answer either way.
+    const bundle = await createBundle(getDb(), user.id, clean);
+    return Response.json({ bundle });
+  });
 }
 
 export async function DELETE(request) {
@@ -46,9 +50,11 @@ export async function DELETE(request) {
     return Response.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  // Only the grouping goes; the words keep their translations and their SRS
-  // schedule, and stay in any other bundle they belong to.
-  const deleted = await deleteBundle(getDb(), user.id, id);
-  if (!deleted) return Response.json({ error: "Not found" }, { status: 404 });
-  return Response.json({ ok: true });
+  return withSchemaGuard(async () => {
+    // Only the grouping goes; the words keep their translations and their SRS
+    // schedule, and stay in any other bundle they belong to.
+    const deleted = await deleteBundle(getDb(), user.id, id);
+    if (!deleted) return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ ok: true });
+  });
 }

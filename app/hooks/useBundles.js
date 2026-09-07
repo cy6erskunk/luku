@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { responseError } from "../lib/utils.js";
 
 /** The bundle words are being collected into, remembered across reloads so a
  *  reading session survives a refresh mid-page. */
@@ -14,6 +15,7 @@ function readActiveId() {
 export function useBundles(userId) {
   const [bundles, setBundles] = useState([]);
   const [loadingBundles, setLoadingBundles] = useState(true);
+  const [bundlesError, setBundlesError] = useState(null);
   const [activeBundleId, _setActiveBundleId] = useState(readActiveId);
 
   const setActiveBundleId = useCallback((id) => {
@@ -25,14 +27,26 @@ export function useBundles(userId) {
   }, []);
 
   useEffect(() => {
-    if (!userId) { setBundles([]); setLoadingBundles(false); return; }
+    if (!userId) { setBundles([]); setBundlesError(null); setLoadingBundles(false); return; }
     setBundles([]);
+    setBundlesError(null);
     setLoadingBundles(true);
-    fetch("/api/bundles")
-      .then((r) => r.json())
-      .then(({ bundles: rows }) => setBundles(rows || []))
-      .catch(() => {})
-      .finally(() => setLoadingBundles(false));
+    // Reported rather than swallowed, for the same reason as the word list: an
+    // empty list of bundles is a perfectly ordinary state, so a silent failure
+    // is indistinguishable from having created none.
+    (async () => {
+      try {
+        const r = await fetch("/api/bundles");
+        if (!r.ok) throw await responseError(r, "Could not load your bundles");
+        const { bundles: rows } = await r.json();
+        setBundles(rows || []);
+      } catch (e) {
+        console.error("load bundles failed", e);
+        setBundlesError(e.message || "Could not load your bundles");
+      } finally {
+        setLoadingBundles(false);
+      }
+    })();
   }, [userId]);
 
   // The remembered id can name a bundle that is no longer there: deleted in
@@ -77,5 +91,5 @@ export function useBundles(userId) {
     }
   };
 
-  return { bundles, loadingBundles, activeBundleId, setActiveBundleId, createBundle, deleteBundle };
+  return { bundles, loadingBundles, bundlesError, activeBundleId, setActiveBundleId, createBundle, deleteBundle };
 }

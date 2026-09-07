@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
 import { MAX_BUNDLE_NAME } from "@/lib/shared/bundleName.js";
 
@@ -7,12 +7,23 @@ const mocks = vi.hoisted(() => ({ session: null, sql: null }));
 vi.mock("@/lib/auth/server", () => ({
   getAuth: () => ({ getSession: () => Promise.resolve({ data: mocks.session }) }),
 }));
-vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
+// Only getDb is faked: withSchemaGuard is the behaviour under test in the
+// "schema out of date" cases below, so it has to be the real one.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDb: () => mocks.sql,
+}));
 
 const { GET, POST, DELETE } = await import("../route.js");
 
 const postRequest = (body) => ({ json: () => Promise.resolve(body) });
 const deleteRequest = (query) => ({ url: `https://luku.test/api/bundles${query}` });
+
+function undefinedTable() {
+  const e = new Error('relation "bundles" does not exist');
+  e.code = "42P01";
+  return e;
+}
 
 beforeEach(() => {
   mocks.session = { user: { id: "u1" } };
@@ -110,5 +121,34 @@ describe("DELETE /api/bundles", () => {
     mocks.sql = fakeSql([[]]);
     const res = await DELETE(deleteRequest("?id=4"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("a database the migration has not been run against", () => {
+  beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("answers the bundle list with a 503 that names the fix", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await GET();
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/db\/schema\.sql/);
+  });
+
+  it("answers a create the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await POST(postRequest({ name: "Kotimaa" }));
+    expect(res.status).toBe(503);
+  });
+
+  it("answers a delete the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await DELETE(deleteRequest("?id=4"));
+    expect(res.status).toBe(503);
+  });
+
+  it("lets an unrelated database failure stay a 500", async () => {
+    mocks.sql = fakeSql([new Error("connection reset")]);
+    await expect(GET()).rejects.toThrow("connection reset");
   });
 });
