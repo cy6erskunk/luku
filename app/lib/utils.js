@@ -83,6 +83,28 @@ export function wordForms(w) {
   return Array.isArray(w?.forms) ? w.forms : [];
 }
 
+/** Array-guarded accessor for the bundles a word belongs to. A word saved
+ *  before bundles existed — or one just returned by an older response — has no
+ *  bundle_ids at all, and belongs to none. */
+export function wordBundleIds(w) {
+  return Array.isArray(w?.bundle_ids) ? w.bundle_ids : [];
+}
+
+export function inBundle(w, bundleId) {
+  return bundleId != null && wordBundleIds(w).includes(bundleId);
+}
+
+/** Fisher-Yates on a copy: practice passes want a different order each time
+ *  without disturbing the caller's list. */
+export function shuffled(items) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 export function sentenceOf(text, word) {
   const t = dehyphenate(text);
   return (t.match(/[^.!?\n]+[.!?]*/g) || [t]).find((s) => s.toLowerCase().includes(word.toLowerCase())) || t.slice(0, 120);

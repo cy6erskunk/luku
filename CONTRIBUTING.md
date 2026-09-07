@@ -49,6 +49,9 @@ npm run telegram:status   # what webhook Telegram currently has registered
 - `app/api/` holds the route handlers.
 - Code both the web app and the Telegram bot need lives in `lib/reviews.js`,
   so a card graded in either place moves through the same path.
+- Word bundles live in `lib/bundles.js` (queries), `app/api/bundles/route.js`
+  and `app/hooks/useBundles.js`. `CLAUDE.md` explains why membership is a join
+  table and why every membership write scopes both sides in one statement.
 
 ## Making changes
 

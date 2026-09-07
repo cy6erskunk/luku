@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import TranslationPopup from "./TranslationPopup.jsx";
+import BundlePicker from "./BundlePicker.jsx";
 import { Bp, Bg } from "../lib/styles.js";
 
 export default function ReadStage({
@@ -7,6 +8,7 @@ export default function ReadStage({
   popup,
   ocrSource, busy, err,
   loadingWords, dueWords, newWords = [],
+  bundleStats = [], activeBundleId, onSelectBundle, onCreateBundle,
   onWord, onAddWord, onRescanWithAI, onStartReview, onStartNewReview, onAddApiKey,
 }) {
   const containerRef = useRef();
@@ -33,6 +35,21 @@ export default function ReadStage({
         ))}
       </div>
 
+      {/* This is where words are actually added, so the bundle they land in
+          stays changeable mid-page rather than only before the scan. */}
+      {onSelectBundle && (
+        <div style={{ marginBottom: 14 }}>
+          <BundlePicker
+            bundles={bundleStats}
+            activeBundleId={activeBundleId}
+            onSelect={onSelectBundle}
+            onCreate={onCreateBundle}
+            label="Adding words to"
+            counts={Object.fromEntries(bundleStats.map((b) => [b.id, b.wordCount]))}
+            maxWidth="100%"
+          />
+        </div>
+      )}
       {ocrSource === "local" && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 9, padding: "8px 13px", marginBottom: 14, fontSize: 12 }}>
           <span style={{ color: "#6b645e" }}>Scanned locally with Tesseract</span>

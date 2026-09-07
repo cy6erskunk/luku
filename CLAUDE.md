@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Luku** is an AI-powered Finnish language learning app. Users photograph Finnish text, tap words for instant translations, and review vocabulary with flashcards.
+**Luku** is an AI-powered Finnish language learning app. Users photograph Finnish text, tap words for instant translations, group them into named bundles, and review vocabulary with flashcards.
 
 ## Tech Stack
 
@@ -41,7 +41,8 @@ app/
 ├── hooks/
 │   ├── useApiKey.js            # Saved API key with localStorage sync
 │   ├── useSession.js           # Per-scan translation session with localStorage sync
-│   ├── useWords.js             # DB word list: fetch, save, update, remove/restore
+│   ├── useWords.js             # DB word list: fetch, save, update, remove/restore, bundle membership
+│   ├── useBundles.js           # Named word bundles + the active one (localStorage)
 │   ├── useReview.js            # Flashcard queue: grading, self-correction, reset
 │   └── useImageProcessing.js  # File pick, crop UI, Tesseract OCR, AI rescan
 ├── components/
@@ -49,7 +50,9 @@ app/
 │   ├── ReadStage.jsx           # Stage 1 — tappable text + TranslationPopup
 │   ├── ReviewStage.jsx         # Stage 2 — flashcard review
 │   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
-│   ├── WordList.jsx            # Full word-list overlay (all stages)
+│   ├── WordList.jsx            # Full word-list overlay (all stages), filtered by bundle
+│   ├── BundlePicker.jsx        # Select or create the bundle words are collected into
+│   ├── BundleReview.jsx        # Start a review of one bundle by name
 │   ├── ApiKeyScreen.jsx        # API key entry screen
 │   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
 │   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / key / sign out)
@@ -57,7 +60,8 @@ app/
 │   └── LukuLogo.jsx            # SVG logo
 └── api/
     ├── claude/route.js         # Server proxy for Anthropic API
-    ├── words/route.js          # CRUD for saved vocabulary
+    ├── words/route.js          # CRUD for saved vocabulary (PATCH edits bundle membership)
+    ├── bundles/route.js        # List / create / delete word bundles
     ├── reviews/route.js        # SRS grading endpoint
     ├── auth/[...path]/route.js # Neon Auth catch-all
     └── telegram/
@@ -68,10 +72,12 @@ app/
 lib/                            # Server-only (except shared/); app/lib/ is the client half
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
-│   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   └── bundleName.js           # Bundle-name normalisation, used by the route and the picker
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
+├── bundles.js                  # Bundle CRUD and word_bundles membership writes
 ├── auth/server.js              # getAuth()
 └── telegram/
     ├── api.js                  # tgCall() and message helpers
@@ -98,11 +104,12 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 |------|------|
 | `useApiKey` | `savedKey` + localStorage persistence |
 | `useSession` | Per-scan translation cache + localStorage persistence |
-| `useWords` | `dbWords`, `loadingWords`, word CRUD |
+| `useWords` | `dbWords`, `loadingWords`, word CRUD, bundle membership |
+| `useBundles` | `bundles`, `activeBundleId` (localStorage), create/delete |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
-Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleScanAnother`, `onWord`) are composed in `page.jsx`.
+Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleStartBundleReview`, `handleDeleteBundle`, `handleScanAnother`, `onWord`) are composed in `page.jsx`. `bundleStats` — each bundle plus its word and due counts — is derived there from `dbWords` rather than fetched, so an optimistic add or delete moves the counts at once and a bundle review always offers exactly what it will walk.
 
 ### Key utility functions (`app/lib/`)
 
@@ -118,10 +125,42 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `dehyphenate()` (`utils.js`) | Rejoins words split across lines; `sentenceOf()` runs it first so context is a whole sentence |
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
+| `wordBundleIds()` / `inBundle()` (`utils.js`) | Array-guarded accessor for a word's bundles, and a membership test that treats "no bundle" as matching nothing |
+| `shuffled()` (`utils.js`) | Fisher-Yates on a copy, for the practice passes |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
 | `savedWordEntry()` (`utils.js`) | Shapes a saved word into popup fields, so tapping a word already on the list shows its stored translation immediately — while the form lookup runs, or without an API key at all |
 | `Bp` / `Bg` (`styles.js`) | Shared primary and ghost button styles |
 | `authClient` (`authClient.js`) | Neon Auth browser client |
+
+### Word bundles
+
+A bundle is a named group of words — normally "the words from this page".
+
+- Membership is **many-to-many** (`word_bundles`), not a column on `words`.
+  Words are unique per `(user_id, base)`, so a word met again on a second page
+  has to join that page's bundle without leaving the first.
+- The picker sets an *active* bundle, remembered in `localStorage`. Every word
+  added while it is set goes in, in the same request that saves the word —
+  `POST /api/words` takes an optional `bundleId`.
+- Names are unique per user **case-insensitively**, enforced by an expression
+  index. That index is also the `ON CONFLICT` target that makes "create a
+  bundle called X" one idempotent statement: the driver has no transaction, so
+  a select-then-insert pair could otherwise produce two bundles with the same
+  name.
+- Both membership writes scope *both* sides to the caller in the same statement
+  as the write. A forged bundle id must not be able to attach someone else's
+  word, and there is no transaction to check ownership in beforehand. Both use
+  a no-op `DO UPDATE` rather than `DO NOTHING`, so "already a member" still
+  returns a row and stays distinguishable from "not yours".
+- Deleting a bundle deletes the grouping only; the words keep their
+  translations, their SRS schedule and any other bundle. `ON DELETE CASCADE` on
+  both foreign keys is what makes the single-statement deletes complete.
+- Reviewing a bundle is a client-side filter over `dbWords`, so it needs no new
+  query. Due cards go through the normal SRS pass; a bundle with nothing due
+  gets a practice pass instead.
+- **The Telegram bot is bundle-unaware** — it reviews everything that is due,
+  as before. Scoping a chat session to a bundle would need selection state the
+  stateless review flow deliberately does not keep.
 
 ### Telegram bot
 

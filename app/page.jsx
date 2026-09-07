@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, inBundle, shuffled } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -17,6 +17,7 @@ import { useApiKey } from "./hooks/useApiKey.js";
 import { useServerKey } from "./hooks/useServerKey.js";
 import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
+import { useBundles } from "./hooks/useBundles.js";
 import { useReview } from "./hooks/useReview.js";
 import { useImageProcessing } from "./hooks/useImageProcessing.js";
 
@@ -61,6 +62,7 @@ export default function Luku() {
   const deletingRef = useRef(new Set());
 
   const words = useWords(user?.id);
+  const bundles = useBundles(user?.id);
 
   const handleTextReady = useCallback((rawText, { resetSession = false } = {}) => {
     setText(rawText);
@@ -116,6 +118,18 @@ export default function Luku() {
     ? [...words.dbWords].sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0)).slice(0, 5)
     : [];
 
+  // Counts come from the word list already on screen rather than from the
+  // server, so an optimistic add or delete moves them at once and a bundle
+  // review always offers exactly what the review would walk.
+  const bundleStats = bundles.bundles.map((b) => {
+    const inIt = words.dbWords.filter((w) => inBundle(w, b.id));
+    return {
+      ...b,
+      wordCount: inIt.length,
+      dueCount: inIt.filter((w) => new Date(w.next_review_at) <= new Date()).length,
+    };
+  });
+
   const handleStartReview = () => {
     if (words.loadingWords || review.grading) return;
     review.startReview(dueWords);
@@ -166,13 +180,51 @@ export default function Luku() {
     const pool = [...words.dbWords]
       .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
       .slice(0, 15);
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    review.startRepeat(pool.slice(0, 5));
+    review.startRepeat(shuffled(pool).slice(0, 5));
     setPopup(null);
     setStage(2);
+  };
+
+  /**
+   * Review one bundle by name. Cards that are due go through the normal SRS
+   * pass; a bundle with nothing due gets a practice pass over its words, the
+   * same distinction the whole-vocabulary buttons make.
+   */
+  const handleStartBundleReview = (bundleId) => {
+    if (words.loadingWords || review.grading) return;
+    const bundle = bundles.bundles.find((b) => b.id === bundleId);
+    if (!bundle) return;
+    const inIt = words.dbWords.filter((w) => inBundle(w, bundleId));
+    if (inIt.length === 0) return;
+    const due = inIt.filter((w) => new Date(w.next_review_at) <= new Date());
+    if (due.length > 0) review.startReview(due, bundle.name);
+    else review.startRepeat(shuffled(inIt).slice(0, 20), bundle.name);
+    setPopup(null);
+    setStage(2);
+  };
+
+  // The server cascades the memberships away with the bundle; this drops them
+  // from the copy on screen so the tags and filters go with it. useBundles puts
+  // a refused delete's bundle back, so the memberships have to come back too —
+  // otherwise the restored bundle would look empty until a reload.
+  const handleDeleteBundle = async (bundleId) => {
+    const affected = words.dbWords.filter((w) => inBundle(w, bundleId)).map((w) => w.id);
+    words.forgetBundle(bundleId);
+    try { await bundles.deleteBundle(bundleId); }
+    catch (e) {
+      console.error("delete bundle failed", e);
+      words.restoreBundle(bundleId, affected);
+    }
+  };
+
+  const handleAddToBundle = async (wordId, bundleId) => {
+    try { await words.addWordToBundle(wordId, bundleId); }
+    catch (e) { console.error("add to bundle failed", e); }
+  };
+
+  const handleRemoveFromBundle = async (wordId, bundleId) => {
+    try { await words.removeWordFromBundle(wordId, bundleId); }
+    catch (e) { console.error("remove from bundle failed", e); }
   };
 
   const handleScanAnother = () => {
@@ -255,7 +307,7 @@ export default function Luku() {
     setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
     try {
-      const saved = await words.saveWord(entry);
+      const saved = await words.saveWord(entry, bundles.activeBundleId);
       if (saved?.id != null) {
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -381,7 +433,20 @@ export default function Luku() {
         </div>
       </div>
 
-      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} />}
+      {stage === 0 && (
+        <ScanStage
+          image={image}
+          dueWords={dueWords}
+          onStartReview={handleStartReview}
+          repeatWords={repeatWords}
+          onStartRepeat={handleStartRepeat}
+          bundleStats={bundleStats}
+          activeBundleId={bundles.activeBundleId}
+          onSelectBundle={bundles.setActiveBundleId}
+          onCreateBundle={bundles.createBundle}
+          onStartBundleReview={handleStartBundleReview}
+        />
+      )}
       {stage === 1 && (
         <ReadStage
           tokens={tokens}
@@ -396,6 +461,10 @@ export default function Luku() {
           loadingWords={words.loadingWords}
           dueWords={dueWords}
           newWords={newWords}
+          bundleStats={bundleStats}
+          activeBundleId={bundles.activeBundleId}
+          onSelectBundle={bundles.setActiveBundleId}
+          onCreateBundle={bundles.createBundle}
           onWord={onWord}
           onAddWord={handleAddWord}
           onRescanWithAI={image.rescanWithAI}
@@ -413,6 +482,7 @@ export default function Luku() {
           grading={review.grading}
           isRepeat={review.isRepeat}
           isNewReview={review.isNewReview}
+          scope={review.scope}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
@@ -425,11 +495,21 @@ export default function Luku() {
           onStartReview={handleStartReview}
           repeatWords={repeatWords}
           onStartRepeat={handleStartRepeat}
+          bundleStats={bundleStats}
+          onStartBundleReview={handleStartBundleReview}
         />
       )}
 
       {showWordList && (
-        <WordList words={words.dbWords} onClose={() => setShowWordList(false)} onDelete={handleDeleteWord} />
+        <WordList
+          words={words.dbWords}
+          bundles={bundleStats}
+          onClose={() => setShowWordList(false)}
+          onDelete={handleDeleteWord}
+          onAddToBundle={handleAddToBundle}
+          onRemoveFromBundle={handleRemoveFromBundle}
+          onDeleteBundle={handleDeleteBundle}
+        />
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}

@@ -54,8 +54,14 @@ const WORD = {
 const signedIn = () => { mocks.session = { data: { user: { id: "u1" } }, isPending: false }; };
 
 /** Routes by URL and method so a test can fail one call and not the others. */
-function mockApi({ words = [], deleteOk = true, saved = null } = {}) {
+function mockApi({ words = [], bundles = [], created = null, deleteOk = true, saved = null } = {}) {
   const fetchMock = vi.fn((url, opts = {}) => {
+    if (String(url).startsWith("/api/bundles") && opts.method === "POST") {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ bundle: created }) });
+    }
+    if (String(url).startsWith("/api/bundles")) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ bundles, ok: true }) });
+    }
     if (String(url).startsWith("/api/words") && opts.method === "POST") {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word: saved }) });
     }
@@ -399,3 +405,121 @@ describe("reading a scanned page", () => {
   });
 });
 
+describe("bundles", () => {
+  const KOTIMAA = { id: 10, name: "Kotimaa" };
+  const OTHER = { id: 20, name: "Luku 3" };
+  const IN_KOTIMAA = { ...WORD, id: 5, base: "koira", translations: ["dog"], bundle_ids: [10] };
+  const ELSEWHERE = { ...WORD, id: 6, base: "kissa", translations: ["cat"], bundle_ids: [20] };
+
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  it("offers a bundle to review by name, with its due count", async () => {
+    mockApi({ words: [IN_KOTIMAA, ELSEWHERE], bundles: [KOTIMAA, OTHER] });
+    render(<Luku />);
+
+    expect(await screen.findByText("Kotimaa")).toBeTruthy();
+    expect(screen.getAllByText("1 due")).toHaveLength(2);
+  });
+
+  it("reviews only the words in the bundle that was picked", async () => {
+    mockApi({ words: [IN_KOTIMAA, ELSEWHERE], bundles: [KOTIMAA, OTHER] });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByText("Kotimaa"));
+
+    // One card, and it is the bundle's — not the other bundle's word, which is
+    // just as overdue.
+    expect(screen.getByText("1 / 1")).toBeTruthy();
+    expect(screen.getByText("koira")).toBeTruthy();
+    expect(screen.queryByText("kissa")).toBeNull();
+  });
+
+  it("names the bundle on the review screen", async () => {
+    mockApi({ words: [IN_KOTIMAA], bundles: [KOTIMAA] });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByText("Kotimaa"));
+
+    // The scan stage is gone, so the one "Kotimaa" left is the scope chip
+    // naming what this session is a review of.
+    expect(screen.getAllByText("Kotimaa")).toHaveLength(1);
+    expect(screen.getByText("Review")).toBeTruthy();
+  });
+
+  it("practices a bundle with nothing due instead of showing an empty session", async () => {
+    const notDue = { ...IN_KOTIMAA, next_review_at: "2999-01-01T00:00:00.000Z" };
+    mockApi({ words: [notDue], bundles: [KOTIMAA] });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByText("Kotimaa"));
+
+    expect(screen.getByText("Extra practice")).toBeTruthy();
+    expect(screen.getByText("1 / 1")).toBeTruthy();
+  });
+
+  it("saves a word into the bundle being collected into", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    localStorage.setItem("luku_bundle", "10");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    const fetchMock = mockApi({
+      bundles: [KOTIMAA],
+      saved: { ...WORD, id: 2, base: "koira", translations: ["dog"], pos: "noun", bundle_ids: [10] },
+    });
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    ocrLocal.mockResolvedValue("Koira juoksee.");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(([url, opts]) => String(url) === "/api/words" && opts?.method === "POST");
+      expect(JSON.parse(post[1].body).bundleId).toBe(10);
+    });
+  });
+
+  it("collects into no bundle when none is picked", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    const fetchMock = mockApi({ bundles: [KOTIMAA], saved: { ...WORD, id: 2, base: "koira", translations: ["dog"] } });
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    ocrLocal.mockResolvedValue("Koira juoksee.");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(([url, opts]) => String(url) === "/api/words" && opts?.method === "POST");
+      expect(JSON.parse(post[1].body).bundleId).toBeNull();
+    });
+  });
+
+  it("keeps the words when a bundle is deleted from the word list", async () => {
+    const fetchMock = mockApi({ words: [IN_KOTIMAA], bundles: [KOTIMAA] });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kotimaa (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete bundle$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete bundle, keep words/i }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url) === "/api/bundles?id=10" && opts?.method === "DELETE")).toBe(true);
+    });
+    // The word is still listed, now in no bundle at all.
+    expect(screen.getByText("koira")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Kotimaa \(/ })).toBeNull();
+  });
+});

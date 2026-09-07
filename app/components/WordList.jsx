@@ -1,16 +1,38 @@
 "use client";
 import { useState } from "react";
-import { wordForms } from "../lib/utils.js";
+import { wordForms, wordBundleIds } from "../lib/utils.js";
 import { useDialog } from "../hooks/useDialog.js";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
-export default function WordList({ words, onClose, onDelete }) {
-  const [pendingId, setPendingId] = useState(null);
+/** Filter values that are not a bundle id. */
+const ALL = "all";
+const UNBUNDLED = "none";
 
-  const handleBackdropClick = () => { setPendingId(null); onClose(); };
+export default function WordList({ words, bundles = [], onClose, onDelete, onAddToBundle, onRemoveFromBundle, onDeleteBundle }) {
+  const [pendingId, setPendingId] = useState(null);
+  const [filter, setFilter] = useState(ALL);
+  // The word whose "add to bundle" list is expanded, if any.
+  const [assigningId, setAssigningId] = useState(null);
+  const [pendingBundleDelete, setPendingBundleDelete] = useState(false);
+
+  const clearTransient = () => { setPendingId(null); setAssigningId(null); setPendingBundleDelete(false); };
+  const handleBackdropClick = () => { clearTransient(); onClose(); };
   const panelRef = useDialog(handleBackdropClick);
-  const handlePanelClick = () => setPendingId(null);
+
+  const byId = new Map(bundles.map((b) => [b.id, b]));
+  const unbundledCount = words.filter((w) => wordBundleIds(w).length === 0).length;
+  const shown = filter === ALL ? words
+    : filter === UNBUNDLED ? words.filter((w) => wordBundleIds(w).length === 0)
+    : words.filter((w) => wordBundleIds(w).includes(filter));
+  const filteredBundle = filter !== ALL && filter !== UNBUNDLED ? byId.get(filter) : null;
+
+  const chip = (active) => ({
+    background: active ? "rgba(74,124,158,0.15)" : "rgba(255,255,255,0.02)",
+    border: `1px solid ${active ? "rgba(74,124,158,0.4)" : "rgba(255,255,255,0.08)"}`,
+    color: active ? "#7ab4d4" : "#6b645e",
+    borderRadius: 20, padding: "4px 11px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif", whiteSpace: "nowrap",
+  });
 
   return (
     <>
@@ -26,17 +48,56 @@ export default function WordList({ words, onClose, onDelete }) {
         ref={panelRef}
         tabIndex={-1}
         aria-labelledby="wordlist-heading"
-        onClick={(e) => { e.stopPropagation(); handlePanelClick(); }}
+        onClick={(e) => { e.stopPropagation(); clearTransient(); }}
         style={{ background: "#181d2a", borderRadius: 18, width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", alignSelf: "center", animation: "wl-fadeUp 0.15s ease" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
+
+        {bundles.length > 0 && (
+          <div style={{ padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            <button onClick={() => setFilter(ALL)} style={chip(filter === ALL)}>All ({words.length})</button>
+            {bundles.map((b) => (
+              <button key={b.id} onClick={() => setFilter(b.id)} style={chip(filter === b.id)}>
+                {b.name} ({words.filter((w) => wordBundleIds(w).includes(b.id)).length})
+              </button>
+            ))}
+            {unbundledCount > 0 && (
+              <button onClick={() => setFilter(UNBUNDLED)} style={chip(filter === UNBUNDLED)}>Unbundled ({unbundledCount})</button>
+            )}
+            {filteredBundle && onDeleteBundle && (
+              // Deletes the grouping only. Saying so on the button matters:
+              // "delete" next to a list of words reads as deleting the words.
+              pendingBundleDelete
+                ? <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 5, marginLeft: "auto" }}>
+                    <button
+                      onClick={() => { onDeleteBundle(filteredBundle.id); setFilter(ALL); setPendingBundleDelete(false); }}
+                      style={{ background: "rgba(180,80,80,0.15)", border: "1px solid rgba(180,80,80,0.45)", color: "#c48a8a", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}
+                    >
+                      Delete bundle, keep words?
+                    </button>
+                  </div>
+                : <button
+                    onClick={(e) => { e.stopPropagation(); setPendingBundleDelete(true); }}
+                    style={{ ...chip(false), marginLeft: "auto", borderColor: "rgba(180,80,80,0.25)", color: "#c48a8a" }}
+                  >
+                    Delete bundle
+                  </button>
+            )}
+          </div>
+        )}
+
         <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "8px 0" }}>
           {words.length === 0
             ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words saved yet.</div>
-            : words.map((w) => (
+            : shown.length === 0
+            ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words in this bundle yet.</div>
+            : shown.map((w) => {
+              const ids = wordBundleIds(w);
+              const unjoined = bundles.filter((b) => !ids.includes(b.id));
+              return (
               <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -51,6 +112,43 @@ export default function WordList({ words, onClose, onDelete }) {
                   {wordForms(w).length > 0 && (
                     <div style={{ fontSize: 11, color: "#4a7c9e", fontFamily: "monospace", marginTop: 2 }}>
                       {wordForms(w).map((f) => f.translation ? `${f.word} — ${f.translation}` : f.word).join(" · ")}
+                    </div>
+                  )}
+                  {bundles.length > 0 && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                      {ids.map((id) => byId.get(id)).filter(Boolean).map((b) => (
+                        <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(74,124,158,0.1)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "1px 4px 1px 8px", fontSize: 10, color: "#7ab4d4" }}>
+                          {b.name}
+                          {onRemoveFromBundle && (
+                            <button
+                              onClick={() => onRemoveFromBundle(w.id, b.id)}
+                              aria-label={`Remove ${w.base} from ${b.name}`}
+                              style={{ background: "none", border: "none", color: "#7ab4d4", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: "0 3px" }}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      {onAddToBundle && unjoined.length > 0 && (
+                        assigningId === w.id
+                          ? unjoined.map((b) => (
+                            <button
+                              key={b.id}
+                              onClick={() => { onAddToBundle(w.id, b.id); setAssigningId(null); }}
+                              style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(74,124,158,0.4)", borderRadius: 10, padding: "1px 8px", fontSize: 10, color: "#6a9ebe", cursor: "pointer", fontFamily: "Georgia,serif" }}
+                            >
+                              + {b.name}
+                            </button>
+                          ))
+                          : <button
+                              onClick={() => setAssigningId(w.id)}
+                              aria-label={`Add ${w.base} to a bundle`}
+                              style={{ background: "none", border: "1px dashed rgba(255,255,255,0.15)", borderRadius: 10, padding: "1px 8px", fontSize: 10, color: "#555", cursor: "pointer", fontFamily: "Georgia,serif" }}
+                            >
+                              + bundle
+                            </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -76,7 +174,8 @@ export default function WordList({ words, onClose, onDelete }) {
                       Delete
                     </button>}
               </div>
-            ))}
+              );
+            })}
         </div>
       </div>
     </div>

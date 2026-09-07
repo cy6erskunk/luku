@@ -101,7 +101,106 @@ describe("useWords – saveWord", () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: WORD_A }) });
     }));
     await act(() => result.current.saveWord({ original: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" }));
-    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null });
+    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null, bundleId: null });
+  });
+
+  it("sends the bundle the reader is collecting into", async () => {
+    mockFetchJson({ words: [] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let body;
+    vi.stubGlobal("fetch", vi.fn((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [4] } }) });
+    }));
+    await act(() => result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"], pos: "verb" }, 4));
+    expect(body.bundleId).toBe(4);
+    expect(result.current.dbWords[0].bundle_ids).toEqual([4]);
+  });
+});
+
+describe("useWords – bundle membership", () => {
+  const inBundle = { ...WORD_A, bundle_ids: [2] };
+
+  async function loaded(words) {
+    mockFetchJson({ words });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    return result;
+  }
+
+  it("adds a membership optimistically and keeps the server's answer", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+
+    let resolve;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => { resolve = r; })));
+    let pending;
+    act(() => { pending = result.current.addWordToBundle(1, 2); });
+    // Optimistic: the tag is there before the request comes back.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await act(async () => {
+      resolve({ ok: true, json: () => Promise.resolve({ bundleIds: [2, 5] }) });
+      await pending;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2, 5]);
+  });
+
+  it("removes a membership optimistically", async () => {
+    const result = await loaded([inBundle]);
+    mockFetchJson({ bundleIds: [] });
+    await act(() => result.current.removeWordFromBundle(1, 2));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("puts the membership back when the server refuses", async () => {
+    const result = await loaded([inBundle]);
+    mockFetch({ ok: false, status: 500 });
+    await expect(act(() => result.current.removeWordFromBundle(1, 2))).rejects.toThrow(/Failed to update bundle/);
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("sends the word, bundle and action", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    let call;
+    vi.stubGlobal("fetch", vi.fn((url, opts) => {
+      call = { url, method: opts.method, body: JSON.parse(opts.body) };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundleIds: [2] }) });
+    }));
+    await act(() => result.current.addWordToBundle(1, 2));
+    expect(call).toEqual({ url: "/api/words", method: "PATCH", body: { id: 1, bundleId: 2, action: "add" } });
+  });
+
+  it("does nothing for a word that is not on the list", async () => {
+    const result = await loaded([]);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await act(() => result.current.addWordToBundle(99, 2));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("drops a deleted bundle from every word that carried it", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2, 3] }, { ...WORD_B, bundle_ids: [3] }]);
+    act(() => result.current.forgetBundle(3));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([]);
+  });
+
+  it("puts the memberships back when the bundle delete turns out to have failed", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2, 3] }, { ...WORD_B, bundle_ids: [3] }]);
+    act(() => result.current.forgetBundle(3));
+    act(() => result.current.restoreBundle(3, [1, 2]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2, 3]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([3]);
+  });
+
+  it("restores only the words that actually carried the bundle", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [3] }, { ...WORD_B, bundle_ids: [] }]);
+    act(() => result.current.forgetBundle(3));
+    act(() => result.current.restoreBundle(3, [1]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([3]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([]);
   });
 });
 

@@ -1,7 +1,12 @@
 import Cropper from "react-easy-crop";
 import { Bp, Bg } from "../lib/styles.js";
+import BundlePicker from "./BundlePicker.jsx";
+import BundleReview from "./BundleReview.jsx";
 
-export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat }) {
+export default function ScanStage({
+  image, dueWords, onStartReview, repeatWords, onStartRepeat,
+  bundleStats = [], activeBundleId, onSelectBundle, onCreateBundle, onStartBundleReview,
+}) {
   const {
     busy, step, err, preview, ocrProgress,
     cropImage, crop, setCrop, zoom, setZoom, croppedAreaPixels, cropAspect, setCropAspect,
@@ -72,6 +77,17 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           [{ bottom: 8, right: 8 }, { borderBottom: "2px solid #4a7c9e", borderRight: "2px solid #4a7c9e", borderRadius: "0 0 3px 0" }],
         ].map(([p, b], i) => <div key={i} style={{ position: "absolute", width: 18, height: 18, ...p, ...b }} />)}
       </div>
+      {/* Chosen before the scan, so every word added while reading the page
+          lands in the same bundle without a second thought. */}
+      <div style={{ width: "100%", maxWidth: 400, marginBottom: 14 }}>
+        <BundlePicker
+          bundles={bundleStats}
+          activeBundleId={activeBundleId}
+          onSelect={onSelectBundle}
+          onCreate={onCreateBundle}
+          counts={Object.fromEntries(bundleStats.map((b) => [b.id, b.wordCount]))}
+        />
+      </div>
       <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
       <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
       <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
@@ -104,6 +120,9 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
         <button onClick={onStartRepeat} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13, borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
           Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
         </button>
+      )}
+      {onStartBundleReview && (
+        <BundleReview bundles={bundleStats} onStartBundleReview={onStartBundleReview} />
       )}
     </div>
   );

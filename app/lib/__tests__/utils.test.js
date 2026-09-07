@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, wordBundleIds, inBundle, shuffled, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -316,5 +316,49 @@ describe("savedWordEntry", () => {
 
   it("returns null when there is no saved word", () => {
     expect(savedWordEntry(null, "koira")).toBeNull();
+  });
+});
+
+describe("wordBundleIds", () => {
+  it("returns the stored ids when present", () => {
+    expect(wordBundleIds({ base: "juosta", bundle_ids: [2, 5] })).toEqual([2, 5]);
+  });
+
+  it("returns an empty array for a word saved before bundles existed", () => {
+    for (const w of [{ base: "juosta" }, { bundle_ids: null }, { bundle_ids: "2" }, null, undefined]) {
+      expect(wordBundleIds(w)).toEqual([]);
+    }
+  });
+});
+
+describe("inBundle", () => {
+  it("is true only for a bundle the word actually carries", () => {
+    const w = { base: "juosta", bundle_ids: [2, 5] };
+    expect(inBundle(w, 2)).toBe(true);
+    expect(inBundle(w, 3)).toBe(false);
+  });
+
+  it("is false for no bundle at all, rather than matching every word", () => {
+    // "No bundle selected" must not read as "every word is in it".
+    expect(inBundle({ bundle_ids: [2] }, null)).toBe(false);
+    expect(inBundle({ bundle_ids: [] }, undefined)).toBe(false);
+  });
+});
+
+describe("shuffled", () => {
+  it("keeps every item exactly once", () => {
+    const items = [1, 2, 3, 4, 5];
+    expect([...shuffled(items)].sort((a, b) => a - b)).toEqual(items);
+  });
+
+  it("leaves the caller's array untouched", () => {
+    const items = [1, 2, 3, 4, 5];
+    shuffled(items);
+    expect(items).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("handles the empty and single-item cases", () => {
+    expect(shuffled([])).toEqual([]);
+    expect(shuffled([7])).toEqual([7]);
   });
 });
