@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { MAX_BUNDLE_NAME } from "@/lib/shared/bundleName.js";
+import { MAX_BUNDLE_NAME } from "@/lib/shared/bundle.js";
 
 /**
  * Picks the bundle words are collected into while reading — an existing one by

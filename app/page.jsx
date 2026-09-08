@@ -319,13 +319,18 @@ export default function Luku() {
 
   const handleAddWord = async () => {
     if (!popup?.k) return;
-    const entry = session[popup.k];
+    // Captured up front: the reader can dismiss the popup or tap another word
+    // while the save is in flight, and the result belongs to the word that
+    // asked for it.
+    const key = popup.k;
+    const entry = session[key];
     if (!entry) return;
     // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
-    setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
+    setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
+    setActionError(null);
     try {
       const saved = await words.saveWord(entry, bundles.activeBundleId);
       if (saved?.id != null) {
@@ -344,7 +349,16 @@ export default function Luku() {
           });
         }
       }
-    } catch (e) { console.error("save word failed", e); }
+    } catch (e) {
+      console.error("save word failed", e);
+      // Nothing was saved, so the tick and the highlight have to go. Leaving
+      // them is worse than never having shown them: the popup replaces its
+      // Add button with "✓ Added to review", so the reader both believes the
+      // word is on the list and has no way to try again.
+      setSession((s) => s[key] ? { ...s, [key]: { ...s[key], added: false } } : s);
+      setPopup((p) => p?.k === key ? { ...p, added: false } : p);
+      setActionError(e.message || "Could not save that word.");
+    }
   };
 
   const handleDeleteWord = async (id) => {

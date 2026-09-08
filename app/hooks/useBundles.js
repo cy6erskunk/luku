@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { responseError } from "../lib/utils.js";
+import { isValidBundleId } from "@/lib/shared/bundle.js";
 
 /** The bundle words are being collected into, remembered across reloads so a
  *  reading session survives a refresh mid-page. */
@@ -8,7 +9,9 @@ const ACTIVE_KEY = "luku_bundle";
 function readActiveId() {
   try {
     const v = Number.parseInt(localStorage.getItem(ACTIVE_KEY) ?? "", 10);
-    return Number.isSafeInteger(v) && v > 0 ? v : null;
+    // The same bound the server applies, so a hand-edited localStorage cannot
+    // put an id into a save request that the route then rejects as a 400.
+    return isValidBundleId(v) ? v : null;
   } catch { return null; }
 }
 

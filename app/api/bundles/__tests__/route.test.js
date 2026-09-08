@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
-import { MAX_BUNDLE_NAME } from "@/lib/shared/bundleName.js";
+import { MAX_BUNDLE_NAME } from "@/lib/shared/bundle.js";
 
 const mocks = vi.hoisted(() => ({ session: null, sql: null }));
 

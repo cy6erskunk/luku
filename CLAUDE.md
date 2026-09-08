@@ -73,7 +73,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
 │   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
-│   └── bundleName.js           # Bundle-name normalisation, used by the route and the picker
+│   └── bundle.js               # Bundle name/id rules, so the client cannot hold a value the route rejects
 ├── db.js                       # getDb() -> neon(DATABASE_URL), plus withSchemaGuard()
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
@@ -186,6 +186,11 @@ Two rules keep that from happening again:
   banner. This matters most for lists whose empty state is unremarkable: any
   silent failure there is indistinguishable from success. A load error is not
   dismissible (it describes the state of the screen); a failed action is.
+- **An optimistic update is rolled back when the write fails.** The same trap
+  in a different shape: `handleAddWord` marks a word added before the save
+  lands, and the popup swaps its Add button for "✓ Added to review". Left up
+  after a failure that tells the reader the word is saved *and* takes away
+  their way to retry, so the catch restores both and reports why.
 
 ### Telegram bot
 
