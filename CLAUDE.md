@@ -9,7 +9,7 @@
 - **Framework**: Next.js 16 (App Router)
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
-- **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
+- **AI**: Anthropic Claude API (claude-haiku-4-5) via server-side proxy. One model serves both Vision OCR and word translation; the id lives in `app/api/claude/route.js`
 - **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
 - **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
 - **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)

@@ -44,6 +44,21 @@ describe("POST /api/claude", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("sends the configured model to Anthropic", async () => {
+    let capturedBody;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      capturedBody = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
+    }));
+
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], maxTokens: 400 }));
+
+    // The model is the route's main cost lever and nothing else pins it, so a
+    // swap should be a deliberate edit here rather than a silent one upstream.
+    expect(capturedBody.model).toBe("claude-haiku-4-5");
+    expect(capturedBody.max_tokens).toBe(400);
+  });
+
   it("returns 400 when neither the caller nor the environment has a key", async () => {
     const req = makeRequest({ messages: [], system: "" });
     const res = await POST(req);
