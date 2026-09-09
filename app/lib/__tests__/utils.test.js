@@ -170,8 +170,11 @@ describe("tokenize", () => {
   });
 
   it("does not join a dash between words", () => {
-    expect(tokenize("talo —\nkoira").find((t) => t.v === "talo")?.w).toBeUndefined();
-    expect(tokenize("talo-\n").find((t) => t.v === "talo")?.w).toBeUndefined();
+    // Not `find(...)?.w`: an optional chain reads "no such token" and "the
+    // token carries no join" the same way, so it would keep passing if the
+    // word stopped being tokenized at all.
+    expect(tokenize("talo —\nkoira").find((t) => t.v === "talo").w).toBeUndefined();
+    expect(tokenize("talo-\n").find((t) => t.v === "talo").w).toBeUndefined();
   });
 
   it("treats unicode and non-breaking hyphens like a plain hyphen", () => {
