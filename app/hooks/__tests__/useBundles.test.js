@@ -39,6 +39,23 @@ describe("useBundles – loading", () => {
     expect(result.current.bundles).toEqual([]);
   });
 
+  it("ignores a load that answers after the account changed", async () => {
+    let resolveFirst;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ bundles: [LUKU3] }) })));
+
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.bundles).toEqual([LUKU3]));
+
+    await act(async () => {
+      resolveFirst({ ok: true, json: () => Promise.resolve({ bundles: [KOTIMAA] }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(result.current.bundles).toEqual([LUKU3]);
+  });
+
   it("reports a failed load rather than looking like no bundles exist", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
     const { result } = renderHook(() => useBundles("user-1"));
@@ -86,6 +103,19 @@ describe("useBundles – the active bundle", () => {
     expect(result.current.activeBundleId).toBe(1);
   });
 
+  it("keeps the remembered bundle when the list fails to load", async () => {
+    // An empty list after a failure says nothing about whether the bundle
+    // still exists, so forgetting it would cost a good selection — and its
+    // localStorage entry — over a dropped connection.
+    localStorage.setItem("luku_bundle", "1");
+    mockFetch({ ok: false, status: 500, json: () => Promise.resolve({}) });
+    const { result } = renderHook(() => useBundles("user-1"));
+    await waitFor(() => expect(result.current.bundlesError).toBeTruthy());
+
+    expect(result.current.activeBundleId).toBe(1);
+    expect(localStorage.getItem("luku_bundle")).toBe("1");
+  });
+
   it("ignores a junk remembered value", async () => {
     localStorage.setItem("luku_bundle", "not-a-number");
     const result = await loaded([KOTIMAA]);
@@ -121,8 +151,8 @@ describe("useBundles – createBundle", () => {
 
   it("throws on a refused create", async () => {
     const result = await loaded([]);
-    mockFetch({ ok: false, status: 400 });
-    await expect(act(() => result.current.createBundle("  "))).rejects.toThrow("Failed to create bundle (400)");
+    mockFetch({ ok: false, status: 400, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    await expect(act(() => result.current.createBundle("  "))).rejects.toThrow(/Could not create that bundle/);
   });
 });
 
@@ -146,9 +176,20 @@ describe("useBundles – deleteBundle", () => {
 
   it("puts the bundle back when the server refuses", async () => {
     const result = await loaded([KOTIMAA, LUKU3]);
-    mockFetch({ ok: false, status: 500, statusText: "Server Error" });
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
     await expect(act(() => result.current.deleteBundle(1))).rejects.toThrow();
     expect(result.current.bundles.map((b) => b.id).sort()).toEqual([1, 2]);
+  });
+
+  it("puts the active selection back with the bundle it was on", async () => {
+    // The bundle returns, so the selection it was carrying has to return too —
+    // otherwise a refused delete still costs the reader their active bundle.
+    const result = await loaded([KOTIMAA, LUKU3]);
+    act(() => result.current.setActiveBundleId(1));
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    await expect(act(() => result.current.deleteBundle(1))).rejects.toThrow();
+    expect(result.current.activeBundleId).toBe(1);
+    expect(localStorage.getItem("luku_bundle")).toBe("1");
   });
 
   it("does nothing for a bundle it does not have", async () => {

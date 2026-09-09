@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { responseError, wordBundleIds } from "../lib/utils.js";
 
 export function useWords(userId) {
@@ -7,7 +7,11 @@ export function useWords(userId) {
   const [wordsError, setWordsError] = useState(null);
 
   useEffect(() => {
-    if (!userId) { setDbWords([]); setWordsError(null); setLoadingWords(false); return; }
+    if (!userId) { setDbWords([]); setWordsError(null); setLoadingWords(false); return undefined; }
+    // Sign out and back in as someone else and two loads are in flight at
+    // once. Whichever answers last would otherwise win, so the first account's
+    // vocabulary can land under the second account's session.
+    let cancelled = false;
     setDbWords([]);
     setWordsError(null);
     setLoadingWords(true);
@@ -20,14 +24,15 @@ export function useWords(userId) {
         const r = await fetch("/api/words");
         if (!r.ok) throw await responseError(r, "Could not load your saved words");
         const { words } = await r.json();
-        setDbWords(words || []);
+        if (!cancelled) setDbWords(words || []);
       } catch (e) {
         console.error("load words failed", e);
-        setWordsError(e.message || "Could not load your saved words");
+        if (!cancelled) setWordsError(e.message || "Could not load your saved words");
       } finally {
-        setLoadingWords(false);
+        if (!cancelled) setLoadingWords(false);
       }
     })();
+    return () => { cancelled = true; };
   }, [userId]);
 
   // bundleId is the bundle the reader is collecting into, or null. The server
@@ -57,10 +62,6 @@ export function useWords(userId) {
     setDbWords((prev) => prev.some((w) => w.id === word.id) ? prev : [...prev, word]);
   };
 
-  const setWordBundles = (id, bundleIds) => {
-    setDbWords((prev) => prev.map((w) => w.id === id ? { ...w, bundle_ids: bundleIds } : w));
-  };
-
   /** Applies one membership change to whatever the list holds at the time it
    *  runs, rather than to the copy the caller closed over. Idempotent, so
    *  re-applying an edit that already landed is a no-op. */
@@ -76,40 +77,71 @@ export function useWords(userId) {
   };
 
   /**
+   * One request at a time per membership.
+   *
+   * The optimistic update puts the inverse control on screen immediately, so
+   * the same word and bundle can be added and then removed before the first
+   * request has answered. A PATCH is several statements with no transaction
+   * around them, so run in parallel the later DELETE can land before the
+   * earlier INSERT and leave the row present after the reader removed it.
+   * Chaining by membership makes the server apply them in the order they were
+   * asked for; different memberships still go in parallel.
+   */
+  const inFlight = useRef(new Map());
+
+  const serializePerMembership = (key, run) => {
+    const previous = inFlight.current.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(run);
+    inFlight.current.set(key, next);
+    next.catch(() => {}).finally(() => {
+      if (inFlight.current.get(key) === next) inFlight.current.delete(key);
+    });
+    return next;
+  };
+
+  /**
    * Add or drop one bundle membership for a saved word, optimistically.
    *
-   * Both the update and its rollback name a single membership rather than a
-   * whole `bundle_ids` array. Two edits to the same word issued before React
-   * re-renders would otherwise compute from the same snapshot and the second
-   * would undo the first, and a rollback restoring a snapshot would take any
-   * edit made since along with it. The server answers with the word's whole
-   * membership list, which wins over the guess made here.
+   * Every step names a single membership rather than a whole `bundle_ids`
+   * array — the optimistic update, the reconcile, and the rollback alike. Two
+   * edits to the same word issued before React re-renders would otherwise
+   * compute from the same snapshot and the second would undo the first.
    */
   const changeWordBundle = async (id, bundleId, action) => {
     // A guard, not the update: a word that is not on the list has nothing to
     // send, and a stale answer here only costs a request the server 404s.
     if (!dbWords.some((w) => w.id === id)) return;
+    // Applied before the queue, so the UI answers the tap even while an
+    // earlier request for the same membership is still outstanding.
     applyBundleChange(id, bundleId, action);
-    try {
-      const r = await fetch("/api/words", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id, bundleId, action }),
-      });
-      // Carries the server's own message when it sent one — a route that
-      // explains itself is more use to the reader than the status alone.
-      if (!r.ok) throw await responseError(r, action === "add"
-        ? "Could not add that word to the bundle"
-        : "Could not take that word out of the bundle");
-      const { bundleIds } = await r.json();
-      if (Array.isArray(bundleIds)) setWordBundles(id, bundleIds);
-    } catch (e) {
-      // The inverse of what was applied. The UI only offers "add" for a bundle
-      // the word is not in and "remove" for one it is, so inverting restores
-      // exactly the state this call changed — and nothing else.
-      applyBundleChange(id, bundleId, action === "add" ? "remove" : "add");
-      throw e;
-    }
+    await serializePerMembership(`${id}:${bundleId}`, async () => {
+      try {
+        const r = await fetch("/api/words", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id, bundleId, action }),
+        });
+        // Carries the server's own message when it sent one — a route that
+        // explains itself is more use to the reader than the status alone.
+        if (!r.ok) throw await responseError(r, action === "add"
+          ? "Could not add that word to the bundle"
+          : "Could not take that word out of the bundle");
+        const { bundleIds } = await r.json();
+        // Only the membership this request settled, not the whole list it came
+        // back with. That list is a snapshot taken at the server, so applying
+        // all of it lets a slow answer about one bundle resurrect another that
+        // a faster request had already removed.
+        if (Array.isArray(bundleIds)) {
+          applyBundleChange(id, bundleId, bundleIds.includes(bundleId) ? "add" : "remove");
+        }
+      } catch (e) {
+        // The inverse of what was applied. The UI only offers "add" for a
+        // bundle the word is not in and "remove" for one it is, so inverting
+        // restores exactly the state this call changed — and nothing else.
+        applyBundleChange(id, bundleId, action === "add" ? "remove" : "add");
+        throw e;
+      }
+    });
   };
 
   const addWordToBundle = (id, bundleId) => changeWordBundle(id, bundleId, "add");

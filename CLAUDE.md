@@ -151,9 +151,21 @@ A bundle is a named group of words — normally "the words from this page".
   target — see the idioms table in `CONTRIBUTING.md` before "fixing" it.)
 - Both membership writes scope *both* sides to the caller in the same statement
   as the write. A forged bundle id must not be able to attach someone else's
-  word, and there is no transaction to check ownership in beforehand. Both use
-  a no-op `DO UPDATE` rather than `DO NOTHING`, so "already a member" still
-  returns a row and stays distinguishable from "not yours".
+  word, and there is no transaction to check ownership in beforehand. The
+  insert uses a no-op `DO UPDATE` rather than `DO NOTHING`, so "already a
+  member" still returns a row and stays distinguishable from "not yours". The
+  delete would be safe scoping the word alone — a caller can only reach rows
+  hanging off their own words — but it scopes both anyway, because "both sides,
+  always" is a rule a reader can check at a glance.
+- **A membership edit names one membership at every step** — the optimistic
+  update, the reconcile against the response, and the rollback. The PATCH
+  answers with the word's whole `bundle_ids`, and applying all of it would let
+  a slow answer about one bundle resurrect another that a faster request had
+  already removed. Edits to the *same* membership are chained
+  (`serializePerMembership` in `useWords`), because a PATCH is several
+  statements with no transaction around them: run in parallel, an add and a
+  remove of the same pair can land in the wrong order. Different memberships
+  still go in parallel.
 - Deleting a bundle deletes the grouping only; the words keep their
   translations, their SRS schedule and any other bundle. `ON DELETE CASCADE` on
   both foreign keys is what makes the single-statement deletes complete.
@@ -187,6 +199,14 @@ Two rules keep that from happening again:
   banner. This matters most for lists whose empty state is unremarkable: any
   silent failure there is indistinguishable from success. A load error is not
   dismissible (it describes the state of the screen); a failed action is.
+- **A load that answers after the account changed is dropped.** Both list
+  hooks take the `cancelled` flag `useServerKey` uses. Signing out and back in
+  as someone else overlaps two loads, and without it the first account's data
+  — or its error — can land under the second account's session.
+- **An empty list after a *failed* load means nothing.** It is not evidence the
+  rows are gone, so nothing may be pruned on the strength of it: `useBundles`
+  gates its stale-selection cleanup on `bundlesError`, or a dropped connection
+  would silently discard the reader's active bundle and its localStorage entry.
 - **An optimistic update is rolled back when the write fails.** The same trap
   in a different shape: `handleAddWord` marks a word added before the save
   lands, and the popup swaps its Add button for "✓ Added to review". Left up

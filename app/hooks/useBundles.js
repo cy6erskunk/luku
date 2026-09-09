@@ -30,7 +30,10 @@ export function useBundles(userId) {
   }, []);
 
   useEffect(() => {
-    if (!userId) { setBundles([]); setBundlesError(null); setLoadingBundles(false); return; }
+    if (!userId) { setBundles([]); setBundlesError(null); setLoadingBundles(false); return undefined; }
+    // As in useWords: a load still in flight when the account changes must not
+    // land under the new one.
+    let cancelled = false;
     setBundles([]);
     setBundlesError(null);
     setLoadingBundles(true);
@@ -42,24 +45,27 @@ export function useBundles(userId) {
         const r = await fetch("/api/bundles");
         if (!r.ok) throw await responseError(r, "Could not load your bundles");
         const { bundles: rows } = await r.json();
-        setBundles(rows || []);
+        if (!cancelled) setBundles(rows || []);
       } catch (e) {
         console.error("load bundles failed", e);
-        setBundlesError(e.message || "Could not load your bundles");
+        if (!cancelled) setBundlesError(e.message || "Could not load your bundles");
       } finally {
-        setLoadingBundles(false);
+        if (!cancelled) setLoadingBundles(false);
       }
     })();
+    return () => { cancelled = true; };
   }, [userId]);
 
   // The remembered id can name a bundle that is no longer there: deleted in
   // another tab, or belonging to the account that was signed in before this
-  // one. Only once the list has actually loaded, or a slow fetch would clear a
-  // perfectly good selection.
+  // one. Only once the list has actually loaded — a slow fetch, or a failed
+  // one, leaves `bundles` empty for a reason that says nothing about whether
+  // the remembered bundle exists, and forgetting it then would throw away a
+  // good selection (and its localStorage entry) over a dropped connection.
   useEffect(() => {
-    if (loadingBundles || activeBundleId == null) return;
+    if (loadingBundles || bundlesError || activeBundleId == null) return;
     if (!bundles.some((b) => b.id === activeBundleId)) setActiveBundleId(null);
-  }, [loadingBundles, bundles, activeBundleId, setActiveBundleId]);
+  }, [loadingBundles, bundlesError, bundles, activeBundleId, setActiveBundleId]);
 
   /** Create a bundle by name, or adopt the one that already has that name —
    *  which is what the server answers with, so both land here the same way. */
@@ -69,7 +75,7 @@ export function useBundles(userId) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    if (!r.ok) throw new Error(`Failed to create bundle (${r.status})`);
+    if (!r.ok) throw await responseError(r, "Could not create that bundle");
     const { bundle } = await r.json();
     if (bundle) {
       setBundles((prev) => prev.some((b) => b.id === bundle.id)
@@ -83,13 +89,18 @@ export function useBundles(userId) {
   const deleteBundle = async (id) => {
     const removed = bundles.find((b) => b.id === id);
     if (!removed) return;
+    const wasActive = activeBundleId === id;
     setBundles((prev) => prev.filter((b) => b.id !== id));
-    if (activeBundleId === id) setActiveBundleId(null);
+    if (wasActive) setActiveBundleId(null);
     try {
       const r = await fetch(`/api/bundles?id=${id}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      if (!r.ok) throw await responseError(r, "Could not delete that bundle");
     } catch (e) {
       setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
+      // The bundle is back, so the selection it was carrying has to come back
+      // with it — otherwise a refused delete still costs the reader their
+      // active bundle.
+      if (wasActive) setActiveBundleId(id);
       throw e;
     }
   };
