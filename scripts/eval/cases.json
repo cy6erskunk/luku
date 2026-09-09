@@ -1,0 +1,11 @@
+{
+  "_schema": {
+    "id": "stable, path-safe case id",
+    "word": "the surface form as tapped in the text",
+    "context": "the sentence sentenceOf() returns for that word",
+    "expected": { "base": "dictionary form", "pos": "verb|noun|adjective|adverb|other" },
+    "tags": ["tags[0] groups the report: word class", "then difficulty", "then source"]
+  },
+  "_provenance": "Awaiting a real page of Finnish text; expected base forms are hand-written and need review before the first paid run.",
+  "cases": []
+}
