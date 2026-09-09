@@ -34,15 +34,30 @@ node scripts/eval/selftest.mjs          # offline, no key, no spend
 export ANTHROPIC_API_KEY=sk-ant-...
 F=.claude/hillclimb/translate-word
 
-# Read run-eval.mjs first — the harness gate refuses to run until you approve it.
+# Pilot: the first 3 cases only. Read run-eval.mjs first — the harness gate
+# refuses to run until you approve it.
 node scripts/eval/run-eval.mjs --flow $F --variant baseline \
-  --model claude-sonnet-4-6 --reps 2 --approve-harness
+  --model claude-sonnet-4-6 --reps 2 --limit 3 --approve-harness
+
+# Check row one before spending the rest: usage present and non-zero, model as
+# requested, the transcript readable.
+head -1 $F/baseline/results.jsonl | python3 -m json.tool
+
+# Same command without --limit. Resume skips the 3 already done.
+node scripts/eval/run-eval.mjs --flow $F --variant baseline \
+  --model claude-sonnet-4-6 --reps 2
 
 node scripts/eval/run-eval.mjs --flow $F --variant v1 \
   --model claude-haiku-4-5 --reps 2
 
 node scripts/eval/build-report-lite.mjs $F   # -> $F/report.html
 ```
+
+`--limit N` runs the first N cases. It is a pilot flag, not a separate run:
+resume keys on `(case, rep)`, so dropping the flag continues the same variant
+rather than restarting it. Pilot the **baseline** rather than a variant — a
+variant case whose baseline never ran has no frozen reference to be judged
+against, and fails into `errors.jsonl` rather than scoring a misleading tie.
 
 `baseline` is the model to beat and `v1` the candidate; which model each one is
 comes from `--model`. The baseline run freezes its examples under

@@ -108,7 +108,13 @@ async function loadCases() {
   }
   installFetchShim();
   const { cases } = JSON.parse(readFileSync(CASES, 'utf8'));
-  return cases.map((c) => ({ ...c, prompt: `${c.word} — ${c.context}` }));
+  // --limit runs the first N cases, for a pilot you inspect before letting the
+  // rest go. loadCases is handed no args, so read it the way --model is read
+  // above. Resume is what makes this a pilot rather than a separate run: drop
+  // the flag afterwards and the full pass picks up the cases still missing.
+  const i = process.argv.indexOf('--limit');
+  const limit = i === -1 ? Infinity : Number(process.argv[i + 1]);
+  return cases.slice(0, limit).map((c) => ({ ...c, prompt: `${c.word} — ${c.context}` }));
 }
 
 /** Run the real translateWord against one case. */
@@ -290,7 +296,15 @@ async function gradeCase(input, run, ref, ctx) {
 
   // Baseline rows keep the neutral 0.5: the reference has nothing to be
   // compared against, and a missing primary metric breaks the report.
-  if (ctx.variant !== 'baseline' && ref) {
+  if (ctx.variant !== 'baseline' && !ref) {
+    // Leaving example_win at its neutral 0.5 here would quietly drag the win
+    // rate toward a tie for every case the baseline never ran — most likely
+    // after a --limit pilot. Fail it into the sidecar instead.
+    const e = new Error(`no frozen baseline reference for '${input.id}' — run the baseline over this case first`);
+    e.failure_class = 'missing_reference';
+    throw e;
+  }
+  if (ctx.variant !== 'baseline') {
     const refOut = JSON.parse(ref);
     // Deterministic A/B swap per case, so position bias cannot ride along with
     // a particular variant and a re-run reproduces the same layout. Per-case
@@ -322,7 +336,7 @@ function perfFrom(run) {
 function parseArgs(argv) {
   const a = { flow: '.claude/hillclimb/flow', variant: 'baseline',
               model: undefined, reps: 1, concurrency: 4, timeoutS: 1800,
-              approveHarness: false };
+              approveHarness: false, limit: Infinity };
   // A flag at the end of argv would otherwise consume undefined - which for
   // --model equals the default and silently disables the served-model check.
   const val = (i) => { if (argv[i] === undefined) { console.error(`missing value for ${argv[i - 1]}`); usage(); process.exit(2); } return argv[i]; };
@@ -334,6 +348,7 @@ function parseArgs(argv) {
     else if (k === '--reps') a.reps = +val(++i);
     else if (k === '--concurrency') a.concurrency = +val(++i);
     else if (k === '--timeout-s') a.timeoutS = +val(++i);
+    else if (k === '--limit') a.limit = +val(++i);
     else if (k === '--approve-harness') a.approveHarness = true;
     else if (k === '-h' || k === '--help') { usage(); process.exit(0); }
     else { console.error(`unknown argument: ${k}`); usage(); process.exit(2); }
@@ -348,11 +363,12 @@ function parseArgs(argv) {
   if (!Number.isFinite(a.timeoutS) || a.timeoutS < 0
       || a.timeoutS * 1000 > 2147483647 // setTimeout clamps >2^31-1 ms to 1 ms - the ceiling would fire instantly
       || !Number.isInteger(a.reps) || a.reps < 1
+      || (a.limit !== Infinity && (!Number.isInteger(a.limit) || a.limit < 1))
       || !Number.isInteger(a.concurrency) || a.concurrency < 1) { usage(); process.exit(2); }
   return a;
 }
 function usage() {
-  console.error('usage: node run-eval.mjs --flow DIR --variant ID [--model ID] [--reps N] [--concurrency N] [--timeout-s N (0 = no ceiling)] [--approve-harness]');
+  console.error('usage: node run-eval.mjs --flow DIR --variant ID [--model ID] [--reps N] [--limit N] [--concurrency N] [--timeout-s N (0 = no ceiling)] [--approve-harness]');
 }
 
 // Harness integrity gate. The hillclimb loop gets this runner command

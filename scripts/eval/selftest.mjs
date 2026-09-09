@@ -86,25 +86,59 @@ const casesPath = join(dir, 'cases.json');
 writeFileSync(casesPath, JSON.stringify({ cases: CASES }));
 const flow = join(dir, 'flow');
 
-const child = spawn(process.execPath, [
-  'scripts/eval/run-eval.mjs',
-  '--flow', flow, '--variant', 'baseline', '--model', MODEL,
-  '--reps', '1', '--concurrency', '3', '--approve-harness',
-], {
-  env: {
-    ...process.env,
-    ANTHROPIC_API_KEY: 'sk-ant-stub',
-    ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}/v1/messages`,
-    EVAL_CASES: casesPath,
-  },
-  stdio: ['ignore', 'inherit', 'pipe'],
-});
-let stderr = '';
-child.stderr.on('data', (c) => { stderr += c; });
-await new Promise((r) => child.on('close', r));
+const run = async (flowDir, extra) => {
+  const child = spawn(process.execPath, [
+    'scripts/eval/run-eval.mjs',
+    '--flow', flowDir, '--model', MODEL,
+    '--reps', '1', '--concurrency', '3', '--approve-harness', ...extra,
+  ], {
+    env: {
+      ...process.env,
+      ANTHROPIC_API_KEY: 'sk-ant-stub',
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}/v1/messages`,
+      EVAL_CASES: casesPath,
+    },
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  await new Promise((r) => child.on('close', r));
+};
+const rowsIn = (flowDir, variant) => {
+  const f = join(flowDir, variant, 'results.jsonl');
+  return existsSync(f)
+    ? readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    : [];
+};
+
+// A --limit pilot, then the same command without it — the pilot must resume
+// into the full pass rather than re-running or duplicating what it did.
+const pilotFlow = join(dir, 'pilot');
+await run(pilotFlow, ['--variant', 'baseline', '--limit', '2']);
+const afterPilot = rowsIn(pilotFlow, 'baseline').length;
+await run(pilotFlow, ['--variant', 'baseline']);
+const afterFull = rowsIn(pilotFlow, 'baseline');
+
+// A variant judged with no frozen baseline reference must fail, not score a tie.
+const orphanFlow = join(dir, 'orphan');
+await run(orphanFlow, ['--variant', 'v1']);
+
+await run(flow, ['--variant', 'baseline']);
 server.close();
 
 console.log('\nchecks:');
+check('--limit 2 ran exactly 2 cases', afterPilot === 2, `ran ${afterPilot}`);
+// apierror never yields a scored row by design, so a full pass scores the rest.
+const scorable = CASES.length - 1;
+check('the pilot resumed into a full pass without duplicating',
+  afterFull.length === scorable
+  && new Set(afterFull.map((r) => `${r.prompt_id}:${r.rep}`)).size === scorable,
+  `${afterFull.length} rows for ${scorable} scorable cases`);
+const orphanErrs = existsSync(join(orphanFlow, 'v1', 'errors.jsonl'))
+  ? readFileSync(join(orphanFlow, 'v1', 'errors.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  : [];
+check('a variant with no frozen reference fails instead of scoring a tie',
+  rowsIn(orphanFlow, 'v1').length === 0
+  && orphanErrs.some((e) => e.failure_class === 'missing_reference'),
+  `${rowsIn(orphanFlow, 'v1').length} scored rows, classes: ${orphanErrs.map((e) => e.failure_class).join(',')}`);
 const resultsPath = join(flow, 'baseline', 'results.jsonl');
 const rows = existsSync(resultsPath)
   ? readFileSync(resultsPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
