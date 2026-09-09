@@ -171,7 +171,11 @@ A bundle is a named group of words — normally "the words from this page".
   both foreign keys is what makes the single-statement deletes complete.
 - Reviewing a bundle is a client-side filter over `dbWords`, so it needs no new
   query. Due cards go through the normal SRS pass; a bundle with nothing due
-  gets a practice pass instead.
+  gets a practice pass instead. Words added this session are held out of the
+  bundle's due count and queue exactly as they are from the whole-vocabulary
+  one — they are due the moment they are saved, and grading them before the
+  keep-or-remove pass would schedule a word the reader has not kept yet. They
+  do take part in the practice pass, which writes no schedule.
 - **The Telegram bot is bundle-unaware** — it reviews everything that is due,
   as before. Scoping a chat session to a bundle would need selection state the
   stateless review flow deliberately does not keep.
@@ -203,6 +207,13 @@ Two rules keep that from happening again:
   hooks take the `cancelled` flag `useServerKey` uses. Signing out and back in
   as someone else overlaps two loads, and without it the first account's data
   — or its error — can land under the second account's session.
+- **A list snapshot never overwrites a mutation made while it was in flight.**
+  The bundle picker stays usable while the list loads, so a bundle can be
+  created before the initial GET answers. `useBundles` empties the list before
+  fetching, which is what makes the merge exact: anything present when the
+  snapshot lands was necessarily created since, so it is kept alongside the
+  rows. Replacing wholesale would erase a bundle the server has, and the
+  stale-selection sweep would then drop it as the active one too.
 - **An empty list after a *failed* load means nothing.** It is not evidence the
   rows are gone, so nothing may be pruned on the strength of it: `useBundles`
   gates its stale-selection cleanup on `bundlesError`, or a dropped connection

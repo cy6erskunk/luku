@@ -56,6 +56,58 @@ describe("useBundles – loading", () => {
     expect(result.current.bundles).toEqual([LUKU3]);
   });
 
+  it("keeps a bundle created while the list was still loading", async () => {
+    // The picker is usable while the initial GET runs, so a reader can create
+    // a bundle before it answers. The snapshot predates them.
+    let resolveLoad;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts.method === "POST") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundle: LUKU3 }) });
+      }
+      return new Promise((r) => { resolveLoad = r; });
+    }));
+
+    const { result } = renderHook(() => useBundles("user-1"));
+    expect(result.current.loadingBundles).toBe(true);
+
+    await act(async () => {
+      const created = await result.current.createBundle("Luku 3");
+      result.current.setActiveBundleId(created.id);
+    });
+    expect(result.current.bundles).toEqual([LUKU3]);
+
+    await act(async () => {
+      resolveLoad({ ok: true, json: () => Promise.resolve({ bundles: [KOTIMAA] }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // The older snapshot must not erase a bundle the server already has...
+    expect(result.current.bundles.map((b) => b.id).sort()).toEqual([1, 2]);
+    // ...nor let the stale-selection sweep drop it as the active bundle.
+    expect(result.current.activeBundleId).toBe(2);
+  });
+
+  it("does not duplicate a bundle the snapshot already carries", async () => {
+    // The create can land before the load reads, in which case the snapshot
+    // has it too and the merge must not list it twice.
+    let resolveLoad;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts.method === "POST") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundle: LUKU3 }) });
+      }
+      return new Promise((r) => { resolveLoad = r; });
+    }));
+
+    const { result } = renderHook(() => useBundles("user-1"));
+    await act(() => result.current.createBundle("Luku 3"));
+
+    await act(async () => {
+      resolveLoad({ ok: true, json: () => Promise.resolve({ bundles: [LUKU3, KOTIMAA] }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(result.current.bundles.map((b) => b.id).sort()).toEqual([1, 2]);
+  });
+
   it("reports a failed load rather than looking like no bundles exist", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
     const { result } = renderHook(() => useBundles("user-1"));

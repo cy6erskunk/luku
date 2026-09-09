@@ -44,8 +44,18 @@ export function useBundles(userId) {
       try {
         const r = await fetch("/api/bundles");
         if (!r.ok) throw await responseError(r, "Could not load your bundles");
-        const { bundles: rows } = await r.json();
-        if (!cancelled) setBundles(rows || []);
+        const { bundles: loaded } = await r.json();
+        if (!cancelled) setBundles((prev) => {
+          const rows = loaded || [];
+          // The effect emptied the list before fetching, so anything sitting
+          // in it now was created while this request was in flight — the
+          // picker stays usable while the list loads. This snapshot was taken
+          // before that bundle existed, so replacing the list wholesale would
+          // erase one the server has, and the sweep below would then drop it
+          // as the active selection too.
+          const known = new Set(rows.map((b) => b.id));
+          return [...prev.filter((b) => !known.has(b.id)), ...rows];
+        });
       } catch (e) {
         console.error("load bundles failed", e);
         if (!cancelled) setBundlesError(e.message || "Could not load your bundles");

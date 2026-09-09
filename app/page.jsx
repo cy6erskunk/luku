@@ -138,7 +138,10 @@ export default function Luku() {
     for (const w of words.dbWords) {
       if (!inBundle(w, b.id)) continue;
       wordCount++;
-      if (isDue(w)) dueCount++;
+      // The same exclusion the main due queue makes: a word added this session
+      // is triaged in the new-word pass before it joins the SRS schedule, so
+      // counting it here would offer a review that grades it early.
+      if (!newWordIds.has(w.id) && isDue(w)) dueCount++;
     }
     return { ...b, wordCount, dueCount };
   });
@@ -210,9 +213,13 @@ export default function Luku() {
     const inIt = words.dbWords.filter((w) => inBundle(w, bundleId));
     if (inIt.length === 0) return;
     // One instant for the whole pass, so a card cannot fall on both sides of
-    // the line while the queue is being built.
+    // the line while the queue is being built. Freshly added words are held
+    // back exactly as they are from the whole-vocabulary queue: they are due
+    // the moment they are saved, and grading them here would put them on a
+    // schedule before the keep-or-remove pass has decided they belong. They
+    // still take part in the practice pass below, which writes no schedule.
     const clickedAt = Date.now();
-    const due = inIt.filter((w) => isDue(w, clickedAt));
+    const due = inIt.filter((w) => !newWordIds.has(w.id) && isDue(w, clickedAt));
     if (due.length > 0) review.startReview(due, bundle.name);
     else review.startRepeat(shuffled(inIt).slice(0, 20), bundle.name);
     setPopup(null);

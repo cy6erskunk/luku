@@ -449,6 +449,42 @@ describe("bundles", () => {
     expect(screen.getByText("Review")).toBeTruthy();
   });
 
+  it("holds back words added this session from the bundle's due review", async () => {
+    // They are due the moment they are saved, and the keep-or-remove pass has
+    // not run yet — grading them here would schedule them before triage, which
+    // is exactly what the whole-vocabulary queue refuses to do.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    localStorage.setItem("luku_bundle", "10");
+    mockApi({
+      bundles: [KOTIMAA],
+      saved: { ...WORD, id: 7, base: "koira", translations: ["dog"], bundle_ids: [10] },
+    });
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    ocrLocal.mockResolvedValue("Koira juoksee.");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+    await screen.findByRole("button", { name: "1 new" });
+
+    // Back to Scan, where the bundle launcher lives.
+    fireEvent.click(screen.getByText("Luku"));
+
+    // The chip counts it as a word, not as a card due for grading.
+    expect(await screen.findByText("Kotimaa")).toBeTruthy();
+    expect(screen.getByText("1 word")).toBeTruthy();
+    expect(screen.queryByText("1 due")).toBeNull();
+
+    // And the session it starts is the practice pass, which writes no schedule.
+    fireEvent.click(screen.getByText("Kotimaa"));
+    expect(screen.getByText("Extra practice")).toBeTruthy();
+  });
+
   it("practices a bundle with nothing due instead of showing an empty session", async () => {
     const notDue = { ...IN_KOTIMAA, next_review_at: "2999-01-01T00:00:00.000Z" };
     mockApi({ words: [notDue], bundles: [KOTIMAA] });
