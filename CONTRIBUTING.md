@@ -67,10 +67,13 @@ npm run telegram:status   # what webhook Telegram currently has registered
 
 Neon Postgres over HTTP, no ORM and no migration tool.
 
-- **The HTTP driver has no transactions.** Each tagged template is its own
-  request, so a read cannot be held against a later write. Make multi-step
-  writes safe half-completed, collapse them into one statement, or guard the
-  write with a compare-and-swap on what you read.
+- **The HTTP driver has no *interactive* transactions.** `sql.transaction([...])`
+  does exist and is atomic, but it takes a list of queries built before the
+  call, so no statement in it can use an earlier one's result. A read cannot
+  be held against a later write. Make multi-step writes safe half-completed,
+  collapse them into one statement, or guard the write with a compare-and-swap
+  on what you read. (`fakeSql` has no `.transaction`, so reaching for it means
+  extending the helper too.)
 - Migrations are appended to `db/schema.sql` by hand and run in the Neon SQL
   editor. Every statement must be idempotent (`IF NOT EXISTS`,
   `ADD COLUMN IF NOT EXISTS`) and safe to re-run against both a populated
@@ -83,6 +86,65 @@ Neon Postgres over HTTP, no ORM and no migration tool.
 - Every query touching user data is scoped by `user.id`.
 - Interpolate values through the tagged template — never concatenate them
   into SQL.
+
+#### The driver's other departures from a pooled client
+
+- **Each tagged template is one HTTPS request.** An N+1 costs round trips, not
+  just CPU, so prefer one statement that returns what you need — the word list
+  gets its bundle membership from a subquery in the same `SELECT` for exactly
+  this reason.
+- **Errors carry Postgres' SQLSTATE on `.code`** (`NeonDbError`). That is what
+  lets `withSchemaGuard()` key off `42P01` exactly, rather than matching on
+  message text.
+- **`TIMESTAMPTZ` loses microseconds on the way out.** A value read from a row
+  is not equal to the row it came from; `scheduleGuard()` in `lib/reviews.js`
+  explains what that costs the compare-and-swap.
+
+#### Why a SQL claim can't be settled by reading the diff
+
+Three things about this setup compound, and they make SQL the hardest thing
+here to review:
+
+- **The schema is not in the diff.** Queries live in `lib/`, tables and indexes
+  in `db/schema.sql`. Whether `ON CONFLICT (user_id, lower(name))` is even
+  valid depends on an index declared in another file, so a hunk of `lib/` is
+  not enough to judge it.
+- **The tests mock the driver.** `fakeSql` records the SQL text and returns
+  canned rows; it never parses or executes anything. The suite goes green on
+  SQL that Postgres would reject, so "the tests pass" is not evidence that a
+  statement runs.
+- **CI has no database**, so nothing in the pipeline executes a statement
+  either.
+
+A SQL claim — yours, or a review comment's — is therefore settled by running
+it. A throwaway cluster costs about a minute:
+
+```bash
+initdb -D /tmp/luku-pg -U postgres --auth=trust
+pg_ctl -D /tmp/luku-pg -o "-k /tmp/luku-pg -p 55432 -c listen_addresses=" -l /tmp/luku-pg/log start
+createdb -h /tmp/luku-pg -p 55432 -U postgres luku
+
+# Twice: every statement in the file has to be safe to re-run.
+psql -h /tmp/luku-pg -p 55432 -U postgres -d luku -v ON_ERROR_STOP=1 -f db/schema.sql
+psql -h /tmp/luku-pg -p 55432 -U postgres -d luku -v ON_ERROR_STOP=1 -f db/schema.sql
+
+# ...then paste the statement under test, with two user ids, and check both
+# that it does what you meant and that it cannot reach the other user's rows.
+
+pg_ctl -D /tmp/luku-pg stop && rm -rf /tmp/luku-pg
+```
+
+#### Idioms here that look wrong and are not
+
+Each of these has drawn a review comment, or is a plausible next one.
+
+| Looks wrong | Why it stands |
+|---|---|
+| `ON CONFLICT (user_id, lower(name))` | Index inference accepts a bare **function call**; this one names `bundles_user_name`. The parentheses the docs' grammar shows are only needed for operator expressions — `name \|\| ''` really is a syntax error, `lower(name)` is not. |
+| `DO UPDATE SET name = bundles.name` — a no-op write | It makes the conflict path return a row. `DO NOTHING` returns none, which would make "already there" and "not yours" indistinguishable to the caller. |
+| `INSERT ... SELECT ... WHERE w.user_id = ... AND b.user_id = ...` | The authorization check *is* the write. That is how a driver without interactive transactions still gets an atomic "attach this only if both rows are the caller's". |
+| `${user.id}` inside a tagged template | A bind parameter, not string interpolation — the driver parameterizes it. Not an injection. |
+| Two statements that "should" be one transaction | See the interactive-transaction note above; if the second needs the first's result, no transaction available here can help. |
 
 ### Secrets
 

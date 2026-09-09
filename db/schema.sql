@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS telegram_link_codes (
 CREATE INDEX IF NOT EXISTS telegram_link_codes_user ON telegram_link_codes (user_id);
 
 -- At most one claimable code per user, enforced here rather than by a
--- delete-then-insert pair: the HTTP driver has no transactions, so two
+-- delete-then-insert pair: the HTTP driver has no interactive transactions, so two
 -- concurrent mint requests could otherwise both delete before either inserted
 -- and leave two redeemable deep links. Drop any duplicates a pre-index
 -- deployment accumulated before adding the constraint.
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS bundles (
 -- by name, so "Kotimaa" and "kotimaa" would be two rows nobody could tell
 -- apart. An expression index rather than a UNIQUE constraint, because a
 -- constraint cannot carry lower(). It is also the conflict target that makes
--- "create a bundle called X" idempotent — the HTTP driver has no transactions,
+-- "create a bundle called X" idempotent — the HTTP driver has no interactive transactions,
 -- so a select-then-insert pair could otherwise create two.
 CREATE UNIQUE INDEX IF NOT EXISTS bundles_user_name ON bundles (user_id, lower(name));
 

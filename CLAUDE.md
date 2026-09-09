@@ -10,7 +10,7 @@
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
 - **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
-- **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
+- **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no *interactive* transactions**: `sql.transaction([...])` runs a fixed list of statements atomically, but every query is built before the call, so no statement can use an earlier one's result. A read-then-decide-then-write therefore needs a compare-and-swap, and multi-step writes must be safe half-completed. `CONTRIBUTING.md` has the driver's other departures from a pooled client, and how to actually run a statement.
 - **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
 - **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)
 
@@ -143,11 +143,12 @@ A bundle is a named group of words — normally "the words from this page".
 - The picker sets an *active* bundle, remembered in `localStorage`. Every word
   added while it is set goes in, in the same request that saves the word —
   `POST /api/words` takes an optional `bundleId`.
-- Names are unique per user **case-insensitively**, enforced by an expression
-  index. That index is also the `ON CONFLICT` target that makes "create a
-  bundle called X" one idempotent statement: the driver has no transaction, so
-  a select-then-insert pair could otherwise produce two bundles with the same
-  name.
+- Names are unique per user **case-insensitively**, enforced by the expression
+  index `bundles_user_name`. That index is also the `ON CONFLICT` target that
+  makes "create a bundle called X" one idempotent statement: the driver has no
+  interactive transaction, so a select-then-insert pair could otherwise produce
+  two bundles with the same name. (A bare function call is a valid inference
+  target — see the idioms table in `CONTRIBUTING.md` before "fixing" it.)
 - Both membership writes scope *both* sides to the caller in the same statement
   as the write. A forged bundle id must not be able to attach someone else's
   word, and there is no transaction to check ownership in beforehand. Both use
