@@ -203,10 +203,19 @@ Two rules keep that from happening again:
   banner. This matters most for lists whose empty state is unremarkable: any
   silent failure there is indistinguishable from success. A load error is not
   dismissible (it describes the state of the screen); a failed action is.
-- **A load that answers after the account changed is dropped.** Both list
+- **A request that answers after the account changed is dropped.** Both list
   hooks take the `cancelled` flag `useServerKey` uses. Signing out and back in
   as someone else overlaps two loads, and without it the first account's data
-  — or its error — can land under the second account's session.
+  — or its error — can land under the second account's session. The writes
+  need the same guard and cannot use that flag, since they do not belong to
+  the effect: `useBundles` compares against `accountRef`, so a create that
+  answers late cannot drop one account's bundle into the next one's list.
+- **A rollback undoes its own optimistic change and nothing else.** Deleting
+  the active bundle clears the selection, so a refused delete restores it —
+  but only if nothing has claimed it since, or a failure would overwrite a
+  choice the reader made while the request was in flight. `activeRef` follows
+  the latest *call* rather than the latest render, because a rollback runs in
+  the same tick as the clear it is undoing.
 - **A list snapshot never overwrites a mutation made while it was in flight.**
   The bundle picker stays usable while the list loads, so a bundle can be
   created before the initial GET answers. `useBundles` empties the list before

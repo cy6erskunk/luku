@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { responseError } from "../lib/utils.js";
 import { isValidBundleId } from "@/lib/shared/bundle.js";
 
@@ -8,9 +8,14 @@ const ACTIVE_KEY = "luku_bundle";
 
 function readActiveId() {
   try {
-    const v = Number.parseInt(localStorage.getItem(ACTIVE_KEY) ?? "", 10);
-    // The same bound the server applies, so a hand-edited localStorage cannot
-    // put an id into a save request that the route then rejects as a 400.
+    // Plain decimal digits, nothing else. parseInt would read "1junk" as 1 and
+    // Number would read "0x1" as 1, so either would let a corrupted or
+    // hand-edited entry silently activate a real bundle and start routing
+    // words into it. Only ever written from String(id), so nothing legitimate
+    // is turned away; the server's own bound then keeps a save from being a
+    // 400.
+    const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
+    const v = /^\d+$/.test(raw) ? Number(raw) : NaN;
     return isValidBundleId(v) ? v : null;
   } catch { return null; }
 }
@@ -21,11 +26,23 @@ export function useBundles(userId) {
   const [bundlesError, setBundlesError] = useState(null);
   const [activeBundleId, _setActiveBundleId] = useState(readActiveId);
 
+  // The account and the selection as of the latest render. A request that
+  // answers after either moved has to know, and a callback's closure cannot
+  // tell it — the cancelled flag covers the loads, and these cover the writes.
+  const accountRef = useRef(userId);
+  accountRef.current = userId;
+  // Seeded once and moved by the setter, not by rendering: a rollback runs in
+  // the same tick as the clear it is undoing, so a render-time assignment
+  // would still be reporting the value from before that clear.
+  const activeRef = useRef(activeBundleId);
+
   const setActiveBundleId = useCallback((id) => {
-    _setActiveBundleId(id ?? null);
+    const value = id ?? null;
+    activeRef.current = value;
+    _setActiveBundleId(value);
     try {
-      if (id == null) localStorage.removeItem(ACTIVE_KEY);
-      else localStorage.setItem(ACTIVE_KEY, String(id));
+      if (value == null) localStorage.removeItem(ACTIVE_KEY);
+      else localStorage.setItem(ACTIVE_KEY, String(value));
     } catch {}
   }, []);
 
@@ -80,6 +97,7 @@ export function useBundles(userId) {
   /** Create a bundle by name, or adopt the one that already has that name —
    *  which is what the server answers with, so both land here the same way. */
   const createBundle = async (name) => {
+    const forAccount = userId;
     const r = await fetch("/api/bundles", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -87,7 +105,10 @@ export function useBundles(userId) {
     });
     if (!r.ok) throw await responseError(r, "Could not create that bundle");
     const { bundle } = await r.json();
-    if (bundle) {
+    // Guarded like the load: a create that answers after a sign-out would
+    // otherwise drop one account's bundle into the next account's list, where
+    // the picker would happily offer it.
+    if (bundle && accountRef.current === forAccount) {
       setBundles((prev) => prev.some((b) => b.id === bundle.id)
         ? prev.map((b) => (b.id === bundle.id ? bundle : b))
         : [bundle, ...prev]);
@@ -99,6 +120,7 @@ export function useBundles(userId) {
   const deleteBundle = async (id) => {
     const removed = bundles.find((b) => b.id === id);
     if (!removed) return;
+    const forAccount = userId;
     const wasActive = activeBundleId === id;
     setBundles((prev) => prev.filter((b) => b.id !== id));
     if (wasActive) setActiveBundleId(null);
@@ -106,11 +128,14 @@ export function useBundles(userId) {
       const r = await fetch(`/api/bundles?id=${id}`, { method: "DELETE" });
       if (!r.ok) throw await responseError(r, "Could not delete that bundle");
     } catch (e) {
-      setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
-      // The bundle is back, so the selection it was carrying has to come back
-      // with it — otherwise a refused delete still costs the reader their
-      // active bundle.
-      if (wasActive) setActiveBundleId(id);
+      // A rollback undoes its own optimistic change and nothing else: not
+      // another account's list, and not a selection the reader made while this
+      // request was in flight. The bundle comes back either way; the selection
+      // only if nothing has claimed it since.
+      if (accountRef.current === forAccount) {
+        setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
+        if (wasActive && activeRef.current == null) setActiveBundleId(id);
+      }
       throw e;
     }
   };

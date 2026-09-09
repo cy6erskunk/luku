@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { useBundles } from "../useBundles.js";
 
 const KOTIMAA = { id: 1, name: "Kotimaa" };
@@ -174,6 +174,17 @@ describe("useBundles – the active bundle", () => {
     expect(result.current.activeBundleId).toBeNull();
   });
 
+  it("does not let a partly-numeric value activate a real bundle", async () => {
+    // parseInt would read every one of these as bundle 1, quietly pointing the
+    // reader's next words at a bundle they never chose.
+    for (const junk of ["1junk", "1.5", "1 2", "0x1", "+1e0junk"]) {
+      localStorage.setItem("luku_bundle", junk);
+      cleanup();
+      const result = await loaded([KOTIMAA]);
+      expect(result.current.activeBundleId).toBeNull();
+    }
+  });
+
   it("clears the selection", async () => {
     const result = await loaded([KOTIMAA]);
     act(() => result.current.setActiveBundleId(1));
@@ -191,6 +202,30 @@ describe("useBundles – createBundle", () => {
     await act(async () => { created = await result.current.createBundle("Luku 3"); });
     expect(created).toEqual(LUKU3);
     expect(result.current.bundles).toEqual([LUKU3, KOTIMAA]);
+  });
+
+  it("does not drop a bundle into the next account's list", async () => {
+    // The create answers after a sign-out. Its bundle belongs to the account
+    // that asked for it, not the one now on screen.
+    let resolveCreate;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts.method === "POST") return new Promise((r) => { resolveCreate = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundles: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    let pending;
+    await act(async () => { pending = result.current.createBundle("Kotimaa").catch(() => {}); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    await act(async () => {
+      resolveCreate({ ok: true, json: () => Promise.resolve({ bundle: KOTIMAA }) });
+      await pending;
+    });
+    expect(result.current.bundles).toEqual([]);
   });
 
   it("does not duplicate when the server answers with one already listed", async () => {
@@ -231,6 +266,26 @@ describe("useBundles – deleteBundle", () => {
     mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
     await expect(act(() => result.current.deleteBundle(1))).rejects.toThrow();
     expect(result.current.bundles.map((b) => b.id).sort()).toEqual([1, 2]);
+  });
+
+  it("does not undo a selection the reader made while the delete was in flight", async () => {
+    // Deleting the active bundle clears the selection; if the reader picks
+    // another one before the request fails, the rollback must not drag the
+    // deleted bundle back into a slot they have since filled.
+    const result = await loaded([KOTIMAA, LUKU3]);
+    act(() => result.current.setActiveBundleId(1));
+
+    let reject;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((_r, rej) => { reject = rej; })));
+    let pending;
+    act(() => { pending = result.current.deleteBundle(1).catch(() => {}); });
+    expect(result.current.activeBundleId).toBeNull();
+
+    act(() => result.current.setActiveBundleId(2));
+
+    await act(async () => { reject(new Error("offline")); await pending; });
+    expect(result.current.activeBundleId).toBe(2);
+    expect(localStorage.getItem("luku_bundle")).toBe("2");
   });
 
   it("puts the active selection back with the bundle it was on", async () => {

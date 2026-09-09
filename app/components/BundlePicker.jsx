@@ -81,7 +81,10 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
             </button>
           </div>
         )}
-      {err && <div style={{ marginTop: 6, fontSize: 11, color: "#c48a8a" }}>{err}</div>}
+      {/* Announced, not just shown: it appears asynchronously while focus is
+          still on the form, so without a live region a screen reader gives no
+          sign the create failed at all. */}
+      {err && <div role="alert" style={{ marginTop: 6, fontSize: 11, color: "#c48a8a" }}>{err}</div>}
     </div>
   );
 }

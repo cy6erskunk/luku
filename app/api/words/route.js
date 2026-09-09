@@ -87,7 +87,9 @@ export async function POST(request) {
     // The membership needs the word's id, so it cannot ride along in the upsert.
     // There is no transaction to pair them in either: a save that lands without
     // its membership is the half-completed state this has to be safe in, and it
-    // is — the word is saved, and the next add or reload puts it in the bundle.
+    // is — the word is saved and keeps its translation, it is simply in no
+    // bundle. Nothing retries it, so a reload does not put it right; adding the
+    // word again does, which is one tap on a word the list shows untagged.
     if (saved && bundleId != null && await addWordToBundle(sql, user.id, saved.id, bundleId)) {
       saved.bundle_ids = [...new Set([...(saved.bundle_ids ?? []), bundleId])].sort((a, b) => a - b);
     }
