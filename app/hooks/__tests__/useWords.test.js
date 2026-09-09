@@ -198,7 +198,7 @@ describe("useWords – bundle membership", () => {
   it("puts the membership back when the server refuses", async () => {
     const result = await loaded([inBundle]);
     mockFetch({ ok: false, status: 500 });
-    await expect(act(() => result.current.removeWordFromBundle(1, 2))).rejects.toThrow(/Failed to update bundle/);
+    await expect(act(() => result.current.removeWordFromBundle(1, 2))).rejects.toThrow(/Could not take that word out of the bundle \(500\)/);
     expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
   });
 
@@ -264,6 +264,21 @@ describe("useWords – bundle membership", () => {
       await Promise.all([failing, succeeding]);
     });
     expect(result.current.dbWords[0].bundle_ids).toEqual([20]);
+  });
+
+  it("carries the server's own explanation when it sent one", async () => {
+    // A route that says why — the schema guard's 503, say — is more use to the
+    // reader than "(503)". The rollback happens either way.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    mockFetch({ ok: false, status: 503, json: () => Promise.resolve({ error: "Run db/schema.sql against it." }) });
+    await expect(act(() => result.current.addWordToBundle(1, 2))).rejects.toThrow("Run db/schema.sql against it.");
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("names the action when the server sent no message", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    await expect(act(() => result.current.addWordToBundle(1, 2))).rejects.toThrow("Could not add that word to the bundle (500)");
   });
 
   it("is idempotent, so a rollback cannot double-remove", async () => {

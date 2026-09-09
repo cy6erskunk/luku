@@ -238,13 +238,13 @@ export default function Luku() {
   const handleAddToBundle = async (wordId, bundleId) => {
     setActionError(null);
     try { await words.addWordToBundle(wordId, bundleId); }
-    catch (e) { console.error("add to bundle failed", e); setActionError("Could not add that word to the bundle."); }
+    catch (e) { console.error("add to bundle failed", e); setActionError(e.message || "Could not add that word to the bundle."); }
   };
 
   const handleRemoveFromBundle = async (wordId, bundleId) => {
     setActionError(null);
     try { await words.removeWordFromBundle(wordId, bundleId); }
-    catch (e) { console.error("remove from bundle failed", e); setActionError("Could not take that word out of the bundle."); }
+    catch (e) { console.error("remove from bundle failed", e); setActionError(e.message || "Could not take that word out of the bundle."); }
   };
 
   const handleScanAnother = () => {

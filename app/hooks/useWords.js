@@ -96,7 +96,11 @@ export function useWords(userId) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, bundleId, action }),
       });
-      if (!r.ok) throw new Error(`Failed to update bundle (${r.status})`);
+      // Carries the server's own message when it sent one — a route that
+      // explains itself is more use to the reader than the status alone.
+      if (!r.ok) throw await responseError(r, action === "add"
+        ? "Could not add that word to the bundle"
+        : "Could not take that word out of the bundle");
       const { bundleIds } = await r.json();
       if (Array.isArray(bundleIds)) setWordBundles(id, bundleIds);
     } catch (e) {
