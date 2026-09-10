@@ -347,6 +347,62 @@ describe("useBundles – deleteBundle", () => {
     expect(localStorage.getItem("luku_bundle:user-1")).toBe("1");
   });
 
+  it("drops a bundle a racing create brought back before the delete landed", async () => {
+    // Until the DELETE lands the name is still taken, so creating it again
+    // answers with the very row on its way out — the insert is idempotent by
+    // name. Resting on the optimistic removal would leave the reader holding,
+    // and collecting into, an id the server has since dropped.
+    const result = await loaded([KOTIMAA, LUKU3]);
+
+    let finishDelete;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((r) => { finishDelete = r; }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ bundle: KOTIMAA }) })));
+
+    let pending;
+    act(() => { pending = result.current.deleteBundle(1); });
+    expect(result.current.bundles).toEqual([LUKU3]);
+
+    await act(async () => {
+      const bundle = await result.current.createBundle("Kotimaa");
+      result.current.setActiveBundleId(bundle.id);
+    });
+    expect(result.current.bundles.map((b) => b.id)).toContain(1);
+
+    await act(async () => {
+      finishDelete({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      await pending;
+    });
+
+    expect(result.current.bundles.map((b) => b.id)).toEqual([2]);
+    expect(result.current.activeBundleId).toBeNull();
+    expect(localStorage.getItem("luku_bundle:user-1")).toBeNull();
+  });
+
+  it("says nothing about a failed delete once the account has changed", async () => {
+    // Like the create and the save: the caller would put this in the banner of
+    // an account that never asked for the delete.
+    mockFetchJson({ bundles: [KOTIMAA] });
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.bundles).toHaveLength(1));
+
+    // Only the DELETE's rejecter is captured; the new account's load gets a
+    // request of its own that simply never answers.
+    let rejectDelete;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((_r, rej) => { rejectDelete = rej; }))
+      .mockImplementation(() => new Promise(() => {})));
+    let pending;
+    act(() => { pending = result.current.deleteBundle(1); });
+    rerender({ uid: "user-2" });
+
+    await act(async () => {
+      rejectDelete(new Error("offline"));
+      expect(await pending).toBeUndefined();
+    });
+    expect(result.current.bundles).toEqual([]);
+  });
+
   it("does nothing for a bundle it does not have", async () => {
     const result = await loaded([KOTIMAA]);
     const fetchMock = vi.fn();

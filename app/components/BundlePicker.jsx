@@ -17,6 +17,16 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
 
   const stop = (e) => e.stopPropagation();
 
+  // The remembered selection outlives the list that names it: on a reload it is
+  // read from localStorage before /api/bundles answers, and a failed load
+  // leaves it set with nothing to match — deliberately, since an empty list
+  // after a failure is no evidence the bundle is gone. Either way the select
+  // would have no option carrying that value, so it would show a blank row (or
+  // "No bundle") while every word added still goes into the remembered bundle:
+  // the control contradicting the thing it controls. So the selection gets an
+  // option of its own until the list can put a name to it.
+  const unresolved = activeBundleId != null && !bundles.some((b) => b.id === activeBundleId);
+
   const submit = async (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -70,6 +80,7 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
               style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "9px 12px", color: "#e8e0d5", fontFamily: "Georgia,serif", fontSize: 13 }}
             >
               <option value="">No bundle</option>
+              {unresolved && <option value={activeBundleId}>Remembered bundle</option>}
               {bundles.map((b) => (
                 <option key={b.id} value={b.id}>
                   {counts?.[b.id] != null ? `${b.name} (${counts[b.id]})` : b.name}

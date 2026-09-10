@@ -48,6 +48,23 @@ describe("BundlePicker", () => {
     expect(screen.getByRole("combobox").value).toBe("2");
   });
 
+  it("still shows a selection the list cannot name yet", () => {
+    // On a reload the remembered id is read from localStorage before
+    // /api/bundles answers, and a failed load leaves it set against an empty
+    // list. With no option carrying that value the select falls off its own
+    // value and reads as unselected, while every word added still goes into
+    // the remembered bundle.
+    renderPicker({ bundles: [], activeBundleId: 7 });
+    expect(screen.getByRole("combobox").value).toBe("7");
+    expect(screen.getByRole("option", { name: "Remembered bundle" })).toBeTruthy();
+  });
+
+  it("drops the placeholder once the list carries the active bundle", () => {
+    renderPicker({ activeBundleId: 2 });
+    expect(screen.queryByRole("option", { name: "Remembered bundle" })).toBeNull();
+    expect(screen.getByRole("combobox").value).toBe("2");
+  });
+
   it("creates a bundle and selects it straight away", async () => {
     const { onSelect, onCreate } = renderPicker();
     fireEvent.click(screen.getByRole("button", { name: /new/i }));

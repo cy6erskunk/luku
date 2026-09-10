@@ -44,12 +44,22 @@ export function useWords(userId) {
   // needs a second request to land in the right group.
   const saveWord = async (entry, bundleId = null) => {
     const forAccount = userId;
-    const r = await fetch("/api/words", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos, formTranslation: entry.formTranslation, example: entry.example ?? null, example_translation: entry.example_translation ?? null, bundleId: bundleId ?? null }),
-    });
-    if (!r.ok) throw await responseError(r, "Failed to save word");
+    let r;
+    try {
+      r = await fetch("/api/words", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos, formTranslation: entry.formTranslation, example: entry.example ?? null, example_translation: entry.example_translation ?? null, bundleId: bundleId ?? null }),
+      });
+      if (!r.ok) throw await responseError(r, "Failed to save word");
+    } catch (e) {
+      // A failure belongs to the account that asked for it just as a success
+      // does. Reported to whoever is signed in now, it would roll back a popup
+      // that is gone and raise the previous account's error in this one's
+      // banner — page.jsx outlives the switch, so its catch really does run.
+      if (accountRef.current !== forAccount) return null;
+      throw e;
+    }
     const { word: saved } = await r.json();
     // A save that answers after a sign-out belongs to the account that asked
     // for it. Withheld from the caller as well as the list: page.jsx files the

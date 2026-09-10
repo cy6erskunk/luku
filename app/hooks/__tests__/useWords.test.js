@@ -206,6 +206,31 @@ describe("useWords – saveWord", () => {
     expect(result.current.dbWords).toEqual([]);
   });
 
+  it("does not report a save that failed after the account changed", async () => {
+    // The mirror of the test above. A failure reaching the new session would
+    // roll back a popup belonging to the old one and raise its error in the
+    // banner — page.jsx holds both across the switch, so its catch really runs.
+    let rejectSave;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "POST") return new Promise((_r, rej) => { rejectSave = rej; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let saving;
+    await act(async () => { saving = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      rejectSave(new Error("offline"));
+      expect(await saving).toBeNull();
+    });
+    expect(result.current.wordsError).toBeNull();
+  });
+
   it("does not undo a membership edit that landed while the save was in flight", async () => {
     // saved.bundle_ids is the route's snapshot from before its own membership
     // insert. Replacing the whole row with it would restore a tag a concurrent

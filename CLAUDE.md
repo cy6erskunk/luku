@@ -146,7 +146,11 @@ A bundle is a named group of words — normally "the words from this page".
   account's id live under the next one's session until their list loaded, and
   if that load failed, indefinitely. Every word added while a bundle is set
   goes in, in the same request that saves the word — `POST /api/words` takes an
-  optional `bundleId`.
+  optional `bundleId`. The selection outlives the list that names it — it is
+  read from `localStorage` before `/api/bundles` answers, and survives a failed
+  load — so `BundlePicker` gives it an option of its own while it is
+  unresolved. Without one the `<select>` has no option carrying its value and
+  reads as unselected, while saves keep quoting the remembered id.
 - Names are unique per user **case-insensitively**, enforced by the expression
   index `bundles_user_name`. That index is also the `ON CONFLICT` target that
   makes "create a bundle called X" one idempotent statement: the driver has no
@@ -220,7 +224,17 @@ Two rules keep that from happening again:
   hands back and `page.jsx` files whatever `saveWord` hands back under the
   session's new words, and the hooks holding both are still mounted after a
   switch. Guarding only the `setState` leaves the stale row travelling by
-  return value.
+  return value. **A failure is withheld on the same terms as a success**:
+  `saveWord` and `deleteBundle` return rather than throw when the account moved
+  under them, because `page.jsx` outlives the switch — its catch would roll
+  back a popup belonging to the old session and raise its error in the new
+  one's banner.
+- **A confirmed delete reasserts itself against the list as it stands.** The
+  optimistic removal is not the last word: until the DELETE lands the name is
+  still taken server-side, so creating a bundle by that name in the meantime
+  answers with the very row on its way out (the insert is idempotent by name)
+  and puts it back — selected. `deleteBundle` therefore filters the id out
+  again on success and clears the selection if it has been reclaimed.
 - **A rollback undoes its own optimistic change and nothing else.** Deleting
   the active bundle clears the selection, so a refused delete restores it —
   but only if nothing has claimed it since, or a failure would overwrite a

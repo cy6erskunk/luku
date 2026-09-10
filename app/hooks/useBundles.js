@@ -151,15 +151,27 @@ export function useBundles(userId) {
     try {
       const r = await fetch(`/api/bundles?id=${id}`, { method: "DELETE" });
       if (!r.ok) throw await responseError(r, "Could not delete that bundle");
+      // The row is gone now, so say so against the list as it stands rather
+      // than resting on the optimistic removal. Creating a bundle by the same
+      // name while this request was in flight puts it back: until the delete
+      // lands the name is still taken, so the idempotent insert answers with
+      // this very row, and the client adds — and selects — an id the server is
+      // about to drop.
+      if (accountRef.current === forAccount) {
+        setBundles((prev) => prev.filter((b) => b.id !== id));
+        if (activeRef.current === id) setActiveBundleId(null);
+      }
     } catch (e) {
       // A rollback undoes its own optimistic change and nothing else: not
       // another account's list, and not a selection the reader made while this
       // request was in flight. The bundle comes back either way; the selection
-      // only if nothing has claimed it since.
-      if (accountRef.current === forAccount) {
-        setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
-        if (wasActive && activeRef.current == null) setActiveBundleId(id);
-      }
+      // only if nothing has claimed it since. A failure that lands after the
+      // account changed is not reported either — like the writes above it
+      // belongs to the session that asked for it, and the caller would put it
+      // in the banner of the account that did not.
+      if (accountRef.current !== forAccount) return;
+      setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
+      if (wasActive && activeRef.current == null) setActiveBundleId(id);
       throw e;
     }
   };
