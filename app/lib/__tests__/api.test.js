@@ -105,6 +105,22 @@ describe("ocrImage", () => {
 });
 
 describe("translateWord", () => {
+  it("sends the sentence as context and the example-quality rules", async () => {
+    let body;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text: "{}" }] }) });
+    }));
+
+    await translateWord("sk-test", "kutoi", "Isoäiti kutoi minulle villasukat.");
+
+    // The sentence is what lets the model pick the right sense, and the rules
+    // are what keep the example from collapsing back into "Hän kutoo."
+    expect(body.messages[0].content).toContain("Isoäiti kutoi minulle villasukat.");
+    expect(body.system).toMatch(/recoverable/);
+    expect(body.system).toMatch(/4-8 words/);
+  });
+
   it("parses a valid JSON response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

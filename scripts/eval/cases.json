@@ -1,0 +1,687 @@
+{
+  "_provenance": "Words drawn from scripts/eval/source-text.txt (two photographed book pages, transcribed by hand — not OCR output, so the eval measures translation rather than OCR noise). Contexts derived with the app's own sentenceOf. Expected base forms and parts of speech are proposed labels pending review by a Finnish speaker.",
+  "cases": [
+    {
+      "id": "tarkoitti",
+      "word": "tarkoitti",
+      "context": "Päätös tarkoitti sitä,",
+      "expected": {
+        "base": "tarkoittaa",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "medium"
+      ]
+    },
+    {
+      "id": "käytetty",
+      "word": "käytetty",
+      "context": "järjestön nimeä olisi käytetty missä tahansa yhteydessä, vaikka vain",
+      "expected": {
+        "base": "käyttää",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "passive past participle — arguably its own adjective"
+      }
+    },
+    {
+      "id": "kokoonnuttu",
+      "word": "kokoonnuttu",
+      "context": "kokoonnuttu nimen alle oman porukan kesken.",
+      "expected": {
+        "base": "kokoontua",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "tarvinnut",
+      "word": "tarvinnut",
+      "context": "Poliisin ei olisi tarvinnut edes odottaa, että mitään varsinaisesti rikollista olisi tapahtunut.",
+      "expected": {
+        "base": "tarvita",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "tapahtunut",
+      "word": "tapahtunut",
+      "context": "Poliisin ei olisi tarvinnut edes odottaa, että mitään varsinaisesti rikollista olisi tapahtunut.",
+      "expected": {
+        "base": "tapahtua",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "medium"
+      ]
+    },
+    {
+      "id": "tuhottu",
+      "word": "tuhottu",
+      "context": "oli tuhottu.",
+      "expected": {
+        "base": "tuhota",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "passive past participle"
+      }
+    },
+    {
+      "id": "tarjosi",
+      "word": "tarjosi",
+      "context": "Lisäksi lakkautuspäätös tarjosi",
+      "expected": {
+        "base": "tarjota",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "miettineet",
+      "word": "miettineet",
+      "context": "tilaisuuden sellaisille jäsenille, jotka olivat muutenkin miettineet",
+      "expected": {
+        "base": "miettiä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "jääneet",
+      "word": "jääneet",
+      "context": "United Brotherhood ja Bad Union eivät jääneet ainoiksi kielletyiksi rikollisjengeiksi.",
+      "expected": {
+        "base": "jäädä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "kielsi",
+      "word": "kielsi",
+      "context": "sen alajärjestö Squad 32, jotka Päijät-Hämeen käräjäoikeus kielsi",
+      "expected": {
+        "base": "kieltää",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "seurataan",
+      "word": "seurataan",
+      "context": "Tämän kanteen kohtaloa seurataan",
+      "expected": {
+        "base": "seurata",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "medium"
+      ]
+    },
+    {
+      "id": "menestyy",
+      "word": "menestyy",
+      "context": "menestyy ja hatut päätyvät kieltolistalle ensimmäisenä kansainvälisenä järjestönä.",
+      "expected": {
+        "base": "menestyä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "easy"
+      ]
+    },
+    {
+      "id": "päätyvät",
+      "word": "päätyvät",
+      "context": "menestyy ja hatut päätyvät kieltolistalle ensimmäisenä kansainvälisenä järjestönä.",
+      "expected": {
+        "base": "päätyä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "easy"
+      ]
+    },
+    {
+      "id": "ajettu",
+      "word": "ajettu",
+      "context": "jälkeen ajettu ahtaalle.",
+      "expected": {
+        "base": "ajaa",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "passive past participle"
+      }
+    },
+    {
+      "id": "puhalsi",
+      "word": "puhalsi",
+      "context": "Viranomaisten vastaiskut ja lakkautuspäätökset olivat näkyviä käänteitä, mutta taustalla puhalsi myös toisenlaisia muutoksen tuulia.",
+      "expected": {
+        "base": "puhaltaa",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "muokanneet",
+      "word": "muokanneet",
+      "context": "olivat muokanneet Suomenkin rikollisia ekosysteemejä uusiksi.",
+      "expected": {
+        "base": "muokata",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "joutuivat",
+      "word": "joutuivat",
+      "context": "Järvenpäässä jengiläiset joutuivat aloittamaan ruohonjuuritasolta.",
+      "expected": {
+        "base": "joutua",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "medium"
+      ]
+    },
+    {
+      "id": "haki",
+      "word": "haki",
+      "context": "Poliisi haki tutkintaa varten tuomioistuimelta luvat erilaisiin",
+      "expected": {
+        "base": "hakea",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "tekivät",
+      "word": "tekivät",
+      "context": "Markkina oli nousussa, viranomaiset tekivät aiempaa suurempia takavarikoita yhä useammin.",
+      "expected": {
+        "base": "tehdä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "lähtenyt",
+      "word": "lähtenyt",
+      "context": "Suomessa huumausaineiden kysyntä oli lähtenyt kasvuun.",
+      "expected": {
+        "base": "lähteä",
+        "pos": "verb"
+      },
+      "tags": [
+        "verb",
+        "hard"
+      ]
+    },
+    {
+      "id": "myrkkyä",
+      "word": "myrkkyä",
+      "context": "Brotherhoodille se oli silkkaa myrkkyä suoneen.",
+      "expected": {
+        "base": "myrkky",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "suoneen",
+      "word": "suoneen",
+      "context": "Brotherhoodille se oli silkkaa myrkkyä suoneen.",
+      "expected": {
+        "base": "suoni",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "toimintaan",
+      "word": "toimintaan",
+      "context": "että siitä eteenpäin poliisi olisi voinut puuttua toimintaan heti, jos",
+      "expected": {
+        "base": "toiminta",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "järjestön",
+      "word": "järjestön",
+      "context": "järjestön nimeä olisi käytetty missä tahansa yhteydessä, vaikka vain",
+      "expected": {
+        "base": "järjestö",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "easy"
+      ]
+    },
+    {
+      "id": "yhteydessä",
+      "word": "yhteydessä",
+      "context": "järjestön nimeä olisi käytetty missä tahansa yhteydessä, vaikka vain",
+      "expected": {
+        "base": "yhteys",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "porukan",
+      "word": "porukan",
+      "context": "kokoonnuttu nimen alle oman porukan kesken.",
+      "expected": {
+        "base": "porukka",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "tilaisuuden",
+      "word": "tilaisuuden",
+      "context": "tilaisuuden sellaisille jäsenille, jotka olivat muutenkin miettineet",
+      "expected": {
+        "base": "tilaisuus",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "jäsenille",
+      "word": "jäsenille",
+      "context": "tilaisuuden sellaisille jäsenille, jotka olivat muutenkin miettineet",
+      "expected": {
+        "base": "jäsen",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "jengistä",
+      "word": "jengistä",
+      "context": "jengistä irtautumista.",
+      "expected": {
+        "base": "jengi",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "easy"
+      ]
+    },
+    {
+      "id": "käänteitä",
+      "word": "käänteitä",
+      "context": "Viranomaisten vastaiskut ja lakkautuspäätökset olivat näkyviä käänteitä, mutta taustalla puhalsi myös toisenlaisia muutoksen tuulia.",
+      "expected": {
+        "base": "käänne",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "tuulia",
+      "word": "tuulia",
+      "context": "Viranomaisten vastaiskut ja lakkautuspäätökset olivat näkyviä käänteitä, mutta taustalla puhalsi myös toisenlaisia muutoksen tuulia.",
+      "expected": {
+        "base": "tuuli",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "ekosysteemejä",
+      "word": "ekosysteemejä",
+      "context": "olivat muokanneet Suomenkin rikollisia ekosysteemejä uusiksi.",
+      "expected": {
+        "base": "ekosysteemi",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "kanteen",
+      "word": "kanteen",
+      "context": "Tämän kanteen kohtaloa seurataan",
+      "expected": {
+        "base": "kanne",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "tähtäimeen",
+      "word": "tähtäimeen",
+      "context": "kohde viranomaisten tähtäimeen, jos kanne Bandidosia vastaan",
+      "expected": {
+        "base": "tähtäin",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "hatut",
+      "word": "hatut",
+      "context": "menestyy ja hatut päätyvät kieltolistalle ensimmäisenä kansainvälisenä järjestönä.",
+      "expected": {
+        "base": "hattu",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "medium"
+      ]
+    },
+    {
+      "id": "luvat",
+      "word": "luvat",
+      "context": "Poliisi haki tutkintaa varten tuomioistuimelta luvat erilaisiin",
+      "expected": {
+        "base": "lupa",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "rikoksilla",
+      "word": "rikoksilla",
+      "context": "ansaita rahaa rikoksilla.",
+      "expected": {
+        "base": "rikos",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "takavarikoita",
+      "word": "takavarikoita",
+      "context": "Markkina oli nousussa, viranomaiset tekivät aiempaa suurempia takavarikoita yhä useammin.",
+      "expected": {
+        "base": "takavarikko",
+        "pos": "noun"
+      },
+      "tags": [
+        "noun",
+        "hard"
+      ]
+    },
+    {
+      "id": "hämmentävältä",
+      "word": "hämmentävältä",
+      "context": "Voi tuntua jopa hämmentävältä, että yksinkertainen siviilioikeudellinen lakkautuspäätös on näin tehokas, mutta United",
+      "expected": {
+        "base": "hämmentävä",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "present participle — could be filed under hämmentää"
+      }
+    },
+    {
+      "id": "yksinkertainen",
+      "word": "yksinkertainen",
+      "context": "Voi tuntua jopa hämmentävältä, että yksinkertainen siviilioikeudellinen lakkautuspäätös on näin tehokas, mutta United",
+      "expected": {
+        "base": "yksinkertainen",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "easy"
+      ]
+    },
+    {
+      "id": "tehokas",
+      "word": "tehokas",
+      "context": "Voi tuntua jopa hämmentävältä, että yksinkertainen siviilioikeudellinen lakkautuspäätös on näin tehokas, mutta United",
+      "expected": {
+        "base": "tehokas",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "easy"
+      ]
+    },
+    {
+      "id": "silkkaa",
+      "word": "silkkaa",
+      "context": "Brotherhoodille se oli silkkaa myrkkyä suoneen.",
+      "expected": {
+        "base": "silkka",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "medium"
+      ]
+    },
+    {
+      "id": "rikollista",
+      "word": "rikollista",
+      "context": "Poliisin ei olisi tarvinnut edes odottaa, että mitään varsinaisesti rikollista olisi tapahtunut.",
+      "expected": {
+        "base": "rikollinen",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "medium"
+      ]
+    },
+    {
+      "id": "näkyviä",
+      "word": "näkyviä",
+      "context": "Viranomaisten vastaiskut ja lakkautuspäätökset olivat näkyviä käänteitä, mutta taustalla puhalsi myös toisenlaisia muutoksen tuulia.",
+      "expected": {
+        "base": "näkyvä",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "medium",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "present participle — could be filed under näkyä"
+      }
+    },
+    {
+      "id": "joutilaita",
+      "word": "joutilaita",
+      "context": "Samaan aikaan Suomessa alkoi olla yhä suurempi joukko joutilaita",
+      "expected": {
+        "base": "joutilas",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "hard"
+      ]
+    },
+    {
+      "id": "ahtaalle",
+      "word": "ahtaalle",
+      "context": "jälkeen ajettu ahtaalle.",
+      "expected": {
+        "base": "ahdas",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "idiomatic in \"ajaa ahtaalle\"; the case form is arguably lexicalised"
+      }
+    },
+    {
+      "id": "törkeää",
+      "word": "törkeää",
+      "context": "Satudarahiin liitettyä epäiltyä törkeää huumausainerikosta.",
+      "expected": {
+        "base": "törkeä",
+        "pos": "adjective"
+      },
+      "tags": [
+        "adjective",
+        "medium"
+      ]
+    },
+    {
+      "id": "eteenpäin",
+      "word": "eteenpäin",
+      "context": "että siitä eteenpäin poliisi olisi voinut puuttua toimintaan heti, jos",
+      "expected": {
+        "base": "eteenpäin",
+        "pos": "adverb"
+      },
+      "tags": [
+        "adverb",
+        "easy"
+      ]
+    },
+    {
+      "id": "varsinaisesti",
+      "word": "varsinaisesti",
+      "context": "Poliisin ei olisi tarvinnut edes odottaa, että mitään varsinaisesti rikollista olisi tapahtunut.",
+      "expected": {
+        "base": "varsinaisesti",
+        "pos": "adverb"
+      },
+      "tags": [
+        "adverb",
+        "easy",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "could be filed under the adjective varsinainen"
+      }
+    },
+    {
+      "id": "useammin",
+      "word": "useammin",
+      "context": "Markkina oli nousussa, viranomaiset tekivät aiempaa suurempia takavarikoita yhä useammin.",
+      "expected": {
+        "base": "usein",
+        "pos": "adverb"
+      },
+      "tags": [
+        "adverb",
+        "hard",
+        "review-me"
+      ],
+      "meta": {
+        "label_note": "comparative — a dictionary may well list useammin itself"
+      }
+    }
+  ]
+}

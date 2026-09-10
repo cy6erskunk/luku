@@ -20,6 +20,14 @@ function developmentKey() {
   return process.env.ANTHROPIC_API_KEY || "";
 }
 
+/**
+ * One model serves both jobs this route is asked to do: Vision OCR of a
+ * photographed page, and per-word translation. Translation is the high-volume
+ * one — a reading session is one OCR call and dozens of word taps — so the
+ * per-token price is what the bill mostly tracks.
+ */
+const MODEL = "claude-haiku-4-5";
+
 async function requireUser() {
   const { data: session } = await getAuth().getSession();
   return session?.user ?? null;
@@ -47,7 +55,7 @@ export async function POST(request) {
     }
 
     const body = {
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       max_tokens: maxTokens,
       messages,
     };
