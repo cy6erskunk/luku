@@ -2,11 +2,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { responseError } from "../lib/utils.js";
 import { isValidBundleId } from "@/lib/shared/bundle.js";
 
-/** The bundle words are being collected into, remembered across reloads so a
- *  reading session survives a refresh mid-page. */
-const ACTIVE_KEY = "luku_bundle";
+/**
+ * The bundle words are being collected into, remembered across reloads so a
+ * reading session survives a refresh mid-page.
+ *
+ * Keyed by account. One shared key would carry a selection across a sign-out:
+ * the next account's saves would quote a bundle id that is not theirs until
+ * their own list loaded and the sweep below cleared it — and if that load
+ * failed, never. A bundle is not a browser preference, it is one account's
+ * row, so it is stored where only that account can read it.
+ */
+const keyFor = (userId) => `luku_bundle:${userId}`;
 
-function readActiveId() {
+function readActiveId(userId) {
+  if (!userId) return null;
   try {
     // Plain decimal digits, nothing else. parseInt would read "1junk" as 1 and
     // Number would read "0x1" as 1, so either would let a corrupted or
@@ -14,7 +23,7 @@ function readActiveId() {
     // words into it. Only ever written from String(id), so nothing legitimate
     // is turned away; the server's own bound then keeps a save from being a
     // 400.
-    const raw = localStorage.getItem(ACTIVE_KEY) ?? "";
+    const raw = localStorage.getItem(keyFor(userId)) ?? "";
     const v = /^\d+$/.test(raw) ? Number(raw) : NaN;
     return isValidBundleId(v) ? v : null;
   } catch { return null; }
@@ -24,7 +33,7 @@ export function useBundles(userId) {
   const [bundles, setBundles] = useState([]);
   const [loadingBundles, setLoadingBundles] = useState(true);
   const [bundlesError, setBundlesError] = useState(null);
-  const [activeBundleId, _setActiveBundleId] = useState(readActiveId);
+  const [activeBundleId, _setActiveBundleId] = useState(() => readActiveId(userId));
 
   // The account and the selection as of the latest render. A request that
   // answers after either moved has to know, and a callback's closure cannot
@@ -40,11 +49,23 @@ export function useBundles(userId) {
     const value = id ?? null;
     activeRef.current = value;
     _setActiveBundleId(value);
+    const account = accountRef.current;
+    if (!account) return;
     try {
-      if (value == null) localStorage.removeItem(ACTIVE_KEY);
-      else localStorage.setItem(ACTIVE_KEY, String(value));
+      if (value == null) localStorage.removeItem(keyFor(account));
+      else localStorage.setItem(keyFor(account), String(value));
     } catch {}
   }, []);
+
+  // Swap to the new account's own remembered selection the moment the account
+  // changes, rather than waiting for their bundle list to arrive and the sweep
+  // to notice. Until this runs there is no window in which one account's id is
+  // live under another's session.
+  useEffect(() => {
+    const mine = readActiveId(userId);
+    activeRef.current = mine;
+    _setActiveBundleId(mine);
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) { setBundles([]); setBundlesError(null); setLoadingBundles(false); return undefined; }
@@ -107,8 +128,11 @@ export function useBundles(userId) {
     const { bundle } = await r.json();
     // Guarded like the load: a create that answers after a sign-out would
     // otherwise drop one account's bundle into the next account's list, where
-    // the picker would happily offer it.
-    if (bundle && accountRef.current === forAccount) {
+    // the picker would happily offer it. Withheld from the caller too, not
+    // just from the list — BundlePicker selects whatever comes back, and the
+    // hook that would store that selection is still mounted after the switch.
+    if (accountRef.current !== forAccount) return null;
+    if (bundle) {
       setBundles((prev) => prev.some((b) => b.id === bundle.id)
         ? prev.map((b) => (b.id === bundle.id ? bundle : b))
         : [bundle, ...prev]);

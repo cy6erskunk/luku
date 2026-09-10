@@ -133,7 +133,7 @@ describe("useBundles – the active bundle", () => {
   it("remembers the selection across a remount", async () => {
     const result = await loaded([KOTIMAA]);
     act(() => result.current.setActiveBundleId(1));
-    expect(localStorage.getItem("luku_bundle")).toBe("1");
+    expect(localStorage.getItem("luku_bundle:user-1")).toBe("1");
 
     const again = await loaded([KOTIMAA]);
     expect(again.current.activeBundleId).toBe(1);
@@ -141,14 +141,14 @@ describe("useBundles – the active bundle", () => {
 
   it("forgets a remembered bundle the account no longer has", async () => {
     // Deleted in another tab, or belonging to the previously signed-in user.
-    localStorage.setItem("luku_bundle", "99");
+    localStorage.setItem("luku_bundle:user-1", "99");
     const result = await loaded([KOTIMAA]);
     await waitFor(() => expect(result.current.activeBundleId).toBeNull());
-    expect(localStorage.getItem("luku_bundle")).toBeNull();
+    expect(localStorage.getItem("luku_bundle:user-1")).toBeNull();
   });
 
   it("does not drop the selection while the list is still loading", () => {
-    localStorage.setItem("luku_bundle", "1");
+    localStorage.setItem("luku_bundle:user-1", "1");
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     const { result } = renderHook(() => useBundles("user-1"));
     expect(result.current.loadingBundles).toBe(true);
@@ -159,17 +159,17 @@ describe("useBundles – the active bundle", () => {
     // An empty list after a failure says nothing about whether the bundle
     // still exists, so forgetting it would cost a good selection — and its
     // localStorage entry — over a dropped connection.
-    localStorage.setItem("luku_bundle", "1");
+    localStorage.setItem("luku_bundle:user-1", "1");
     mockFetch({ ok: false, status: 500, json: () => Promise.resolve({}) });
     const { result } = renderHook(() => useBundles("user-1"));
     await waitFor(() => expect(result.current.bundlesError).toBeTruthy());
 
     expect(result.current.activeBundleId).toBe(1);
-    expect(localStorage.getItem("luku_bundle")).toBe("1");
+    expect(localStorage.getItem("luku_bundle:user-1")).toBe("1");
   });
 
   it("ignores a junk remembered value", async () => {
-    localStorage.setItem("luku_bundle", "not-a-number");
+    localStorage.setItem("luku_bundle:user-1", "not-a-number");
     const result = await loaded([KOTIMAA]);
     expect(result.current.activeBundleId).toBeNull();
   });
@@ -178,11 +178,34 @@ describe("useBundles – the active bundle", () => {
     // parseInt would read every one of these as bundle 1, quietly pointing the
     // reader's next words at a bundle they never chose.
     for (const junk of ["1junk", "1.5", "1 2", "0x1", "+1e0junk"]) {
-      localStorage.setItem("luku_bundle", junk);
+      localStorage.setItem("luku_bundle:user-1", junk);
       cleanup();
       const result = await loaded([KOTIMAA]);
       expect(result.current.activeBundleId).toBeNull();
     }
+  });
+
+  it("does not carry one account's selection into another's session", async () => {
+    // A shared key would leave A's bundle id live under B until B's own list
+    // arrived — and if that load failed, indefinitely, with B's saves quoting
+    // a bundle that is not theirs.
+    localStorage.setItem("luku_bundle:user-1", "1");
+    mockFetchJson({ bundles: [KOTIMAA] });
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.activeBundleId).toBe(1));
+
+    rerender({ uid: "user-2" });
+    expect(result.current.activeBundleId).toBeNull();
+    // ...and A's own selection is still there when A comes back.
+    rerender({ uid: "user-1" });
+    expect(result.current.activeBundleId).toBe(1);
+  });
+
+  it("stores a selection where only its own account can read it", async () => {
+    const result = await loaded([KOTIMAA]);
+    act(() => result.current.setActiveBundleId(1));
+    expect(localStorage.getItem("luku_bundle:user-1")).toBe("1");
+    expect(localStorage.getItem("luku_bundle")).toBeNull();
   });
 
   it("clears the selection", async () => {
@@ -190,7 +213,7 @@ describe("useBundles – the active bundle", () => {
     act(() => result.current.setActiveBundleId(1));
     act(() => result.current.setActiveBundleId(null));
     expect(result.current.activeBundleId).toBeNull();
-    expect(localStorage.getItem("luku_bundle")).toBeNull();
+    expect(localStorage.getItem("luku_bundle:user-1")).toBeNull();
   });
 });
 
@@ -202,6 +225,31 @@ describe("useBundles – createBundle", () => {
     await act(async () => { created = await result.current.createBundle("Luku 3"); });
     expect(created).toEqual(LUKU3);
     expect(result.current.bundles).toEqual([LUKU3, KOTIMAA]);
+  });
+
+  it("does not hand a stale bundle back to the caller either", async () => {
+    // BundlePicker selects whatever createBundle returns, and the hook holding
+    // that selection is still mounted after an account switch — so keeping the
+    // stale row out of the list is not enough on its own.
+    let resolveCreate;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts.method === "POST") return new Promise((r) => { resolveCreate = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundles: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    let created;
+    await act(async () => { created = result.current.createBundle("Kotimaa"); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    await act(async () => {
+      resolveCreate({ ok: true, json: () => Promise.resolve({ bundle: KOTIMAA }) });
+      expect(await created).toBeNull();
+    });
+    expect(result.current.activeBundleId).toBeNull();
   });
 
   it("does not drop a bundle into the next account's list", async () => {
@@ -285,7 +333,7 @@ describe("useBundles – deleteBundle", () => {
 
     await act(async () => { reject(new Error("offline")); await pending; });
     expect(result.current.activeBundleId).toBe(2);
-    expect(localStorage.getItem("luku_bundle")).toBe("2");
+    expect(localStorage.getItem("luku_bundle:user-1")).toBe("2");
   });
 
   it("puts the active selection back with the bundle it was on", async () => {
@@ -296,7 +344,7 @@ describe("useBundles – deleteBundle", () => {
     mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
     await expect(act(() => result.current.deleteBundle(1))).rejects.toThrow();
     expect(result.current.activeBundleId).toBe(1);
-    expect(localStorage.getItem("luku_bundle")).toBe("1");
+    expect(localStorage.getItem("luku_bundle:user-1")).toBe("1");
   });
 
   it("does nothing for a bundle it does not have", async () => {

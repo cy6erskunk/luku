@@ -140,9 +140,13 @@ A bundle is a named group of words — normally "the words from this page".
 - Membership is **many-to-many** (`word_bundles`), not a column on `words`.
   Words are unique per `(user_id, base)`, so a word met again on a second page
   has to join that page's bundle without leaving the first.
-- The picker sets an *active* bundle, remembered in `localStorage`. Every word
-  added while it is set goes in, in the same request that saves the word —
-  `POST /api/words` takes an optional `bundleId`.
+- The picker sets an *active* bundle, remembered in `localStorage` **under a
+  key namespaced by account** (`luku_bundle:<userId>`). A bundle is one
+  account's row, not a browser preference: a shared key would leave one
+  account's id live under the next one's session until their list loaded, and
+  if that load failed, indefinitely. Every word added while a bundle is set
+  goes in, in the same request that saves the word — `POST /api/words` takes an
+  optional `bundleId`.
 - Names are unique per user **case-insensitively**, enforced by the expression
   index `bundles_user_name`. That index is also the `ON CONFLICT` target that
   makes "create a bundle called X" one idempotent statement: the driver has no
@@ -210,6 +214,13 @@ Two rules keep that from happening again:
   need the same guard and cannot use that flag, since they do not belong to
   the effect: `useBundles` compares against `accountRef`, so a create that
   answers late cannot drop one account's bundle into the next one's list.
+- **A write withholds its result from the caller too, not just from the
+  state.** `createBundle` and `saveWord` return null when the account moved
+  while they were in flight: `BundlePicker` selects whatever `createBundle`
+  hands back and `page.jsx` files whatever `saveWord` hands back under the
+  session's new words, and the hooks holding both are still mounted after a
+  switch. Guarding only the `setState` leaves the stale row travelling by
+  return value.
 - **A rollback undoes its own optimistic change and nothing else.** Deleting
   the active bundle clears the selection, so a refused delete restores it —
   but only if nothing has claimed it since, or a failure would overwrite a
@@ -227,6 +238,12 @@ Two rules keep that from happening again:
   rows are gone, so nothing may be pruned on the strength of it: `useBundles`
   gates its stale-selection cleanup on `bundlesError`, or a dropped connection
   would silently discard the reader's active bundle and its localStorage entry.
+- **An error is rendered where the action was taken.** `WordList` declares
+  `aria-modal` over a backdrop above `page.jsx`'s banner, so a failure from
+  inside that overlay reported by the page reaches nobody — invisible behind
+  the dialog and hidden from assistive technology by the modal semantics. The
+  overlay renders its own copy and the page suppresses its banner while it is
+  open.
 - **An optimistic update is rolled back when the write fails.** The same trap
   in a different shape: `handleAddWord` marks a word added before the save
   lands, and the popup swaps its Add button for "✓ Added to review". Left up

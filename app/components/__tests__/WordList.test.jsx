@@ -248,6 +248,45 @@ describe("WordList – bundles", () => {
     expect(screen.getByText("nopea")).toBeTruthy();
   });
 
+  it("marks which filter is selected, not only by colour", () => {
+    withBundles();
+    expect(screen.getByRole("button", { name: "All (3)" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Kotimaa (2)" }).getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Kotimaa (2)" }));
+    expect(screen.getByRole("button", { name: "Kotimaa (2)" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "All (3)" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("counts a word held by a bundle that is gone as unbundled", () => {
+    // A word can carry an id whose bundle no longer exists — deleted while a
+    // save quoting it was in flight, or in another tab. Its tag is already
+    // invisible; counting it as bundled would drop the word out of Unbundled
+    // with nothing on screen to explain the absence.
+    const stale = [{ ...WORDS[0], bundle_ids: [999] }];
+    render(<WordList words={stale} bundles={[{ id: 10, name: "Kotimaa", wordCount: 0, dueCount: 0 }]} onClose={vi.fn()} onDelete={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unbundled (1)" }));
+    expect(screen.getByText("juosta")).toBeTruthy();
+  });
+
+  it("shows a failed action inside the dialog, where it can be seen", () => {
+    // page.jsx's banner sits behind this backdrop, and the dialog declares
+    // aria-modal over it — so an error rendered there reaches nobody.
+    const onDismissError = vi.fn();
+    withBundles({ error: "Could not add that word to the bundle.", onDismissError });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/could not add that word/i);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismissError).toHaveBeenCalled();
+  });
+
+  it("shows no alert when nothing has failed", () => {
+    withBundles();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("offers no bundle delete while showing everything", () => {
     withBundles();
     expect(screen.queryByRole("button", { name: /^delete bundle$/i })).toBeNull();

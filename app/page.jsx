@@ -474,7 +474,10 @@ export default function Luku() {
         </div>
       </div>
 
-      {banner && (
+      {/* Suppressed while the word list is open: that overlay declares
+          aria-modal and sits above this, so it renders the same message inside
+          itself instead. Every action that can fail from there is taken there. */}
+      {banner && !showWordList && (
         <div
           role="alert"
           style={{ margin: "14px 18px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
@@ -568,6 +571,8 @@ export default function Luku() {
           onAddToBundle={handleAddToBundle}
           onRemoveFromBundle={handleRemoveFromBundle}
           onDeleteBundle={handleDeleteBundle}
+          error={banner}
+          onDismissError={loadError ? undefined : () => setActionError(null)}
         />
       )}
 

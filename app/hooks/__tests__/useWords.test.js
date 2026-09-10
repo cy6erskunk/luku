@@ -182,6 +182,67 @@ describe("useWords – saveWord", () => {
     expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null, bundleId: null });
   });
 
+  it("does not file a save that answered after the account changed", async () => {
+    let resolveSave;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "POST") return new Promise((r) => { resolveSave = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let saving;
+    await act(async () => { saving = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      resolveSave({ ok: true, json: () => Promise.resolve({ word: WORD_A }) });
+      // Withheld from the caller too: page.jsx files the returned id under the
+      // session's new words.
+      expect(await saving).toBeNull();
+    });
+    expect(result.current.dbWords).toEqual([]);
+  });
+
+  it("does not undo a membership edit that landed while the save was in flight", async () => {
+    // saved.bundle_ids is the route's snapshot from before its own membership
+    // insert. Replacing the whole row with it would restore a tag a concurrent
+    // PATCH had already removed.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10, 20] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let resolveSave;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "POST") return new Promise((r) => { resolveSave = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundleIds: [10] }) });
+    }));
+
+    let saving;
+    await act(async () => { saving = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 10); });
+    // A tag goes while the save is out.
+    await act(() => result.current.removeWordFromBundle(1, 20));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10]);
+
+    await act(async () => {
+      resolveSave({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [10, 20] } }) });
+      await saving;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10]);
+  });
+
+  it("adds the membership its own save settled", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [5] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    mockFetchJson({ word: { ...WORD_A, bundle_ids: [3] } });
+    await act(() => result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 3));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([3, 5]);
+  });
+
   it("sends the bundle the reader is collecting into", async () => {
     mockFetchJson({ words: [] });
     const { result } = renderHook(() => useWords("user-1"));

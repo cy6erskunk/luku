@@ -3,6 +3,10 @@ import { responseError, wordBundleIds } from "../lib/utils.js";
 
 export function useWords(userId) {
   const [dbWords, setDbWords] = useState([]);
+  // The account as of the latest render. The cancelled flag below covers the
+  // load, which belongs to an effect; a write does not, and needs this.
+  const accountRef = useRef(userId);
+  accountRef.current = userId;
   const [loadingWords, setLoadingWords] = useState(true);
   const [wordsError, setWordsError] = useState(null);
 
@@ -39,6 +43,7 @@ export function useWords(userId) {
   // attaches the word to it, so a word saved while a bundle is active never
   // needs a second request to land in the right group.
   const saveWord = async (entry, bundleId = null) => {
+    const forAccount = userId;
     const r = await fetch("/api/words", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -46,7 +51,31 @@ export function useWords(userId) {
     });
     if (!r.ok) throw await responseError(r, "Failed to save word");
     const { word: saved } = await r.json();
-    if (saved) setDbWords((prev) => { const without = prev.filter((w) => w.id !== saved.id); return [...without, saved]; });
+    // A save that answers after a sign-out belongs to the account that asked
+    // for it. Withheld from the caller as well as the list: page.jsx files the
+    // returned id under this session's new words.
+    if (accountRef.current !== forAccount) return null;
+    if (saved) {
+      setDbWords((prev) => {
+        const existing = prev.find((w) => w.id === saved.id);
+        const without = prev.filter((w) => w.id !== saved.id);
+        // The row is authoritative for the word, but its bundle_ids is a
+        // snapshot the route took before its own membership insert. Taking all
+        // of it would let this answer speak for memberships other requests
+        // own — a tag removed while the save was in flight would come back. So
+        // keep what is on screen and apply only the one this save settled.
+        const confirmed = wordBundleIds(saved);
+        const merged = existing
+          ? {
+            ...saved,
+            bundle_ids: bundleId != null && confirmed.includes(bundleId)
+              ? [...new Set([...wordBundleIds(existing), bundleId])].sort((a, b) => a - b)
+              : wordBundleIds(existing),
+          }
+          : saved;
+        return [...without, merged];
+      });
+    }
     return saved;
   };
 

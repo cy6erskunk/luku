@@ -15,7 +15,7 @@ const UNBUNDLED = "none";
  * re-scanning `words` per bundle, so one definition of "how many words are in
  * this bundle" serves the chip and the list it filters to.
  */
-export default function WordList({ words, bundles = [], onClose, onDelete, onAddToBundle, onRemoveFromBundle, onDeleteBundle }) {
+export default function WordList({ words, bundles = [], onClose, onDelete, onAddToBundle, onRemoveFromBundle, onDeleteBundle, error, onDismissError }) {
   const [pendingId, setPendingId] = useState(null);
   const [filter, setFilter] = useState(ALL);
   // The word whose "add to bundle" list is expanded, if any.
@@ -27,9 +27,15 @@ export default function WordList({ words, bundles = [], onClose, onDelete, onAdd
   const panelRef = useDialog(handleBackdropClick);
 
   const byId = new Map(bundles.map((b) => [b.id, b]));
-  const unbundledCount = words.filter((w) => wordBundleIds(w).length === 0).length;
+  // Only bundles this list knows about count. A word can hold an id for a
+  // bundle that is gone — deleted here while a save carrying it was in flight,
+  // or in another tab — and its tag is already invisible, so counting it as
+  // bundled would drop the word out of Unbundled with nothing on screen
+  // explaining why.
+  const knownOf = (w) => wordBundleIds(w).filter((id) => byId.has(id));
+  const unbundledCount = words.filter((w) => knownOf(w).length === 0).length;
   const shown = filter === ALL ? words
-    : filter === UNBUNDLED ? words.filter((w) => wordBundleIds(w).length === 0)
+    : filter === UNBUNDLED ? words.filter((w) => knownOf(w).length === 0)
     : words.filter((w) => wordBundleIds(w).includes(filter));
   const filteredBundle = filter !== ALL && filter !== UNBUNDLED ? byId.get(filter) : null;
 
@@ -62,16 +68,33 @@ export default function WordList({ words, bundles = [], onClose, onDelete, onAdd
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
 
+        {error && (
+          // Rendered here, not by page.jsx: every action that can fail from
+          // this overlay is taken inside it, and the page's banner sits behind
+          // a backdrop this dialog declares aria-modal over — visible to
+          // nobody and reachable by no one.
+          <div
+            role="alert"
+            onClick={(e) => e.stopPropagation()}
+            style={{ margin: "10px 20px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "9px 12px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
+          >
+            <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {error}</span>
+            {onDismissError && (
+              <button onClick={onDismissError} aria-label="Dismiss" style={{ background: "none", border: "none", color: "#c48a8a", fontSize: 14, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}>✕</button>
+            )}
+          </div>
+        )}
+
         {bundles.length > 0 && (
           <div style={{ padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-            <button onClick={() => setFilter(ALL)} style={chip(filter === ALL)}>All ({words.length})</button>
+            <button onClick={() => setFilter(ALL)} aria-pressed={filter === ALL} style={chip(filter === ALL)}>All ({words.length})</button>
             {bundles.map((b) => (
-              <button key={b.id} onClick={() => setFilter(b.id)} style={chip(filter === b.id)}>
+              <button key={b.id} onClick={() => setFilter(b.id)} aria-pressed={filter === b.id} style={chip(filter === b.id)}>
                 {b.name} ({b.wordCount})
               </button>
             ))}
             {unbundledCount > 0 && (
-              <button onClick={() => setFilter(UNBUNDLED)} style={chip(filter === UNBUNDLED)}>Unbundled ({unbundledCount})</button>
+              <button onClick={() => setFilter(UNBUNDLED)} aria-pressed={filter === UNBUNDLED} style={chip(filter === UNBUNDLED)}>Unbundled ({unbundledCount})</button>
             )}
             {filteredBundle && onDeleteBundle && (
               // Deletes the grouping only. Saying so on the button matters:

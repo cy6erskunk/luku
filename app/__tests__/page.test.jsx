@@ -455,7 +455,7 @@ describe("bundles", () => {
     // is exactly what the whole-vocabulary queue refuses to do.
     const { ocrLocal } = await import("../lib/ocr.js");
     mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
-    localStorage.setItem("luku_bundle", "10");
+    localStorage.setItem("luku_bundle:u1", "10");
     mockApi({
       bundles: [KOTIMAA],
       saved: { ...WORD, id: 7, base: "koira", translations: ["dog"], bundle_ids: [10] },
@@ -498,7 +498,7 @@ describe("bundles", () => {
 
   it("saves a word into the bundle being collected into", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
-    localStorage.setItem("luku_bundle", "10");
+    localStorage.setItem("luku_bundle:u1", "10");
     mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
     const fetchMock = mockApi({
       bundles: [KOTIMAA],
