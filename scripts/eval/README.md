@@ -53,6 +53,20 @@ node scripts/eval/run-eval.mjs --flow $F --variant v1 \
 node scripts/eval/build-report-lite.mjs $F   # -> $F/report.html
 ```
 
+### Frozen references and provenance
+
+The baseline freezes its example sentences under `baseline/ref/` and writes
+`ref/PROVENANCE.json` recording the model and a hash of the system prompt that
+produced them. **Commit both** — that is what keeps a win rate comparable
+across runs and lets a fresh clone evaluate a candidate without paying for a
+baseline pass first.
+
+A reference is only valid for the (prompt, model) pair that made it. If
+`TRANSLATE_SYSTEM` in `app/lib/api.js` changes, a run refuses to judge against
+the old refs (`stale_reference`) instead of quietly scoring the prompt change
+and the model change together. The remedy is always `rm -rf` the `ref/`
+directory and re-run the baseline.
+
 `--limit N` runs the first N cases. It is a pilot flag, not a separate run:
 resume keys on `(case, rep)`, so dropping the flag continues the same variant
 rather than restarting it. Pilot the **baseline** rather than a variant — a

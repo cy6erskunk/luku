@@ -121,6 +121,18 @@ const afterFull = rowsIn(pilotFlow, 'baseline');
 const orphanFlow = join(dir, 'orphan');
 await run(orphanFlow, ['--variant', 'v1']);
 
+// Provenance: the baseline records what froze ref/, and a later run whose
+// prompt no longer matches must refuse rather than judge across the change.
+const provFlow = join(dir, 'prov');
+await run(provFlow, ['--variant', 'baseline']);
+const provPath = join(provFlow, 'baseline', 'ref', 'PROVENANCE.json');
+const prov = existsSync(provPath) ? JSON.parse(readFileSync(provPath, 'utf8')) : null;
+if (prov) {
+  // Simulate the prompt having moved since the refs were frozen.
+  writeFileSync(provPath, JSON.stringify({ ...prov, system_prompt_sha: 'deadbeefdeadbeef' }));
+}
+await run(provFlow, ['--variant', 'v1']);
+
 await run(flow, ['--variant', 'baseline']);
 server.close();
 
@@ -132,6 +144,20 @@ check('the pilot resumed into a full pass without duplicating',
   afterFull.length === scorable
   && new Set(afterFull.map((r) => `${r.prompt_id}:${r.rep}`)).size === scorable,
   `${afterFull.length} rows for ${scorable} scorable cases`);
+check('the baseline records ref provenance', Boolean(prov), 'no PROVENANCE.json');
+if (prov) {
+  check('provenance names the model and hashes the system prompt',
+    prov.model === MODEL && /^[0-9a-f]{16}$/.test(prov.system_prompt_sha) && Boolean(prov.frozen_at),
+    JSON.stringify(prov));
+}
+const provErrs = existsSync(join(provFlow, 'v1', 'errors.jsonl'))
+  ? readFileSync(join(provFlow, 'v1', 'errors.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  : [];
+check('a variant refuses to judge against refs frozen under a different prompt',
+  rowsIn(provFlow, 'v1').length === 0
+  && provErrs.some((e) => e.failure_class === 'stale_reference'),
+  `${rowsIn(provFlow, 'v1').length} scored rows, classes: ${provErrs.map((e) => e.failure_class).join(',')}`);
+
 const orphanErrs = existsSync(join(orphanFlow, 'v1', 'errors.jsonl'))
   ? readFileSync(join(orphanFlow, 'v1', 'errors.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
   : [];

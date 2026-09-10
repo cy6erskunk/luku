@@ -146,6 +146,7 @@ async function runCase(input, ctx) {
       model: rec.model_served,
       usage: rec.usage,
       stop_reason: rec.stop_reason,
+      system: rec.system,
     };
   } catch (e) {
     if (rec.httpError) {
@@ -264,6 +265,64 @@ async function judge(input, a, b) {
   return { ...call.input, judge_model: data.model, judge_usage: data.usage };
 }
 
+const sha16 = (v) => createHash('sha256').update(String(v ?? '')).digest('hex').slice(0, 16);
+
+/**
+ * A frozen reference is only valid for the (prompt, model) pair that produced
+ * it, and the prompt is the thing under active development in this repo. Judge
+ * a new-prompt candidate against a ref frozen under an older TRANSLATE_SYSTEM
+ * and example_win silently measures the prompt change and the model change at
+ * once — the exact conflation freezing the reference was meant to prevent.
+ *
+ * So the baseline records what froze the refs, and every later run checks it.
+ * The sha is taken from the system prompt actually sent on the wire, not from
+ * re-reading a source file, so it cannot drift from what was really used.
+ * The remedy on a mismatch is always the same: delete ref/ and re-run the
+ * baseline, which is a real cost and exactly why it should be a loud stop.
+ */
+function guardRefProvenance(ctx, run, refDir) {
+  const path = join(refDir, 'PROVENANCE.json');
+  const now = { model: run.model, system_prompt_sha: sha16(run.system) };
+
+  if (ctx.variant === 'baseline') {
+    if (!existsSync(path)) {
+      mkdirSync(refDir, { recursive: true });
+      writeFileSync(path, JSON.stringify({ ...now, frozen_at: new Date().toISOString() }, null, 2) + '\n');
+      return;
+    }
+    const was = JSON.parse(readFileSync(path, 'utf8'));
+    // A second baseline run under a changed prompt or model would leave a ref/
+    // holding a mix: the scaffold only freezes refs that are absent, so the
+    // cases already frozen would keep the old output while the new rows claim
+    // the new model.
+    if (was.system_prompt_sha !== now.system_prompt_sha || was.model !== now.model) {
+      const e = new Error(
+        `ref/ was frozen by ${was.model} under prompt ${was.system_prompt_sha}, but this baseline is `
+        + `${now.model} under ${now.system_prompt_sha} — delete ${refDir} and re-run the baseline`);
+      e.failure_class = 'stale_reference';
+      throw e;
+    }
+    return;
+  }
+
+  if (!existsSync(path)) {
+    const e = new Error(`ref/ has no PROVENANCE.json, so what produced it is unknown — delete ${refDir} and re-run the baseline`);
+    e.failure_class = 'stale_reference';
+    throw e;
+  }
+  const was = JSON.parse(readFileSync(path, 'utf8'));
+  // The model is expected to differ here — that is the comparison. The prompt
+  // is not.
+  if (was.system_prompt_sha !== now.system_prompt_sha) {
+    const e = new Error(
+      `ref/ was frozen under prompt ${was.system_prompt_sha}, this run sends ${now.system_prompt_sha} — `
+      + `judging across a prompt change would score the prompt and the model together. `
+      + `Delete ${refDir} and re-run the baseline.`);
+    e.failure_class = 'stale_reference';
+    throw e;
+  }
+}
+
 async function gradeCase(input, run, ref, ctx) {
   const p = run.parsed;
   const ex = p.example;
@@ -304,6 +363,8 @@ async function gradeCase(input, run, ref, ctx) {
     e.failure_class = 'missing_reference';
     throw e;
   }
+  guardRefProvenance(ctx, run, join(ctx.flow, 'baseline', 'ref'));
+
   if (ctx.variant !== 'baseline') {
     const refOut = JSON.parse(ref);
     // Deterministic A/B swap per case, so position bias cannot ride along with
