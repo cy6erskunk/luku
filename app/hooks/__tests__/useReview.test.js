@@ -169,6 +169,32 @@ describe("useReview – reset", () => {
   });
 });
 
+describe("useReview – a grade that answers after reset", () => {
+  it("does not advance or requeue the cards that replaced it", async () => {
+    // reset() runs when the account changes. The grade itself is recorded
+    // server-side and stays recorded; what must not happen is the answer
+    // steering a queue that now belongs to a different session.
+    let resolveGrade;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => { resolveGrade = r; })));
+    const updateWord = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ updateWord })));
+
+    act(() => result.current.startReview(WORDS));
+    act(() => { result.current.gradeWord(1); });          // a failed card: requeues
+    act(() => result.current.reset());
+    act(() => result.current.startReview([WORDS[2]]));    // the next session's queue
+
+    await act(async () => {
+      resolveGrade({ ok: true, json: () => Promise.resolve({ word: { id: 1 } }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(result.current.queue).toEqual([3]);
+    expect(result.current.revIdx).toBe(0);
+    expect(updateWord).not.toHaveBeenCalled();
+  });
+});
+
 describe("useReview – grading is reset when starting a new session", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
