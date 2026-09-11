@@ -176,11 +176,11 @@ describe("POST /api/words", () => {
   });
 
   it("returns the stored row", async () => {
-    mocks.sql = fakeSql([[WORD]]);
+    mocks.sql = fakeSql([[{ ...WORD, bundle_ids: [] }]]);
     const res = await POST(jsonRequest(BODY));
 
     expect(res.status).toBe(200);
-    expect((await res.json()).word).toEqual(WORD);
+    expect((await res.json()).word).toEqual({ ...WORD, bundle_ids: [] });
   });
 
   it("returns null rather than undefined when the write returned no row", async () => {
@@ -287,26 +287,55 @@ describe("POST /api/words", () => {
 });
 
 describe("POST /api/words with a bundle", () => {
-  it("saves without touching word_bundles when no bundle is active", async () => {
-    mocks.sql = fakeSql([[SAVED]]);
-    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], pos: "verb" }));
-    expect((await res.json()).word).toEqual(SAVED);
-    expect(mocks.sql.calls).toHaveLength(1);
-  });
-
-  it("attaches the saved word to the active bundle", async () => {
-    mocks.sql = fakeSql([[SAVED], [{ bundle_id: 3 }]]);
+  it("saves and attaches in one statement", async () => {
+    // Two statements left a window: the reader could take the tag off between
+    // the word landing and the membership landing, and the attach would then
+    // put it back. The word's id is not known until it is written, so the
+    // attach rides in a data-modifying CTE rather than a second request.
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
     const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], pos: "verb", bundleId: 3 }));
     expect((await res.json()).word.bundle_ids).toEqual([3]);
-    expect(mocks.sql.calls[1].values).toEqual([7, 3, "u1", "u1"]);
+    expect(mocks.sql.calls).toHaveLength(1);
+    expect(mocks.sql.calls[0].text).toContain("WITH saved AS");
+  });
+
+  it("scopes the attach to the caller's own bundle", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
+    await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    // The word side is the caller's by construction — it is the row this
+    // statement just wrote; the bundle side is checked here.
+    expect(mocks.sql.calls[0].text).toContain("b.user_id =");
+    expect(mocks.sql.calls[0].values).toContain(3);
+  });
+
+  it("passes a null bundle straight through rather than branching", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: null }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], pos: "verb" }));
+    expect((await res.json()).word.bundle_ids).toEqual([]);
+    expect(mocks.sql.calls).toHaveLength(1);
+    expect(mocks.sql.calls[0].values).toContain(null);
   });
 
   it("does not claim membership the insert refused", async () => {
-    // A bundle that is not this user's: the word is still saved, and the
-    // answer says truthfully that it joined nothing.
-    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [1] }], []]);
+    // A bundle that is not this user's: the word is still saved, the attach
+    // matched no row, and the answer says truthfully that it joined nothing.
+    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [1], attached_bundle_id: null }]]);
     const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
     expect((await res.json()).word.bundle_ids).toEqual([1]);
+  });
+
+  it("adds the attached id to the memberships the snapshot could not see", async () => {
+    // The CTEs share one snapshot, so bundle_ids cannot include the row being
+    // inserted beside it.
+    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [1], attached_bundle_id: 3 }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect((await res.json()).word.bundle_ids).toEqual([1, 3]);
+  });
+
+  it("does not leak the internal column to the client", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect((await res.json()).word).not.toHaveProperty("attached_bundle_id");
   });
 
   it("rejects a malformed bundleId before writing anything", async () => {

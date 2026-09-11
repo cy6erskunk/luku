@@ -140,6 +140,7 @@ Each of these has drawn a review comment, or is a plausible next one.
 
 | Looks wrong | Why it stands |
 |---|---|
+| `WITH saved AS (INSERT …), attached AS (INSERT … FROM saved)` in `POST /api/words` | A data-modifying CTE is how two writes that depend on each other become one statement here. The driver has no interactive transaction, so the alternative is two requests with a window between them. Note the CTEs share one snapshot: a `SELECT` beside the second insert cannot see what it wrote. |
 | `ON CONFLICT (user_id, lower(name))` | Index inference accepts a bare **function call**; this one names `bundles_user_name`. The parentheses the docs' grammar shows are only needed for operator expressions — `name \|\| ''` really is a syntax error, `lower(name)` is not. |
 | `DO UPDATE SET name = bundles.name` — a no-op write | It makes the conflict path return a row. `DO NOTHING` returns none, which would make "already there" and "not yours" indistinguishable to the caller. |
 | `INSERT ... SELECT ... WHERE w.user_id = ... AND b.user_id = ...` | The authorization check *is* the write. That is how a driver without interactive transactions still gets an atomic "attach this only if both rows are the caller's". |

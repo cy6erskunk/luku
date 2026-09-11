@@ -44,6 +44,11 @@ export function useBundles(userId) {
   // the same tick as the clear it is undoing, so a render-time assignment
   // would still be reporting the value from before that clear.
   const activeRef = useRef(activeBundleId);
+  // Bundles this session has confirmed deleted since the current load began.
+  // The snapshot that load is waiting on was taken before the delete, so
+  // without this the merge below hands the row back as a ghost that every
+  // later delete can only 404 on.
+  const deletedSinceLoad = useRef(new Set());
 
   const setActiveBundleId = useCallback((id) => {
     const value = id ?? null;
@@ -72,6 +77,7 @@ export function useBundles(userId) {
     // As in useWords: a load still in flight when the account changes must not
     // land under the new one.
     let cancelled = false;
+    deletedSinceLoad.current = new Set();
     setBundles([]);
     setBundlesError(null);
     setLoadingBundles(true);
@@ -91,8 +97,11 @@ export function useBundles(userId) {
           // before that bundle existed, so replacing the list wholesale would
           // erase one the server has, and the sweep below would then drop it
           // as the active selection too.
-          const known = new Set(rows.map((b) => b.id));
-          return [...prev.filter((b) => !known.has(b.id)), ...rows];
+          // A bundle deleted while this request was out is gone server-side,
+          // whatever the snapshot still shows.
+          const live = rows.filter((b) => !deletedSinceLoad.current.has(b.id));
+          const known = new Set(live.map((b) => b.id));
+          return [...prev.filter((b) => !known.has(b.id)), ...live];
         });
       } catch (e) {
         console.error("load bundles failed", e);
@@ -158,6 +167,7 @@ export function useBundles(userId) {
       // this very row, and the client adds — and selects — an id the server is
       // about to drop.
       if (accountRef.current === forAccount) {
+        deletedSinceLoad.current.add(id);
         setBundles((prev) => prev.filter((b) => b.id !== id));
         if (activeRef.current === id) setActiveBundleId(null);
       }

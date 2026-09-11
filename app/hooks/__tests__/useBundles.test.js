@@ -379,6 +379,29 @@ describe("useBundles – deleteBundle", () => {
     expect(localStorage.getItem("luku_bundle:user-1")).toBeNull();
   });
 
+  it("does not let a pending load snapshot resurrect a bundle it deleted", async () => {
+    // The GET was answered before the delete; its snapshot still carries the
+    // row. Merging it back leaves a ghost that later deletes only 404 on.
+    let finishLoad;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((r) => { finishLoad = r; }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ bundle: KOTIMAA }) }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) })));
+
+    const { result } = renderHook(() => useBundles("user-1"));
+    // The picker stays usable while the list loads, so a bundle can be created
+    // and then deleted before the snapshot ever lands.
+    await act(async () => { await result.current.createBundle("Kotimaa"); });
+    await act(async () => { await result.current.deleteBundle(1); });
+    expect(result.current.bundles).toEqual([]);
+
+    await act(async () => {
+      finishLoad({ ok: true, json: () => Promise.resolve({ bundles: [KOTIMAA] }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(result.current.bundles).toEqual([]);
+  });
+
   it("says nothing about a failed delete once the account has changed", async () => {
     // Like the create and the save: the caller would put this in the banner of
     // an account that never asked for the delete.

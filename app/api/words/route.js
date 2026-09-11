@@ -64,35 +64,53 @@ export async function POST(request) {
       ? [{ word, translation: formTranslation ?? null }]
       : [];
 
+    // One statement, so the word and its membership cannot be separated. The
+    // membership needs the word's id, which used to mean a second request —
+    // and a window in which the reader could remove the tag between the two,
+    // only for the attach to put it back. A data-modifying CTE closes that: the
+    // insert below sees `saved`'s id without the client ever holding it.
+    //
+    // Ownership is still checked on both sides. The word side by construction
+    // (`saved` is the row this caller just wrote), the bundle side explicitly —
+    // a forged id belonging to someone else matches no row and attaches
+    // nothing. A null bundleId matches nothing either, which is how "collect
+    // into no bundle" takes the same path.
     const rows = await sql`
-      INSERT INTO words (user_id, base, translations, pos, forms, example, example_translation)
-      VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb, ${example ?? null}, ${example_translation ?? null})
-      ON CONFLICT (user_id, base) DO UPDATE
-        SET translations = EXCLUDED.translations, pos = EXCLUDED.pos,
-            forms = CASE
-              WHEN jsonb_array_length(EXCLUDED.forms) = 0 THEN words.forms
-              WHEN EXISTS (
-                SELECT 1 FROM jsonb_array_elements(words.forms) AS f
-                WHERE lower(f->>'word') = lower(EXCLUDED.forms->0->>'word')
-              ) THEN words.forms
-              ELSE words.forms || EXCLUDED.forms
-            END,
-            example = COALESCE(EXCLUDED.example, words.example),
-            example_translation = COALESCE(EXCLUDED.example_translation, words.example_translation)
-      RETURNING *,
-        ARRAY(SELECT bundle_id FROM word_bundles WHERE word_id = words.id ORDER BY bundle_id) AS bundle_ids
+      WITH saved AS (
+        INSERT INTO words (user_id, base, translations, pos, forms, example, example_translation)
+        VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb, ${example ?? null}, ${example_translation ?? null})
+        ON CONFLICT (user_id, base) DO UPDATE
+          SET translations = EXCLUDED.translations, pos = EXCLUDED.pos,
+              forms = CASE
+                WHEN jsonb_array_length(EXCLUDED.forms) = 0 THEN words.forms
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(words.forms) AS f
+                  WHERE lower(f->>'word') = lower(EXCLUDED.forms->0->>'word')
+                ) THEN words.forms
+                ELSE words.forms || EXCLUDED.forms
+              END,
+              example = COALESCE(EXCLUDED.example, words.example),
+              example_translation = COALESCE(EXCLUDED.example_translation, words.example_translation)
+        RETURNING *
+      ), attached AS (
+        INSERT INTO word_bundles (word_id, bundle_id)
+        SELECT saved.id, b.id FROM saved, bundles b
+        WHERE b.id = ${bundleId ?? null} AND b.user_id = ${user.id}
+        ON CONFLICT (word_id, bundle_id) DO UPDATE SET added_at = word_bundles.added_at
+        RETURNING bundle_id
+      )
+      SELECT saved.*,
+        ARRAY(SELECT bundle_id FROM word_bundles WHERE word_id = saved.id ORDER BY bundle_id) AS bundle_ids,
+        (SELECT bundle_id FROM attached) AS attached_bundle_id
+      FROM saved
     `;
-    const saved = rows[0] ?? null;
-
-    // The membership needs the word's id, so it cannot ride along in the upsert.
-    // There is no transaction to pair them in either: a save that lands without
-    // its membership is the half-completed state this has to be safe in, and it
-    // is — the word is saved and keeps its translation, it is simply in no
-    // bundle. Nothing retries it, so a reload does not put it right; adding the
-    // word again does, which is one tap on a word the list shows untagged.
-    if (saved && bundleId != null && await addWordToBundle(sql, user.id, saved.id, bundleId)) {
-      saved.bundle_ids = [...new Set([...(saved.bundle_ids ?? []), bundleId])].sort((a, b) => a - b);
-    }
+    if (!rows[0]) return Response.json({ word: null });
+    // The CTEs share one snapshot, so bundle_ids above cannot see the insert
+    // beside it. The attached id is how this answer reports it.
+    const { attached_bundle_id: attached, ...saved } = rows[0];
+    saved.bundle_ids = attached != null
+      ? [...new Set([...(saved.bundle_ids ?? []), attached])].sort((a, b) => a - b)
+      : (saved.bundle_ids ?? []);
 
     return Response.json({ word: saved });
   });

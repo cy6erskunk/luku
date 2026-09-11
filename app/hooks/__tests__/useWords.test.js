@@ -497,6 +497,53 @@ describe("useWords – bundle membership", () => {
     expect(result.current.dbWords[0].bundle_ids).toEqual([]);
   });
 
+  it("does not reconcile a membership edit that answered after the account changed", async () => {
+    let resolvePatch;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "PATCH") return new Promise((r) => { resolvePatch = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [{ ...WORD_A, bundle_ids: [] }] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let editing;
+    await act(async () => { editing = result.current.addWordToBundle(1, 10); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      resolvePatch({ ok: true, json: () => Promise.resolve({ bundleIds: [10] }) });
+      await editing;
+    });
+    // user-2's list is whatever their own load returned; nothing from the
+    // previous account's edit may appear in it.
+    expect(result.current.dbWords.every((w) => (w.bundle_ids || []).length === 0)).toBe(true);
+  });
+
+  it("does not report a membership edit that failed after the account changed", async () => {
+    let rejectPatch;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "PATCH") return new Promise((_r, rej) => { rejectPatch = rej; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [{ ...WORD_A, bundle_ids: [] }] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let editing;
+    await act(async () => { editing = result.current.addWordToBundle(1, 10); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      rejectPatch(new Error("offline"));
+      // Resolves rather than throwing: page.jsx would put this in the new
+      // account's banner.
+      expect(await editing).toBeUndefined();
+    });
+  });
+
   it("rolls back only the membership that failed, not the whole list", async () => {
     // A rollback restoring the snapshot would drop the concurrent add of 20
     // along with the failed add of 10.

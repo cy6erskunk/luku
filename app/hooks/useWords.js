@@ -149,6 +149,7 @@ export function useWords(userId) {
    * compute from the same snapshot and the second would undo the first.
    */
   const changeWordBundle = async (id, bundleId, action) => {
+    const forAccount = userId;
     // A guard, not the update: a word that is not on the list has nothing to
     // send, and a stale answer here only costs a request the server 404s.
     if (!dbWords.some((w) => w.id === id)) return;
@@ -168,6 +169,10 @@ export function useWords(userId) {
           ? "Could not add that word to the bundle"
           : "Could not take that word out of the bundle");
         const { bundleIds } = await r.json();
+        // Nothing lands under an account that did not ask for it — the list
+        // this would reconcile against is someone else's now, and the word id
+        // it names means nothing there.
+        if (accountRef.current !== forAccount) return;
         // Only the membership this request settled, not the whole list it came
         // back with. That list is a snapshot taken at the server, so applying
         // all of it lets a slow answer about one bundle resurrect another that
@@ -176,6 +181,10 @@ export function useWords(userId) {
           applyBundleChange(id, bundleId, bundleIds.includes(bundleId) ? "add" : "remove");
         }
       } catch (e) {
+        // Neither does a failure: rolled back against the wrong list it would
+        // edit a stranger's word, and reported it would put the previous
+        // account's error in this one's banner.
+        if (accountRef.current !== forAccount) return;
         // The inverse of what was applied. The UI only offers "add" for a
         // bundle the word is not in and "remove" for one it is, so inverting
         // restores exactly the state this call changed — and nothing else.

@@ -145,8 +145,13 @@ A bundle is a named group of words — normally "the words from this page".
   account's row, not a browser preference: a shared key would leave one
   account's id live under the next one's session until their list loaded, and
   if that load failed, indefinitely. Every word added while a bundle is set
-  goes in, in the same request that saves the word — `POST /api/words` takes an
-  optional `bundleId`. The selection outlives the list that names it — it is
+  goes in, in the same **statement** that saves the word: `POST /api/words`
+  takes an optional `bundleId` and attaches it in a data-modifying CTE, so the
+  membership cannot be separated from the word it belongs to. Two statements
+  left a window in which the reader could take the tag off between them, only
+  for the attach to put it back. The CTEs share one snapshot, so the returned
+  `bundle_ids` cannot see the row inserted beside it — the route unions the
+  attached id in. The selection outlives the list that names it — it is
   read from `localStorage` before `/api/bundles` answers, and survives a failed
   load — so `BundlePicker` gives it an option of its own while it is
   unresolved. Without one the `<select>` has no option carrying its value and
@@ -165,6 +170,11 @@ A bundle is a named group of words — normally "the words from this page".
   delete would be safe scoping the word alone — a caller can only reach rows
   hanging off their own words — but it scopes both anyway, because "both sides,
   always" is a rule a reader can check at a glance.
+- **A load's merge respects what this session has already deleted.** A bundle
+  can be created and deleted while the initial GET is still out, and that
+  snapshot was taken before the delete. `useBundles` keeps the ids it has
+  confirmed deleted since the load began and filters them out of the merge, or
+  the row comes back as a ghost that every later delete can only 404 on.
 - **A membership edit names one membership at every step** — the optimistic
   update, the reconcile against the response, and the rollback. The PATCH
   answers with the word's whole `bundle_ids`, and applying all of it would let
