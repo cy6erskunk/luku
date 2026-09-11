@@ -135,10 +135,17 @@ hint was a missing word-count chip.
 
 Rules that keep that from happening again:
 
-- **A route that can hit a not-yet-created table wraps its body in
-  `withSchemaGuard()`** (`lib/db.js`). It turns Postgres' `42P01` into a 503
+- **A route whose query can outrun the schema wraps its body in
+  `withSchemaGuard()`** (`lib/db.js`) — `/api/words`, `/api/reviews` and
+  `/api/telegram/link`. Two are deliberately outside it: the webhook must
+  answer 200 once authenticated or Telegram redelivers the update on a
+  schedule, and `/api/telegram/cron` answers a machine that only reads the
+  status. It turns Postgres' `42P01` *and* `42703` into a 503
   naming `db/schema.sql`, and rethrows everything else so a real bug stays a
-  500. A handler that only ever names a table an existing deployment must
+  500. The column case matters more than the table case: migrations are
+  appended as `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` far more often than as
+  new tables, so an older database usually has every table and only some of the
+  columns — the list loads and the save fails. A handler that only ever names a table an existing deployment must
   already have — `/api/words` DELETE, which cannot be reached before the list
   has loaded — is left unguarded rather than wrapped for symmetry.
 - **A failed load is never swallowed.** `useWords` exposes `wordsError`, read

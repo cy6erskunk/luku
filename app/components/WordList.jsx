@@ -5,7 +5,7 @@ import { useDialog } from "../hooks/useDialog.js";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
-export default function WordList({ words, onClose, onDelete }) {
+export default function WordList({ words, onClose, onDelete, error, onDismissError }) {
   const [pendingId, setPendingId] = useState(null);
 
   const handleBackdropClick = () => { setPendingId(null); onClose(); };
@@ -33,6 +33,24 @@ export default function WordList({ words, onClose, onDelete }) {
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
+
+        {error && (
+          // Rendered here, not by page.jsx: the delete that can fail is taken
+          // inside this overlay, and the page's banner sits behind a backdrop
+          // this dialog declares aria-modal over — visible to nobody and
+          // reachable by no one. A test asserting role="alert" still finds it
+          // there, which is how it went unnoticed.
+          <div
+            role="alert"
+            onClick={(e) => e.stopPropagation()}
+            style={{ margin: "10px 20px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "9px 12px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
+          >
+            <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {error}</span>
+            {onDismissError && (
+              <button onClick={onDismissError} aria-label="Dismiss" style={{ background: "none", border: "none", color: "#c48a8a", fontSize: 14, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}>✕</button>
+            )}
+          </div>
+        )}
         <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "8px 0" }}>
           {words.length === 0
             ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words saved yet.</div>

@@ -126,6 +126,12 @@ export default function Luku() {
     setShowTelegram(false);
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
+    // As handleScanAnother does. Left behind, an id from a DELETE that is still
+    // in flight keeps the re-entry guard closed on the next screen: a fresh
+    // attempt at that word returns immediately and the control stays disabled
+    // until the old request settles, with nothing said about why.
+    deletingRef.current = new Set();
+    setDeletingIds(new Set());
     resetReview();
     resetImage();
   }, [user?.id, resetReview, resetImage]);
@@ -371,6 +377,11 @@ export default function Luku() {
 
   const handleDeleteWord = async (id) => {
     const forScreen = screenRef.current;
+    const forAccount = accountRef.current;
+    // As handleAddWord does. Without it a failure reported here outlives the
+    // retry that succeeds, and the reader is still being told about a delete
+    // that has since gone through.
+    setActionError(null);
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
@@ -407,6 +418,14 @@ export default function Luku() {
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw await responseError(res, "Could not delete that word");
+      // The optimistic removal was undone by the reload the account change
+      // triggered, so the row is back on screen while the server no longer has
+      // it — and deleting it again would 404 and restore it a second time.
+      // Scoped to the account rather than the screen: the row is this
+      // account's either way, and removing it is what the server already did.
+      if (screenRef.current !== forScreen && accountRef.current === forAccount) {
+        words.removeWord(id);
+      }
     } catch (e) {
       console.error("delete word failed", e);
       // Nothing is restored or reported on a screen that did not ask for the
@@ -447,6 +466,10 @@ export default function Luku() {
   };
 
   const banner = words.wordsError || actionError;
+  // While the overlay is open it renders the banner itself, above its own
+  // backdrop. Two copies would be one too many, and the page's is the one
+  // nobody can see.
+  const pageBanner = showWordList ? null : banner;
 
   return (
     <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif" }} onClick={() => setPopup(null)}>
@@ -489,12 +512,12 @@ export default function Luku() {
       {/* A load failure wins over an action failure: it explains the empty
           screen the reader is looking at, and unlike a failed action it does
           not go away by dismissing it. */}
-      {banner && (
+      {pageBanner && (
         <div
           role="alert"
           style={{ margin: "14px 18px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
         >
-          <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {banner}</span>
+          <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {pageBanner}</span>
           {!words.wordsError && (
             <button
               onClick={(e) => { e.stopPropagation(); setActionError(null); }}
@@ -555,7 +578,13 @@ export default function Luku() {
       )}
 
       {showWordList && (
-        <WordList words={words.dbWords} onClose={() => setShowWordList(false)} onDelete={handleDeleteWord} />
+        <WordList
+          words={words.dbWords}
+          onClose={() => setShowWordList(false)}
+          onDelete={handleDeleteWord}
+          error={banner}
+          onDismissError={words.wordsError ? undefined : () => setActionError(null)}
+        />
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}

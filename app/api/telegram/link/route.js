@@ -1,5 +1,5 @@
 import { getAuth } from "@/lib/auth/server";
-import { getDb } from "@/lib/db";
+import { getDb, withSchemaGuard } from "@/lib/db";
 import { createLinkCode, deleteLinkByUserId, getLinkByUserId } from "@/lib/telegram/link";
 
 async function requireUser() {
@@ -40,8 +40,12 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const link = await getLinkByUserId(getDb(), user.id);
-  return Response.json(serialize(link));
+  // telegram_links and telegram_link_codes are schema.sql's, and a deployment
+  // that adds the bot later is the ordinary way to meet them missing.
+  return withSchemaGuard(async () => {
+    const link = await getLinkByUserId(getDb(), user.id);
+    return Response.json(serialize(link));
+  });
 }
 
 /**
@@ -57,20 +61,24 @@ export async function POST() {
   }
   const bot = botUsername();
 
-  const sql = getDb();
-  if (await getLinkByUserId(sql, user.id)) {
-    return Response.json({ error: "Already connected" }, { status: 409 });
-  }
+  return withSchemaGuard(async () => {
+    const sql = getDb();
+    if (await getLinkByUserId(sql, user.id)) {
+      return Response.json({ error: "Already connected" }, { status: 409 });
+    }
 
-  const code = await createLinkCode(sql, user.id);
-  return Response.json({ url: `https://t.me/${bot}?start=${code}`, code });
+    const code = await createLinkCode(sql, user.id);
+    return Response.json({ url: `https://t.me/${bot}?start=${code}`, code });
+  });
 }
 
 export async function DELETE() {
   const user = await requireUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const removed = await deleteLinkByUserId(getDb(), user.id);
-  if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
-  return Response.json({ ok: true });
+  return withSchemaGuard(async () => {
+    const removed = await deleteLinkByUserId(getDb(), user.id);
+    if (!removed) return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ ok: true });
+  });
 }
