@@ -59,6 +59,10 @@ export default function Luku() {
   // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
+  // A failed action, shown in the same banner as a failed load. These used to
+  // reach only console.error, which on a screen whose empty state looks exactly
+  // like the failed one told the reader nothing.
+  const [actionError, setActionError] = useState(null);
 
   const words = useWords(user?.id);
 
@@ -247,13 +251,18 @@ export default function Luku() {
 
   const handleAddWord = async () => {
     if (!popup?.k) return;
-    const entry = session[popup.k];
+    // Captured up front: the reader can dismiss the popup or tap another word
+    // while the save is in flight, and the result belongs to the word that
+    // asked for it.
+    const key = popup.k;
+    const entry = session[key];
     if (!entry) return;
     // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
-    setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
+    setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
+    setActionError(null);
     try {
       const saved = await words.saveWord(entry);
       if (saved?.id != null) {
@@ -272,7 +281,16 @@ export default function Luku() {
           });
         }
       }
-    } catch (e) { console.error("save word failed", e); }
+    } catch (e) {
+      console.error("save word failed", e);
+      // Nothing was saved, so the tick and the highlight have to go. Leaving
+      // them is worse than never having shown them: the popup replaces its
+      // Add button with "✓ Added to review", so the reader both believes the
+      // word is on the list and has no way to try again.
+      setSession((s) => s[key] ? { ...s, [key]: { ...s[key], added: false } } : s);
+      setPopup((p) => p?.k === key ? { ...p, added: false } : p);
+      setActionError(e.message || "Could not save that word.");
+    }
   };
 
   const handleDeleteWord = async (id) => {
@@ -343,6 +361,8 @@ export default function Luku() {
     }
   };
 
+  const banner = words.wordsError || actionError;
+
   return (
     <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif" }} onClick={() => setPopup(null)}>
 
@@ -380,6 +400,27 @@ export default function Luku() {
           />
         </div>
       </div>
+
+      {/* A load failure wins over an action failure: it explains the empty
+          screen the reader is looking at, and unlike a failed action it does
+          not go away by dismissing it. */}
+      {banner && (
+        <div
+          role="alert"
+          style={{ margin: "14px 18px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
+        >
+          <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {banner}</span>
+          {!words.wordsError && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setActionError(null); }}
+              aria-label="Dismiss"
+              style={{ background: "none", border: "none", color: "#c48a8a", fontSize: 14, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} />}
       {stage === 1 && (

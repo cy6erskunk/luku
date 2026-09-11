@@ -10,7 +10,7 @@
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
 - **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
-- **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
+- **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no *interactive* transactions**: `sql.transaction([...])` runs a fixed list of statements atomically, but every query is built before the call, so no statement can use an earlier one's result. A read-then-decide-then-write therefore needs a compare-and-swap, and multi-step writes must be safe half-completed. `CONTRIBUTING.md` has the driver's other departures from a pooled client.
 - **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
 - **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)
 
@@ -69,7 +69,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
 │   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
-├── db.js                       # getDb() -> neon(DATABASE_URL)
+├── db.js                       # getDb() -> neon(DATABASE_URL), plus withSchemaGuard()
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
 ├── auth/server.js              # getAuth()
@@ -98,7 +98,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 |------|------|
 | `useApiKey` | `savedKey` + localStorage persistence |
 | `useSession` | Per-scan translation cache + localStorage persistence |
-| `useWords` | `dbWords`, `loadingWords`, word CRUD |
+| `useWords` | `dbWords`, `loadingWords`, `wordsError`, word CRUD |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
@@ -118,10 +118,54 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `dehyphenate()` (`utils.js`) | Rejoins words split across lines; `sentenceOf()` runs it first so context is a whole sentence |
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
+| `responseError()` (`utils.js`) | Turns a not-ok response into an Error carrying the server's own `error` message, or the status when there is no readable body |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
 | `savedWordEntry()` (`utils.js`) | Shapes a saved word into popup fields, so tapping a word already on the list shows its stored translation immediately — while the form lookup runs, or without an API key at all |
 | `Bp` / `Bg` (`styles.js`) | Shared primary and ghost button styles |
 | `authClient` (`authClient.js`) | Neon Auth browser client |
+
+### When the schema has not been run
+
+Nothing deploys `db/schema.sql`; it is run by hand. A deployment pointed at a
+database that predates the last appended migration is therefore a normal way to
+be wrong, and it used to be **invisible**: the query threw, Next answered 500
+with no body of ours, `useWords` swallowed it, and the app rendered an account
+with no saved words — which is exactly what a new account looks like. The only
+hint was a missing word-count chip.
+
+Rules that keep that from happening again:
+
+- **A route that can hit a not-yet-created table wraps its body in
+  `withSchemaGuard()`** (`lib/db.js`). It turns Postgres' `42P01` into a 503
+  naming `db/schema.sql`, and rethrows everything else so a real bug stays a
+  500. A handler that only ever names a table an existing deployment must
+  already have — `/api/words` DELETE, which cannot be reached before the list
+  has loaded — is left unguarded rather than wrapped for symmetry.
+- **A failed load is never swallowed.** `useWords` exposes `wordsError`, read
+  through `responseError()` so the server's own message is what the reader
+  sees, and `page.jsx` renders it in one banner. This matters most for lists
+  whose empty state is unremarkable: any silent failure there is
+  indistinguishable from success. A load error is not dismissible (it describes
+  the state of the screen); a failed action is.
+- **A request that answers after the account changed is dropped.** The load
+  takes the `cancelled` flag `useServerKey` uses — signing out and back in as
+  someone else overlaps two loads, and without it the first account's data, or
+  its error, can land under the second account's session. A write cannot use
+  that flag, since it does not belong to the effect: `saveWord` compares
+  against `accountRef` instead.
+- **A write withholds its result from the caller too, not just from the
+  state.** `saveWord` returns null when the account moved while it was in
+  flight, because `page.jsx` files whatever it hands back under the session's
+  new words, and the hook holding it is still mounted after a switch. Guarding
+  only the `setState` leaves the stale row travelling by return value. The same
+  applies to a *failure*: it returns rather than throwing, or `page.jsx`'s catch
+  would roll back a popup belonging to the old session and raise its error in
+  the new one's banner.
+- **An optimistic update is rolled back when the write fails.**
+  `handleAddWord` marks a word added before the save lands, and the popup swaps
+  its Add button for "✓ Added to review". Left up after a failure that tells
+  the reader the word is saved *and* takes away their way to retry, so the
+  catch restores both and reports why.
 
 ### Telegram bot
 

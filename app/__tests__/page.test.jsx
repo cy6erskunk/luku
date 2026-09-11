@@ -399,3 +399,141 @@ describe("reading a scanned page", () => {
   });
 });
 
+describe("a deployment whose database is missing the migration", () => {
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  /** The word list 503s the way the schema guard makes it. */
+  function unmigrated() {
+    const schemaError = {
+      ok: false, status: 503,
+      json: () => Promise.resolve({
+        error: "This deployment's database is missing a table the app needs — run db/schema.sql against it.",
+        schemaOutOfDate: true,
+      }),
+    };
+    const fetchMock = vi.fn((url) => {
+      if (String(url).startsWith("/api/words")) return Promise.resolve(schemaError);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("says what is wrong instead of looking like an empty account", async () => {
+    // Before this, the only hint was that the word counters were missing —
+    // which is indistinguishable from having saved no words yet.
+    unmigrated();
+    render(<Luku />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/db\/schema\.sql/);
+  });
+
+  it("still lets the reader scan and read", async () => {
+    // The vocabulary is unavailable; the rest of the app is not, so it is not
+    // replaced by an error screen.
+    unmigrated();
+    render(<Luku />);
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("Photograph a Finnish page")).toBeTruthy();
+  });
+
+  it("does not offer to dismiss a failure that dismissing cannot fix", async () => {
+    unmigrated();
+    render(<Luku />);
+
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+  });
+
+  it("shows nothing once the migration has been run", async () => {
+    mockApi({ words: [WORD] });
+    render(<Luku />);
+
+    await screen.findByRole("button", { name: "1 words" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("a word that fails to save", () => {
+  const SCANNED = "Koira juoksee.";
+
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+  });
+
+  /** Everything loads; only the save is refused. */
+  function saveFails(body = {}) {
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "POST") {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve(body) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  async function tapAndAdd() {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    ocrLocal.mockResolvedValue(SCANNED);
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+  }
+
+  it("does not leave the reader believing the word was saved", async () => {
+    // The optimistic tick replaces the Add button, so leaving it up after a
+    // failure both misinforms the reader and removes their way to retry.
+    saveFails();
+    await tapAndAdd();
+
+    await screen.findByRole("alert");
+    expect(screen.queryByText("✓ Added to review")).toBeNull();
+  });
+
+  it("offers the add again, so the reader can retry", async () => {
+    saveFails();
+    await tapAndAdd();
+
+    expect(await screen.findByRole("button", { name: /Add to review list/ })).toBeTruthy();
+  });
+
+  it("says why, using the server's own message when it sent one", async () => {
+    saveFails({ error: "This deployment's database is missing a table the app needs — run db/schema.sql against it." });
+    await tapAndAdd();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/db\/schema\.sql/);
+  });
+
+  it("falls back to the status when there is no message", async () => {
+    saveFails();
+    await tapAndAdd();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Failed to save word \(500\)/);
+  });
+
+  it("keeps the word off the new-words bucket", async () => {
+    // Nothing was saved, so there is nothing to triage. Waits on the rollback
+    // rather than the banner, so it is the bookkeeping being asserted here and
+    // not the error reporting the tests above already cover.
+    saveFails();
+    await tapAndAdd();
+
+    await screen.findByRole("button", { name: /Add to review list/ });
+    expect(screen.queryByRole("button", { name: /new$/ })).toBeNull();
+  });
+});
