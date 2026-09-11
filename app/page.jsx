@@ -38,7 +38,7 @@ export default function Luku() {
   // A key the user typed wins over the development one, so someone who wants
   // to spend their own credit still can.
   const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
-  const { session, setSession } = useSession();
+  const { session, setSession } = useSession(user?.id);
 
   const [stage, setStage] = useState(0);
   const [text, setText] = useState("");
