@@ -347,6 +347,106 @@ describe("useWords – bundle membership", () => {
     expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
   });
 
+  it("does not show the opposite of the reader's last action while it waits", async () => {
+    // Add then remove, in quick succession. The queue sends them in order, so
+    // the add answers first — and reconciling to it puts the tag back on
+    // screen, with the wrong control beside it, until the remove finally
+    // lands. Ordering the requests is not enough; the answer has to know it
+    // has been overruled.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add, remove;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await act(async () => { resolvers[0](ok([2])); await add; });
+    // The add's own answer says the tag is on. It is not the last word.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("does not roll back an edit the reader has already replaced", async () => {
+    // Same shape for the failure path. Add, remove, add again — then let the
+    // first add fail. Its rollback is "remove", which would take off the tag
+    // the reader's latest action just put on. Two actions are not enough to
+    // catch this: the inverse has to differ from where the reader left it.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let first, remove, again;
+    await act(async () => { first = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    await act(async () => { again = result.current.addWordToBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await first.catch(() => {});
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove.catch(() => {}); });
+    await settle();
+    await act(async () => { resolvers[2](ok([2])); await again.catch(() => {}); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("queues a save carrying a bundle behind a pending edit of that membership", async () => {
+    // The POST attaches membership in the same statement as the word, which is
+    // atomic in itself and says nothing about its order against a PATCH the
+    // reader issues meanwhile. Re-adding a word already in the bundle and then
+    // untagging it must not end with the tag back on.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2] }]);
+    const seen = [];
+    const resolvers = pendingFetch((body) => seen.push(body));
+
+    let save, remove;
+    await act(async () => { save = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    // The save is on the same queue, so the remove has not been sent yet.
+    expect(seen).toHaveLength(1);
+    expect(seen[0].bundleId).toBe(2);
+
+    await act(async () => {
+      resolvers[0]({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [2] } }) });
+      await save;
+    });
+    // The save's own attach is stale: the reader untagged it afterwards.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("does not restore a membership that was only ever optimistic", async () => {
+    // Add a word to a bundle, delete the bundle while that PATCH is pending,
+    // let the add fail, then let the bundle delete fail too. restoreBundle is
+    // handed ids read off the screen, which included this one — but the server
+    // never had the membership.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    act(() => result.current.forgetBundle(2));
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await add.catch(() => {});
+    });
+
+    act(() => result.current.restoreBundle(2, [1]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
   it("takes only the membership it asked about from the response", async () => {
     // The response is the word's whole list as the server saw it. Applying all
     // of it would let this answer speak for bundles other requests own.

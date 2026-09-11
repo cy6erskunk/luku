@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { MAX_BUNDLE_NAME } from "@/lib/shared/bundle.js";
 
 /**
@@ -24,6 +24,16 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
   // selection gets an option of its own until the list can name it.
   const unresolved = activeBundleId != null && !bundles.some((b) => b.id === activeBundleId);
 
+  // The account key above remounts this component, but onSelect is page.jsx's
+  // own callback — one function shared by every instance — so a create still
+  // running from the old one can call it against the new screen. Signing out
+  // and back in as the same account restores the id the hook compares, so its
+  // guard lets that response through; this is what stops it writing a bundle
+  // the reader is no longer collecting into, into their selection and their
+  // localStorage.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
   const submit = async (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -37,7 +47,7 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
       // the account moved under it, or it named a bundle this session has
       // since deleted. Nothing happened, so the form stays as the reader left
       // it — clearing it would wipe a name the next account is typing.
-      if (bundle?.id == null) return;
+      if (bundle?.id == null || !mounted.current) return;
       onSelect(bundle.id);
       setName("");
       setAdding(false);

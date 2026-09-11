@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
 import BundlePicker from "../BundlePicker.jsx";
 
 const BUNDLES = [
@@ -91,6 +91,29 @@ describe("BundlePicker", () => {
     await waitFor(() => expect(onCreate).toHaveBeenCalledWith("Uusi"));
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/new bundle name/i).value).toBe("Uusi");
+  });
+
+  it("does not select a bundle created by a picker that is gone", async () => {
+    // page.jsx keys this component on the account, so a switch unmounts it —
+    // but onSelect is page.jsx's own callback, shared by every instance, so a
+    // create still running from the old one can still write a selection into
+    // the new screen. Signing back in as the same account restores the id the
+    // hook compares, so its own guard lets that response through.
+    let resolveCreate;
+    const onCreate = vi.fn(() => new Promise((r) => { resolveCreate = r; }));
+    const onSelect = vi.fn();
+    const { unmount } = render(
+      <BundlePicker bundles={BUNDLES} activeBundleId={null} onSelect={onSelect} onCreate={onCreate} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Uusi" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+
+    unmount();
+    await act(async () => { resolveCreate({ id: 3, name: "Uusi" }); await Promise.resolve(); });
+
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it("trims the typed name before creating", async () => {
