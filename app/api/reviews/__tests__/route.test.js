@@ -6,7 +6,12 @@ const mocks = vi.hoisted(() => ({ session: null, sql: null }));
 vi.mock("@/lib/auth/server", () => ({
   getAuth: () => ({ getSession: () => Promise.resolve({ data: mocks.session }) }),
 }));
-vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
+// Only getDb is faked; the real withSchemaGuard runs, so these exercise the
+// guard rather than a stub of it — as the /api/words tests already do.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDb: () => mocks.sql,
+}));
 
 const { POST } = await import("../route.js");
 

@@ -72,7 +72,8 @@ export default function WordList({ words, bundles = [], onClose, onDelete, onAdd
           // Rendered here, not by page.jsx: every action that can fail from
           // this overlay is taken inside it, and the page's banner sits behind
           // a backdrop this dialog declares aria-modal over — visible to
-          // nobody and reachable by no one.
+          // nobody and reachable by no one. A test asserting role="alert"
+          // still finds it there, which is how it went unnoticed.
           <div
             role="alert"
             onClick={(e) => e.stopPropagation()}

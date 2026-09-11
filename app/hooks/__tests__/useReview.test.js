@@ -171,9 +171,11 @@ describe("useReview – reset", () => {
 
 describe("useReview – a grade that answers after reset", () => {
   it("does not advance or requeue the cards that replaced it", async () => {
-    // reset() runs when the account changes. The grade itself is recorded
-    // server-side and stays recorded; what must not happen is the answer
-    // steering a queue that now belongs to a different session.
+    // reset() runs when the account changes. The grade is recorded server-side
+    // and the returned row is applied either way — discarding it would leave
+    // the card showing an old schedule and due again until the next load, and
+    // updateWord matches by id, which is unique across accounts. What must not
+    // happen is the answer steering a queue that belongs to another session.
     let resolveGrade;
     vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => { resolveGrade = r; })));
     const updateWord = vi.fn();
@@ -191,7 +193,8 @@ describe("useReview – a grade that answers after reset", () => {
 
     expect(result.current.queue).toEqual([3]);
     expect(result.current.revIdx).toBe(0);
-    expect(updateWord).not.toHaveBeenCalled();
+    // The row is applied; only the queue is left alone.
+    expect(updateWord).toHaveBeenCalledWith({ id: 1 });
   });
 });
 

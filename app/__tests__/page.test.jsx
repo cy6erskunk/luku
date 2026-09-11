@@ -879,6 +879,53 @@ describe("a word that fails to delete", () => {
   });
 });
 
+describe("a failed delete from the vocabulary overlay", () => {
+  beforeEach(() => { signedIn(); localStorage.setItem("luku_api_key", "sk-ant-test"); });
+
+  const openListAndDelete = async (fetchImpl) => {
+    vi.stubGlobal("fetch", vi.fn(fetchImpl));
+    render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+  };
+
+  it("reports inside the dialog, not behind its backdrop", async () => {
+    // page.jsx's banner sits under a fixed backdrop the dialog declares
+    // aria-modal over, so a reader with the overlay open cannot see it — and a
+    // test that only asserts role="alert" cannot tell the difference. Assert
+    // where it is, not just that it exists.
+    await openListAndDelete((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: "nope" }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.getByRole("dialog").contains(alert)).toBe(true);
+  });
+
+  it("stops reporting a failure the retry has since fixed", async () => {
+    let fail = true;
+    await openListAndDelete((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        const first = fail; fail = false;
+        return Promise.resolve(first
+          ? { ok: false, status: 500, json: () => Promise.resolve({ error: "nope" }) }
+          : { ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    });
+    await screen.findByRole("alert");
+
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+});
+
 describe("an action failure from a previous account", () => {
   it("does not follow the reader into the next session", async () => {
     // Luku stays mounted while it renders <SignIn />, so the banner outlives a
@@ -1059,6 +1106,39 @@ describe("signing in as someone else", () => {
 
     expect(screen.queryByText("Koira")).toBeNull();
     await screen.findByText("Photograph a Finnish page");
+  });
+
+  it("does not leave a delete from the previous screen blocking the next one", async () => {
+    // deletingRef is the re-entry guard. Left holding an id across the switch,
+    // the next screen's delete of that word returns immediately and the
+    // control stays disabled — silently — until the old request settles.
+    let settleDelete;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return new Promise((r) => { settleDelete = r; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    await switchTo(rerender, "u2");
+    await switchTo(rerender, "u1");
+
+    // The same word is on screen again for u1; deleting it must issue a
+    // request rather than be swallowed by the previous screen's bookkeeping.
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    await waitFor(() => {
+      const deletes = fetch.mock.calls.filter(([, o]) => o?.method === "DELETE");
+      expect(deletes.length).toBe(2);
+    });
+    expect(settleDelete).toBeTypeOf("function");
   });
 
   it("does not mark a word new when its save lands after signing back in", async () => {

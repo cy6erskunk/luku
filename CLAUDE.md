@@ -212,9 +212,14 @@ hint was a missing word-count chip.
 
 These rules keep that from happening again:
 
-- **A route that can hit a not-yet-created table wraps its body in
-  `withSchemaGuard()`** (`lib/db.js`). It turns Postgres' `42P01` into a 503
+- **A route whose query can outrun the schema wraps its body in
+  `withSchemaGuard()`** (`lib/db.js`) — `/api/words`, `/api/reviews` and
+  `/api/telegram/link`. Two are deliberately outside it: the webhook must
+  answer 200 once authenticated or Telegram redelivers the update on a
+  schedule, and `/api/telegram/cron` answers a machine that only reads the
+  status. It turns Postgres' `42P01` *and* `42703` into a 503
   naming `db/schema.sql`, and rethrows everything else so a real bug stays a
+<<<<<<< HEAD
   500. Bundles widen what that covers: membership is part of the word list
   now, so a missing `word_bundles` takes the whole vocabulary down with it and
   `/api/words` needs the guard on the read, the save and the membership edit
@@ -233,6 +238,26 @@ These rules keep that from happening again:
   need the same guard and cannot use that flag, since they do not belong to
   the effect: `useBundles` compares against `accountRef`, so a create that
   answers late cannot drop one account's bundle into the next one's list.
+=======
+  500. The column case matters more than the table case: migrations are
+  appended as `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` far more often than as
+  new tables, so an older database usually has every table and only some of the
+  columns — the list loads and the save fails. A handler that only ever names a table an existing deployment must
+  already have — `/api/words` DELETE, which cannot be reached before the list
+  has loaded — is left unguarded rather than wrapped for symmetry.
+- **A failed load is never swallowed.** `useWords` exposes `wordsError`, read
+  through `responseError()` so the server's own message is what the reader
+  sees, and `page.jsx` renders it in one banner. This matters most for lists
+  whose empty state is unremarkable: any silent failure there is
+  indistinguishable from success. A load error is not dismissible (it describes
+  the state of the screen); a failed action is.
+- **A request that answers after the account changed is dropped.** The load
+  takes the `cancelled` flag `useServerKey` uses — signing out and back in as
+  someone else overlaps two loads, and without it the first account's data, or
+  its error, can land under the second account's session. A write cannot use
+  that flag, since it does not belong to the effect: `saveWord` compares
+  against `accountRef` instead.
+>>>>>>> claude/failure-visibility-043601
 - **A write withholds its result from the caller too, not just from the
   state.** `createBundle` and `saveWord` return null when the account moved
   while they were in flight: `BundlePicker` selects whatever `createBundle`

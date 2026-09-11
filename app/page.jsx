@@ -128,6 +128,12 @@ export default function Luku() {
     setShowTelegram(false);
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
+    // As handleScanAnother does. Left behind, an id from a DELETE that is still
+    // in flight keeps the re-entry guard closed on the next screen: a fresh
+    // attempt at that word returns immediately and the control stays disabled
+    // until the old request settles, with nothing said about why.
+    deletingRef.current = new Set();
+    setDeletingIds(new Set());
     resetReview();
     resetImage();
   }, [user?.id, resetReview, resetImage]);
@@ -462,6 +468,11 @@ export default function Luku() {
 
   const handleDeleteWord = async (id) => {
     const forScreen = screenRef.current;
+    const forAccount = accountRef.current;
+    // As handleAddWord does. Without it a failure reported here outlives the
+    // retry that succeeds, and the reader is still being told about a delete
+    // that has since gone through.
+    setActionError(null);
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
@@ -498,6 +509,14 @@ export default function Luku() {
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw await responseError(res, "Could not delete that word");
+      // The optimistic removal was undone by the reload the account change
+      // triggered, so the row is back on screen while the server no longer has
+      // it — and deleting it again would 404 and restore it a second time.
+      // Scoped to the account rather than the screen: the row is this
+      // account's either way, and removing it is what the server already did.
+      if (screenRef.current !== forScreen && accountRef.current === forAccount) {
+        words.removeWord(id);
+      }
     } catch (e) {
       console.error("delete word failed", e);
       // Nothing is restored or reported on a screen that did not ask for the

@@ -92,10 +92,13 @@ export function useReview({ dbWords, updateWord, stage }) {
       });
       if (!r.ok) throw new Error(`grade failed: ${r.status}`);
       const { word: updated } = await r.json();
-      // The grade is recorded server-side either way — it is the queue this
-      // must not touch, since the reset means these are no longer its cards.
-      if (runRef.current !== run) return;
+      // The row is applied either way: the grade was recorded server-side, so
+      // discarding it leaves the card showing an old schedule and due again
+      // until the next load. updateWord matches by id and word ids are unique
+      // across accounts, so on a list that is not this row's it is a no-op.
       if (updated) updateWord(updated);
+      // The queue is what the reset means: these are no longer its cards.
+      if (runRef.current !== run) return;
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
