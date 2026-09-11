@@ -891,6 +891,28 @@ describe("signing in as someone else", () => {
     expect(localStorage.getItem("luku_session:u2")).toBeNull();
   });
 
+  it("does not put the previous account's scan on the next one's screen", async () => {
+    // OCR outlives the screen that started it. image.reset() cleared what was
+    // drawn but not the run itself, so the old scan still called onTextReady —
+    // landing A's photographed page, at the read stage, in front of B.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    let finishOcr;
+    ocrLocal.mockImplementation(() => new Promise((r) => { finishOcr = r; }));
+    mockApi({ words: [] });
+
+    const { rerender } = render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+
+    await switchTo(rerender, "u2");
+    await act(async () => { finishOcr(SCANNED); await new Promise((r) => setTimeout(r, 0)); });
+
+    expect(screen.queryByText("Koira")).toBeNull();
+    await screen.findByText("Photograph a Finnish page");
+  });
+
   it("does not mark a word new when its save lands after signing back in", async () => {
     // The guard used to compare account ids, which cannot tell an
     // A -> B -> A round trip from the original A session: the id matches

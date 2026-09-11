@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export function useReview({ dbWords, updateWord, stage }) {
   const [queue, setQueue] = useState([]);
@@ -9,6 +9,11 @@ export function useReview({ dbWords, updateWord, stage }) {
   // The bundle a scoped session was started from, purely so the review screen
   // can name it. Null for a session over the whole vocabulary.
   const [scope, setScope] = useState(null);
+  // Which review the grading request belongs to, bumped by reset(). A grade is
+  // a round trip, and reset() runs when the account changes — so without this
+  // an answer from the previous session advances the card of whoever is
+  // reviewing now, and requeues a word that is not theirs.
+  const runRef = useRef(0);
   const isRepeat = mode === "repeat";
   const isNewReview = mode === "new";
 
@@ -77,6 +82,7 @@ export function useReview({ dbWords, updateWord, stage }) {
       setShowAnswer(false);
       return;
     }
+    const run = runRef.current;
     setGrading(true);
     try {
       const r = await fetch("/api/reviews", {
@@ -86,12 +92,15 @@ export function useReview({ dbWords, updateWord, stage }) {
       });
       if (!r.ok) throw new Error(`grade failed: ${r.status}`);
       const { word: updated } = await r.json();
+      // The grade is recorded server-side either way — it is the queue this
+      // must not touch, since the reset means these are no longer its cards.
+      if (runRef.current !== run) return;
       if (updated) updateWord(updated);
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
     } catch (e) { console.error("grade failed", e); }
-    finally { setGrading(false); }
+    finally { if (runRef.current === run) setGrading(false); }
   };
 
   const removeWordFromQueue = (id) => {
@@ -119,6 +128,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   // Stable, so callers can depend on it without re-running an effect every
   // render.
   const reset = useCallback(() => {
+    runRef.current += 1;
     setQueue([]);
     setRevIdx(0);
     setShowAnswer(false);
