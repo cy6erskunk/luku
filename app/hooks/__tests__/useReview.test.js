@@ -198,6 +198,42 @@ describe("useReview – a grade that answers after reset", () => {
   });
 });
 
+describe("useReview – a grade that answers after a new review starts", () => {
+  it("does not steer the queue that replaced its own", async () => {
+    // The run counter was bumped by reset() alone, but startReview installs a
+    // new queue too — and an older grade's answer would advance or requeue
+    // cards it has never seen.
+    let resolveGrade;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => { resolveGrade = r; })));
+    const { result } = renderHook(() => useReview(makeProps()));
+
+    act(() => result.current.startReview(WORDS));
+    act(() => { result.current.gradeWord(1); });
+    act(() => result.current.startReview([WORDS[2]]));
+
+    await act(async () => {
+      resolveGrade({ ok: true, json: () => Promise.resolve({ word: { id: 1 } }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(result.current.queue).toEqual([3]);
+    expect(result.current.revIdx).toBe(0);
+  });
+
+  it("reports a refused grade instead of only logging it", async () => {
+    // The schema guard answers /api/reviews with a 503 naming db/schema.sql.
+    // Swallowed, the reader taps a grade and simply nothing happens.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 503, json: () => Promise.resolve({ error: "run db/schema.sql against it" }),
+    })));
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReview(WORDS));
+    await act(async () => { await result.current.gradeWord(1); });
+
+    expect(result.current.gradeError).toContain("db/schema.sql");
+  });
+});
+
 describe("useReview – grading is reset when starting a new session", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));

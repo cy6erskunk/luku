@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { responseError } from "../lib/utils.js";
 
 export function useReview({ dbWords, updateWord, stage }) {
   const [queue, setQueue] = useState([]);
@@ -6,6 +7,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [grading, setGrading] = useState(false);
   const [mode, setMode] = useState("due");
+  const [gradeError, setGradeError] = useState(null);
   // Which review the grading request belongs to, bumped by reset(). A grade is
   // a round trip, and reset() runs when the account changes — so without this
   // an answer from the previous session advances the card of whoever is
@@ -29,6 +31,9 @@ export function useReview({ dbWords, updateWord, stage }) {
   }, [stage, revIdx, queue, dbWords]);
 
   const startReview = (dueWords) => {
+    // A new queue invalidates the old one's pending grade as surely as a reset
+    // does: its answer would advance or requeue cards it has never seen.
+    runRef.current += 1;
     setMode("due");
     setQueue(dueWords.map((w) => w.id));
     setRevIdx(0);
@@ -37,6 +42,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   };
 
   const startRepeat = (words) => {
+    runRef.current += 1;
     setMode("repeat");
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
@@ -45,6 +51,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   };
 
   const startNewReview = (words) => {
+    runRef.current += 1;
     setMode("new");
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
@@ -78,13 +85,16 @@ export function useReview({ dbWords, updateWord, stage }) {
     }
     const run = runRef.current;
     setGrading(true);
+    setGradeError(null);
     try {
       const r = await fetch("/api/reviews", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ wordId: word.id, grade }),
       });
-      if (!r.ok) throw new Error(`grade failed: ${r.status}`);
+      // Through responseError like the word actions, so the schema guard's
+      // 503 reaches the reader rather than becoming "grade failed: 503".
+      if (!r.ok) throw await responseError(r, "Could not record that answer");
       const { word: updated } = await r.json();
       // The row is applied either way: the grade was recorded server-side, so
       // discarding it leaves the card showing an old schedule and due again
@@ -96,7 +106,12 @@ export function useReview({ dbWords, updateWord, stage }) {
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
-    } catch (e) { console.error("grade failed", e); }
+    } catch (e) {
+      console.error("grade failed", e);
+      // Reported rather than swallowed: the card stays where it is either way,
+      // so without this the reader taps a grade and nothing happens at all.
+      if (runRef.current === run) setGradeError(e.message || "Could not record that answer.");
+    }
     finally { if (runRef.current === run) setGrading(false); }
   };
 
@@ -126,6 +141,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   // render.
   const reset = useCallback(() => {
     runRef.current += 1;
+    setGradeError(null);
     setQueue([]);
     setRevIdx(0);
     setShowAnswer(false);
@@ -134,7 +150,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   }, []);
 
   return {
-    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, mode, isRepeat, isNewReview,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, gradeError, mode, isRepeat, isNewReview,
     startReview, startRepeat, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }
