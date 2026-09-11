@@ -660,6 +660,87 @@ describe("signing in as someone else", () => {
     expect(localStorage.getItem("luku_session:u2")).toBeNull();
   });
 
+  it("does not let the last scan's lookup repopulate the next scan's session", async () => {
+    // screenRef used to move only on an account change, but an AI re-scan and
+    // Scan another both empty the session under the same account.
+    // Token keys collide across pages, so a lookup still running from the last
+    // one would land its entry on the new page's word.
+    let resolveLookup;
+    mocks.translateWord.mockImplementation(() => new Promise((r) => { resolveLookup = r; }));
+    const { ocrImage } = await import("../lib/api.js");
+    ocrImage.mockResolvedValue("Kissa nukkuu.");
+    mockApi({ words: [] });
+
+    await scanAsFirstAccount();
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    // The AI re-scan replaces the text and empties the session under the very
+    // same account — the reachable form of the same reset.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /re-scan with ai/i })); });
+    await screen.findByText("Kissa");
+
+    await act(async () => {
+      resolveLookup({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const stored = JSON.parse(localStorage.getItem("luku_session:u1") || "{}");
+    expect(Object.keys(stored)).toHaveLength(0);
+  });
+
+  it("does not let an obsolete lookup release the current one's marker", async () => {
+    // xlating is the re-entry guard: one lookup at a time. Its cleanup ran
+    // unguarded, so a lookup left over from the previous screen cleared the
+    // marker the *current* lookup was holding and let a second start beside it.
+    const resolvers = [];
+    mocks.translateWord.mockImplementation(() => new Promise((r) => { resolvers.push(r); }));
+    const { ocrImage } = await import("../lib/api.js");
+    ocrImage.mockResolvedValue("Kissa nukkuu.");
+    mockApi({ words: [] });
+
+    await scanAsFirstAccount();
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });   // lookup 1
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /re-scan with ai/i })); });
+    await screen.findByText("Kissa");
+    await act(async () => { fireEvent.click(screen.getByText("Kissa")); });   // lookup 2, holds the marker
+
+    await act(async () => {
+      resolvers[0]({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await act(async () => { fireEvent.click(screen.getByText("nukkuu")); });
+
+    // Still two: lookup 2 has the marker, so the third tap is refused.
+    expect(mocks.translateWord).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not persist an add that never landed", async () => {
+    // The optimistic tick belongs on the popup, which is ephemeral. Written
+    // into the session cache it is persisted under the account and survives
+    // the sign-out — so a save that fails once the screen is gone leaves the
+    // reader told the word is on their list, with no Add button to retry.
+    let rejectSave;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "POST") {
+        return new Promise((_r, rej) => { rejectSave = rej; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    }));
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+
+    const { rerender } = await scanAsFirstAccount();
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /add to review/i }));
+
+    await switchTo(rerender, "u2");
+    await act(async () => {
+      rejectSave(new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const stored = JSON.parse(localStorage.getItem("luku_session:u1") || "{}");
+    for (const entry of Object.values(stored)) expect(entry.added).not.toBe(true);
+  });
+
   it("does not put the previous account's scan on the next one's screen", async () => {
     // OCR outlives the screen that started it. image.reset() cleared what was
     // drawn but not the run itself, so the old scan still called onTextReady —
