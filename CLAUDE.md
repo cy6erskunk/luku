@@ -210,7 +210,7 @@ with no body of ours, `useWords` swallowed it, and the app rendered an account
 with no saved words — which is exactly what a new account looks like. The only
 hint was a missing word-count chip.
 
-Two rules keep that from happening again:
+These rules keep that from happening again:
 
 - **A route that can hit a not-yet-created table wraps its body in
   `withSchemaGuard()`** (`lib/db.js`). It turns Postgres' `42P01` into a 503

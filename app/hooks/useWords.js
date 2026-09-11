@@ -91,8 +91,20 @@ export function useWords(userId) {
     return saved;
   };
 
+  /**
+   * Replace a word with a fresher copy of the same row.
+   *
+   * `bundle_ids` is carried over when the incoming row does not mention it.
+   * Membership lives in its own table, so a row selected straight out of
+   * `words` — which is what `/api/reviews` answers a grade with — has no such
+   * field, and taking it at face value would drop every tag the word has the
+   * moment it is graded. An explicit `[]` still means "no bundles": the test
+   * is absence, not emptiness.
+   */
   const updateWord = (updated) => {
-    setDbWords((prev) => prev.map((w) => w.id === updated.id ? updated : w));
+    setDbWords((prev) => prev.map((w) => w.id === updated.id
+      ? (updated.bundle_ids === undefined ? { ...updated, bundle_ids: wordBundleIds(w) } : updated)
+      : w));
   };
 
   const removeWord = (id) => {

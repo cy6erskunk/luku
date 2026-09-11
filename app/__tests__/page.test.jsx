@@ -416,6 +416,19 @@ describe("bundles", () => {
     localStorage.setItem("luku_api_key", "sk-ant-test");
   });
 
+  it("can still reach a bundle created before any word was saved", async () => {
+    // The overlay is the only place a bundle can be deleted, and its launcher
+    // used to be gated on the word count — so a bundle made before the first
+    // save had no way out of the list.
+    mockApi({ words: [], bundles: [KOTIMAA] });
+    render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: /0 words/i }));
+
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: /^kotimaa \(/i }));
+    screen.getByRole("button", { name: /delete bundle/i });
+  });
+
   it("offers a bundle to review by name, with its due count", async () => {
     mockApi({ words: [IN_KOTIMAA, ELSEWHERE], bundles: [KOTIMAA, OTHER] });
     render(<Luku />);

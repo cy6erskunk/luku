@@ -607,6 +607,33 @@ describe("useWords – updateWord", () => {
     expect(result.current.dbWords.find((w) => w.id === 1).translations).toEqual(["to sprint"]);
     expect(result.current.dbWords).toHaveLength(2);
   });
+
+  it("keeps the word's bundles when the fresher row does not carry them", async () => {
+    // /api/reviews grades through `RETURNING *` on `words`, and membership is
+    // not a column there — so the row that comes back after every grade has no
+    // bundle_ids at all. Taking it literally dropped every tag on the word the
+    // moment it was reviewed.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10, 20] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    const graded = { ...WORD_A, interval_days: 6 };
+    delete graded.bundle_ids;
+    act(() => result.current.updateWord(graded));
+
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10, 20]);
+    expect(result.current.dbWords[0].interval_days).toBe(6);
+  });
+
+  it("still accepts an explicit empty list as 'no bundles'", async () => {
+    // Absence is what means "unmentioned"; [] is an answer.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    act(() => result.current.updateWord({ ...WORD_A, bundle_ids: [] }));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
 });
 
 describe("useWords – removeWord / restoreWord", () => {

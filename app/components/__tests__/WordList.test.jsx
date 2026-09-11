@@ -163,6 +163,21 @@ describe("WordList – bundles", () => {
     return handlers;
   };
 
+  it("does not call an emptied Unbundled filter a bundle", () => {
+    // Tagging the last unbundled word empties the filter, but Unbundled is not
+    // a bundle — the old message named something the reader never made.
+    const handlers = { onClose: vi.fn(), onDelete: vi.fn(), onDeleteBundle: vi.fn() };
+    const loose = [{ ...WORDS[0], bundle_ids: [] }];
+    const { rerender } = render(<WordList words={loose} bundles={BUNDLES} {...handlers} />);
+    fireEvent.click(screen.getByRole("button", { name: /^unbundled \(/i }));
+
+    // The word gets tagged while the filter is still on it.
+    rerender(<WordList words={[{ ...WORDS[0], bundle_ids: [10] }]} bundles={BUNDLES} {...handlers} />);
+
+    expect(screen.queryByText(/no words in this bundle yet/i)).toBeNull();
+    screen.getByText(/every word is in a bundle/i);
+  });
+
   it("shows no filter row at all when there are no bundles", () => {
     setup();
     expect(screen.queryByRole("button", { name: /^all \(/i })).toBeNull();

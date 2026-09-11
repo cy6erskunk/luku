@@ -522,7 +522,10 @@ export default function Luku() {
           ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {words.dbWords.length > 0 && (
+          {/* Bundles open it too, not just words: the overlay is the only place
+              a bundle can be deleted, and one can be created before any word is
+              saved into it — which used to leave it with no way out. */}
+          {(words.dbWords.length > 0 || bundles.bundles.length > 0) && (
             <div style={{ display: "flex", gap: 5 }}>
               <button onClick={(e) => { e.stopPropagation(); setShowWordList(true); }} style={{ fontSize: 11, color: "#7a9e7e", background: "rgba(122,158,126,0.1)", padding: "3px 9px", borderRadius: 20, border: "1px solid rgba(122,158,126,0.2)", cursor: "pointer", fontFamily: "Georgia,serif", whiteSpace: "nowrap" }}>{words.dbWords.length} words</button>
               {/* The due-review launcher used to live here too; it is dropped in

@@ -122,7 +122,12 @@ export default function WordList({ words, bundles = [], onClose, onDelete, onAdd
           {words.length === 0
             ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words saved yet.</div>
             : shown.length === 0
-            ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words in this bundle yet.</div>
+            ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>
+              {/* Unbundled is a filter, not a bundle — tagging its last word
+                  empties it, and calling that "this bundle" names something
+                  the reader never made. */}
+              {filter === UNBUNDLED ? "Every word is in a bundle." : "No words in this bundle yet."}
+            </div>
             : shown.map((w) => {
               const ids = wordBundleIds(w);
               const unjoined = bundles.filter((b) => !ids.includes(b.id));
