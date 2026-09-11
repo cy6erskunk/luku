@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bp, Bg } from "../lib/styles.js";
+import { responseError } from "../lib/utils.js";
 import { useDialog } from "../hooks/useDialog.js";
 
 // The server keeps a link code claimable for 10 minutes (CODE_TTL_MINUTES in
@@ -25,7 +26,9 @@ export default function TelegramConnect({ onClose }) {
 
   const load = useCallback(async () => {
     const res = await fetch("/api/telegram/link");
-    if (!res.ok) throw new Error(`Failed to load status (${res.status})`);
+    // Through responseError so the schema guard's 503 arrives as the fix to
+    // apply rather than as "Failed to load status (503)".
+    if (!res.ok) throw await responseError(res, "Failed to load status");
     return res.json();
   }, []);
 
@@ -114,7 +117,7 @@ export default function TelegramConnect({ onClose }) {
     setBusy(true);
     try {
       const res = await fetch("/api/telegram/link", { method: "DELETE" });
-      if (!res.ok) throw new Error(`Failed to disconnect (${res.status})`);
+      if (!res.ok) throw await responseError(res, "Failed to disconnect");
       setStatus({ linked: false });
       setConfirmDisconnect(false);
     } catch (e) {

@@ -879,6 +879,33 @@ describe("a word that fails to delete", () => {
   });
 });
 
+describe("a save the server did not make", () => {
+  beforeEach(() => { signedIn(); localStorage.setItem("luku_api_key", "sk-ant-test"); });
+
+  it("does not read as success when the route returns no row", async () => {
+    // POST /api/words answers `{ word: null }` when its RETURNING yields
+    // nothing, so a 2xx is not by itself proof the word was saved. Treated as
+    // success it left "✓ Added to review" over nothing, with no way to retry.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    ocrLocal.mockResolvedValue("Koira juoksee.");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    mockApi({ words: [], saved: null });
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /add to review/i }));
+
+    await screen.findByRole("alert");
+    // And the Add button is back, so the reader can try again.
+    await screen.findByRole("button", { name: /add to review/i });
+  });
+});
+
 describe("a failed delete from the vocabulary overlay", () => {
   beforeEach(() => { signedIn(); localStorage.setItem("luku_api_key", "sk-ant-test"); });
 
@@ -1084,6 +1111,41 @@ describe("signing in as someone else", () => {
 
     const stored = JSON.parse(localStorage.getItem("luku_session:u1") || "{}");
     for (const entry of Object.values(stored)) expect(entry.added).not.toBe(true);
+  });
+
+  it("puts the word back on the list when a delete fails after a scan reset", async () => {
+    // The vocabulary belongs to the account, not to the screen. Conflating the
+    // two meant a delete rejected after the reader scanned another page simply
+    // dropped the word from the list, while the server still had it.
+    let rejectDelete;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return new Promise((_r, rej) => { rejectDelete = rej; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+    const { ocrImage } = await import("../lib/api.js");
+    ocrImage.mockResolvedValue("Kissa nukkuu.");
+
+    await scanAsFirstAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    // Same account, new screen.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /re-scan with ai/i })); });
+    await screen.findByText("Kissa");
+
+    await act(async () => {
+      rejectDelete(new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // The row is theirs and the server still has it, so it is back on the list.
+    await screen.findByRole("button", { name: "1 words" });
+    // But the banner belongs to the screen that asked, which is gone.
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("does not put the previous account's scan on the next one's screen", async () => {

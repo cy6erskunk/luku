@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { fileToBase64, getCroppedImg } from "../lib/image.js";
-import { ocrLocal } from "../lib/ocr.js";
+import { ocrLocal, resetTesseractWorker } from "../lib/ocr.js";
 import { ocrImage } from "../lib/api.js";
 import { hasApiKey } from "../lib/utils.js";
 
@@ -29,19 +29,29 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   // scanned page, on a screen that now belongs to someone else.
   const runRef = useRef(0);
   const stale = (run) => runRef.current !== run;
+  // Whether a recognition is actually outstanding. The run counter stops an
+  // abandoned pass from painting, but the work itself keeps the Tesseract
+  // worker busy and holds the module's serialized queue, so the next account's
+  // scan waits behind an image nobody is going to read.
+  const ocrRunning = useRef(false);
 
   const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   const runOcr = async (base64, mediaType, run) => {
     setStep("Loading OCR engine…");
     setOcrProgress(0);
-    const out = await ocrLocal(base64, mediaType, (label, p) => {
-      if (stale(run)) return;
-      setStep(label);
-      setOcrProgress(p);
-    });
-    if (!stale(run)) setOcrProgress(1);
-    return out;
+    ocrRunning.current = true;
+    try {
+      const out = await ocrLocal(base64, mediaType, (label, p) => {
+        if (stale(run)) return;
+        setStep(label);
+        setOcrProgress(p);
+      });
+      if (!stale(run)) setOcrProgress(1);
+      return out;
+    } finally {
+      ocrRunning.current = false;
+    }
   };
 
   const processFile = async (file) => {
@@ -131,6 +141,12 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   // out from under a scan the next account has started.
   const reset = useCallback(() => {
     runRef.current += 1;
+    // Terminate rather than merely ignore: the recognition is abandoned, and
+    // leaving it running spends the next account's wait and the device's CPU on
+    // an image that will never be shown. Only when one is actually outstanding
+    // — tearing the worker down on an idle reset would make the next scan pay
+    // to load it again.
+    if (ocrRunning.current) { ocrRunning.current = false; resetTesseractWorker(); }
     setBusy(false);
     setStep("");
     setPreview(null);

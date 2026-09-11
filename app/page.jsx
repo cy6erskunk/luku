@@ -173,7 +173,7 @@ export default function Luku() {
   // A load failure wins over an action failure: it explains the empty screen
   // the reader is looking at, and it does not go away by dismissing it.
   const loadError = words.wordsError || bundles.bundlesError;
-  const banner = loadError || actionError;
+  const banner = loadError || actionError || review.gradeError;
 
   const allDueWords = words.dbWords.filter((w) => isDue(w));
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
@@ -437,7 +437,13 @@ export default function Luku() {
       // the page was reset would hold a word out of the due queue for a
       // session that never added it.
       if (screenRef.current !== forScreen) return;
-      if (saved?.id != null) {
+      // The route answers `{ word: null }` when its RETURNING yields no row, so
+      // a 2xx does not by itself mean the word was saved. Treated as a success
+      // it leaves the popup claiming "Added to review" over nothing, with the
+      // Add button gone and no way to retry — the same trap as a swallowed
+      // failure, reached through the happy path.
+      if (saved?.id == null) throw new Error("The server saved nothing — try again.");
+      {
         setSession((s) => (s[key] ? { ...s, [key]: { ...s[key], added: true } } : s));
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -519,15 +525,19 @@ export default function Luku() {
       }
     } catch (e) {
       console.error("delete word failed", e);
-      // Nothing is restored or reported on a screen that did not ask for the
-      // delete: the row belongs to the session before the switch, and the
-      // effect above has already cleared the banner this would refill.
+      // Two different questions, and conflating them lost the row. The
+      // vocabulary belongs to the *account*: the delete failed, the server
+      // still has the word, so it belongs back on the list even if the reader
+      // has since scanned another page — otherwise it simply disappears until
+      // a reload. The banner, the queue and the new-word sets belong to the
+      // *screen*, which has been reset and is not the one that asked.
+      if (accountRef.current !== forAccount) return;
+      words.restoreWord(deletedWord);
       if (screenRef.current !== forScreen) return;
       // The row comes back on screen, which on its own reads as the delete
       // never having been asked for. Saying why is the difference between a
       // reader who retries and one who thinks they mis-clicked.
       setActionError(e.message || "Could not delete that word.");
-      words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
         setNewWordIds((prev) => {
@@ -546,13 +556,19 @@ export default function Luku() {
         });
       }
     } finally {
-      deletingRef.current.delete(id);
-      setDeletingIds((prev) => {
-        if (!prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      // The fourth place this has bitten: a reset empties both collections, so
+      // a new screen can start deleting the same word before this request
+      // settles, and an ungated cleanup here would lift *its* guard and
+      // re-enable its controls.
+      if (screenRef.current === forScreen) {
+        deletingRef.current.delete(id);
+        setDeletingIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
     }
   };
 
@@ -561,7 +577,7 @@ export default function Luku() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div onClick={(e) => { e.stopPropagation(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
+        <div onClick={(e) => { e.stopPropagation(); newScreen(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
           <LukuLogo size={32} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
