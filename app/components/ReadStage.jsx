@@ -4,6 +4,7 @@ import BundlePicker from "./BundlePicker.jsx";
 import { Bp, Bg } from "../lib/styles.js";
 
 export default function ReadStage({
+  accountId,
   tokens, session, savedBases, xlating,
   popup,
   ocrSource, busy, err,
@@ -40,6 +41,8 @@ export default function ReadStage({
       {onSelectBundle && (
         <div style={{ marginBottom: 14 }}>
           <BundlePicker
+            // Remounted per account, as in ScanStage.
+            key={accountId}
             bundles={bundleStats}
             activeBundleId={activeBundleId}
             onSelect={onSelectBundle}

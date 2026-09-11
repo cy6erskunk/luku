@@ -4,6 +4,7 @@ import BundlePicker from "./BundlePicker.jsx";
 import BundleReview from "./BundleReview.jsx";
 
 export default function ScanStage({
+  accountId,
   image, dueWords, onStartReview, repeatWords, onStartRepeat,
   bundleStats = [], activeBundleId, onSelectBundle, onCreateBundle, onStartBundleReview,
 }) {
@@ -81,6 +82,10 @@ export default function ScanStage({
           lands in the same bundle without a second thought. */}
       <div style={{ width: "100%", maxWidth: 400, marginBottom: 14 }}>
         <BundlePicker
+          // Remounted per account: its transient state (a half-typed name, an
+          // open form, the saving flag that blocks a second create) belongs to
+          // whoever opened it, and it has no other way to know they changed.
+          key={accountId}
           bundles={bundleStats}
           activeBundleId={activeBundleId}
           onSelect={onSelectBundle}

@@ -452,6 +452,37 @@ describe("bundles", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("does not carry a half-typed bundle name into the next account", async () => {
+    // BundlePicker keeps its own transient state — the name, the open form,
+    // and the saving flag that blocks a second create — and page.jsx does not
+    // own it. Left mounted across a switch it hands all three to whoever signs
+    // in next, with the create button still disabled behind an in-flight
+    // request that is not theirs.
+    let resolveCreate;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/bundles") && opts.method === "POST") {
+        return new Promise((r) => { resolveCreate = r; });
+      }
+      if (String(url).startsWith("/api/bundles")) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ bundles: [] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Kotimaa" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    mocks.session = { data: { user: { id: "u2" } }, isPending: false };
+    await act(async () => { rerender(<Luku />); });
+
+    // A fresh picker: no open form carrying the previous account's name.
+    expect(screen.queryByLabelText(/new bundle name/i)).toBeNull();
+    expect(resolveCreate).toBeTypeOf("function");
+  });
+
   it("can still reach a bundle created before any word was saved", async () => {
     // The overlay is the only place a bundle can be deleted, and its launcher
     // used to be gated on the word count — so a bundle made before the first

@@ -601,6 +601,7 @@ export default function Luku() {
 
       {stage === 0 && (
         <ScanStage
+          accountId={user?.id}
           image={image}
           dueWords={dueWords}
           onStartReview={handleStartReview}
@@ -615,6 +616,7 @@ export default function Luku() {
       )}
       {stage === 1 && (
         <ReadStage
+          accountId={user?.id}
           tokens={tokens}
           session={session}
           savedBases={savedBases}
