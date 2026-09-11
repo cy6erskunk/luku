@@ -102,12 +102,17 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     finally { setBusy(false); setStep(""); }
   };
 
-  const reset = () => {
+  // Stable, so callers can depend on it without re-running an effect every
+  // render. Clears the pending crop too: it holds the same photo the preview
+  // does, and a reset that left it would put the crop overlay back on screen.
+  const reset = useCallback(() => {
     setPreview(null);
+    setCropImage(null);
+    setCropFile(null);
     setOcrProgress(0);
     setOcrSource("");
     setErr("");
-  };
+  }, []);
 
   return {
     busy, step, err, preview, ocrProgress, ocrSource,
