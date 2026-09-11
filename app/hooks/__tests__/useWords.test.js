@@ -206,6 +206,29 @@ describe("useWords – saveWord", () => {
     expect(result.current.dbWords).toEqual([]);
   });
 
+  it("does not report a success body that failed to parse after the account changed", async () => {
+    // A 2xx whose body is truncated rejects on .json(); before, that rejection
+    // was raised outside the guard and reached the new account's banner.
+    let resolveSave;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "POST") return new Promise((r) => { resolveSave = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let saving;
+    await act(async () => { saving = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      resolveSave({ ok: true, json: () => Promise.reject(new SyntaxError("Unexpected end of JSON input")) });
+      expect(await saving).toBeNull();
+    });
+  });
+
   it("does not report a save that failed after the account changed", async () => {
     // The mirror of the test above. A failure reaching the new session would
     // roll back a popup belonging to the old one and raise its error in the

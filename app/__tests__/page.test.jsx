@@ -537,3 +537,72 @@ describe("a word that fails to save", () => {
     expect(screen.queryByRole("button", { name: /new$/ })).toBeNull();
   });
 });
+
+describe("a word that fails to delete", () => {
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  /** The list loads; only the DELETE is refused. */
+  function deleteFails(body = {}) {
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve(body) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  async function openListAndDelete() {
+    render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+  }
+
+  it("says why, rather than putting the row back unexplained", async () => {
+    // The rollback alone reads as the delete never having been asked for.
+    deleteFails({ error: "This deployment's database is missing a table the app needs — run db/schema.sql against it." });
+    await openListAndDelete();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/db\/schema\.sql/);
+  });
+
+  it("falls back to naming the action when the server sent no message", async () => {
+    deleteFails();
+    await openListAndDelete();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Could not delete that word \(500\)/);
+  });
+});
+
+describe("an action failure from a previous account", () => {
+  it("does not follow the reader into the next session", async () => {
+    // Luku stays mounted while it renders <SignIn />, so the banner outlives a
+    // sign-out unless the account change clears it.
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+    await screen.findByRole("alert");
+
+    mocks.session = { data: { user: { id: "u2" } }, isPending: false };
+    await act(async () => { rerender(<Luku />); });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+});
+
