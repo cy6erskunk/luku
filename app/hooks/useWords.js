@@ -44,14 +44,18 @@ export function useWords(userId) {
   // needs a second request to land in the right group.
   const saveWord = async (entry, bundleId = null) => {
     const forAccount = userId;
-    let r;
+    let saved;
     try {
-      r = await fetch("/api/words", {
+      const r = await fetch("/api/words", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ word: entry.original, base: entry.base, translations: entry.translations, pos: entry.pos, formTranslation: entry.formTranslation, example: entry.example ?? null, example_translation: entry.example_translation ?? null, bundleId: bundleId ?? null }),
       });
       if (!r.ok) throw await responseError(r, "Failed to save word");
+      // Inside the guarded region with the rest: a 2xx whose body is truncated
+      // rejects here, and a rejection reaching the caller after a sign-out does
+      // the same damage as any other.
+      ({ word: saved } = await r.json());
     } catch (e) {
       // A failure belongs to the account that asked for it just as a success
       // does. Reported to whoever is signed in now, it would roll back a popup
@@ -60,9 +64,7 @@ export function useWords(userId) {
       if (accountRef.current !== forAccount) return null;
       throw e;
     }
-    const { word: saved } = await r.json();
-    // A save that answers after a sign-out belongs to the account that asked
-    // for it. Withheld from the caller as well as the list: page.jsx files the
+    // Withheld from the caller as well as the list: page.jsx files the
     // returned id under this session's new words.
     if (accountRef.current !== forAccount) return null;
     if (saved) {

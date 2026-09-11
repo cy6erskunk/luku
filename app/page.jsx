@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, inBundle, isDue, shuffled } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, responseError, inBundle, isDue, shuffled } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -39,7 +39,7 @@ export default function Luku() {
   // A key the user typed wins over the development one, so someone who wants
   // to spend their own credit still can.
   const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
-  const { session, setSession } = useSession();
+  const { session, setSession } = useSession(user?.id);
 
   const [stage, setStage] = useState(0);
   const [text, setText] = useState("");
@@ -79,6 +79,12 @@ export default function Luku() {
   const review = useReview({ dbWords: words.dbWords, updateWord: words.updateWord, stage });
 
   useEffect(() => () => resetTesseractWorker(), []);
+
+  // An action failure belongs to the account that produced it. This component
+  // stays mounted while it renders <SignIn />, so without this the banner
+  // carries one account's failed save into the next account's session, where
+  // it describes nothing the reader did and nothing they can act on.
+  useEffect(() => { setActionError(null); }, [user?.id]);
 
   if (authLoading) {
     return (
@@ -404,9 +410,13 @@ export default function Luku() {
     }
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      if (!res.ok) throw await responseError(res, "Could not delete that word");
     } catch (e) {
       console.error("delete word failed", e);
+      // The row comes back on screen, which on its own reads as the delete
+      // never having been asked for. Saying why is the difference between a
+      // reader who retries and one who thinks they mis-clicked.
+      setActionError(e.message || "Could not delete that word.");
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
