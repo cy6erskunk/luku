@@ -1,5 +1,6 @@
 import { Bp, Bg } from "../lib/styles.js";
 import { wordForms } from "../lib/utils.js";
+import BundleReview from "./BundleReview.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -12,6 +13,8 @@ export default function ReviewStage({
   dueWords, onStartReview,
   preexistingNewIds,
   deletingIds,
+  scope,
+  bundleStats = [], onStartBundleReview,
 }) {
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   if (loadingWords) {
@@ -37,6 +40,11 @@ export default function ReviewStage({
             </button>
           )}
           <button onClick={onScanAnother} style={{ ...Bg, padding: "9px 20px" }}>← Back to Scan</button>
+          {onStartBundleReview && (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <BundleReview bundles={bundleStats} onStartBundleReview={onStartBundleReview} title="Or review a bundle" />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -62,6 +70,11 @@ export default function ReviewStage({
             </button>
           )}
           <button onClick={onScanAnother} style={{ ...(isNewReview && dueRemaining > 0 ? Bg : Bp), width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
+          {onStartBundleReview && (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <BundleReview bundles={bundleStats} onStartBundleReview={onStartBundleReview} title="Or review a bundle" />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -80,6 +93,7 @@ export default function ReviewStage({
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 400 }}>{heading}</div>
+          {scope && <div style={{ fontSize: 11, color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 8px" }}>{scope}</div>}
           {isRepeat && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a9ebe", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>no schedule update</div>}
           {isNewReview && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>keep or remove</div>}
         </div>

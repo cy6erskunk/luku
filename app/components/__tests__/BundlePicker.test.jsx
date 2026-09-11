@@ -1,0 +1,116 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import BundlePicker from "../BundlePicker.jsx";
+
+const BUNDLES = [
+  { id: 1, name: "Kotimaa" },
+  { id: 2, name: "Luku 3" },
+];
+
+afterEach(cleanup);
+
+function renderPicker(props = {}) {
+  const onSelect = vi.fn();
+  const onCreate = vi.fn(() => Promise.resolve({ id: 3, name: "Uusi" }));
+  render(<BundlePicker bundles={BUNDLES} activeBundleId={null} onSelect={onSelect} onCreate={onCreate} {...props} />);
+  return { onSelect, onCreate };
+}
+
+describe("BundlePicker", () => {
+  it("offers every bundle plus no bundle at all", () => {
+    renderPicker();
+    expect(screen.getByRole("option", { name: "No bundle" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Kotimaa" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Luku 3" })).toBeTruthy();
+  });
+
+  it("shows the word count beside each name when given one", () => {
+    renderPicker({ counts: { 1: 12, 2: 0 } });
+    expect(screen.getByRole("option", { name: "Kotimaa (12)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Luku 3 (0)" })).toBeTruthy();
+  });
+
+  it("reports the picked bundle as a number", () => {
+    const { onSelect } = renderPicker();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "2" } });
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("reports null when the reader picks no bundle", () => {
+    const { onSelect } = renderPicker({ activeBundleId: 2 });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "" } });
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
+  it("shows the active bundle as the current value", () => {
+    renderPicker({ activeBundleId: 2 });
+    expect(screen.getByRole("combobox").value).toBe("2");
+  });
+
+  it("still shows a selection the list cannot name yet", () => {
+    // On a reload the remembered id is read from localStorage before
+    // /api/bundles answers, and a failed load leaves it set against an empty
+    // list. With no option carrying that value the select falls off its own
+    // value and reads as unselected, while every word added still goes into
+    // the remembered bundle.
+    renderPicker({ bundles: [], activeBundleId: 7 });
+    expect(screen.getByRole("combobox").value).toBe("7");
+    expect(screen.getByRole("option", { name: "Remembered bundle" })).toBeTruthy();
+  });
+
+  it("drops the placeholder once the list carries the active bundle", () => {
+    renderPicker({ activeBundleId: 2 });
+    expect(screen.queryByRole("option", { name: "Remembered bundle" })).toBeNull();
+    expect(screen.getByRole("combobox").value).toBe("2");
+  });
+
+  it("creates a bundle and selects it straight away", async () => {
+    const { onSelect, onCreate } = renderPicker();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Uusi" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith("Uusi"));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(3));
+    // Back to the select, with the new bundle available to pick again.
+    await waitFor(() => expect(screen.getByRole("combobox")).toBeTruthy());
+  });
+
+  it("trims the typed name before creating", async () => {
+    const { onCreate } = renderPicker();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "  Uusi  " } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith("Uusi"));
+  });
+
+  it("will not create an empty name", () => {
+    const { onCreate } = renderPicker();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+
+  it("keeps what was typed and says so when the create fails", async () => {
+    const onCreate = vi.fn(() => Promise.reject(new Error("nope")));
+    render(<BundlePicker bundles={BUNDLES} activeBundleId={null} onSelect={vi.fn()} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Uusi" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(screen.getByText(/could not create/i)).toBeTruthy());
+    expect(screen.getByLabelText(/new bundle name/i).value).toBe("Uusi");
+  });
+
+  it("goes back to the select on cancel", () => {
+    renderPicker();
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.getByRole("combobox")).toBeTruthy();
+  });
+
+  it("labels the select with the caller's wording", () => {
+    renderPicker({ label: "Adding words to" });
+    expect(screen.getByLabelText("Adding words to")).toBeTruthy();
+  });
+});

@@ -1,20 +1,24 @@
 import { getAuth } from "@/lib/auth/server";
 import { getDb, withSchemaGuard } from "@/lib/db";
-import { isValidWordId } from "@/lib/reviews";
+import { getWord, isValidWordId } from "@/lib/reviews";
+import { addWordToBundle, isValidBundleId, removeWordFromBundle, wordBundleIds } from "@/lib/bundles";
 
 export async function GET() {
   const { data: session } = await getAuth().getSession();
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Guarded because the vocabulary is what a reader looks at first: on a
-  // database `db/schema.sql` has never been run against, an unguarded failure
-  // here renders an account with no saved words, which is indistinguishable
-  // from a new one.
   return withSchemaGuard(async () => {
     const sql = getDb();
+    // Bundle membership travels with the word, so the client can group, filter
+    // and review by bundle without a request per word. It also makes the word
+    // list depend on word_bundles, which is why this route needs the guard: on
+    // a database the schema file has not been re-run against, the whole
+    // vocabulary would otherwise fail to load with nothing to show for it.
     const words = await sql`
-      SELECT * FROM words WHERE user_id = ${user.id} ORDER BY next_review_at ASC
+      SELECT words.*,
+             ARRAY(SELECT bundle_id FROM word_bundles WHERE word_id = words.id ORDER BY bundle_id) AS bundle_ids
+      FROM words WHERE user_id = ${user.id} ORDER BY next_review_at ASC
     `;
     return Response.json({ words });
   });
@@ -35,6 +39,8 @@ export async function DELETE(request) {
   }
 
   const sql = getDb();
+  // Membership rows go with it via ON DELETE CASCADE — there is no transaction
+  // to pair a second statement with this one.
   const rows = await sql`DELETE FROM words WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
   if (!rows[0]) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ ok: true });
@@ -45,7 +51,10 @@ export async function POST(request) {
   const user = session?.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { word, base, translations, pos, formTranslation, example, example_translation } = await request.json();
+  const { word, base, translations, pos, formTranslation, example, example_translation, bundleId } = await request.json();
+  if (bundleId != null && !isValidBundleId(bundleId)) {
+    return Response.json({ error: "Invalid bundleId" }, { status: 400 });
+  }
 
   return withSchemaGuard(async () => {
     const sql = getDb();
@@ -70,8 +79,52 @@ export async function POST(request) {
             END,
             example = COALESCE(EXCLUDED.example, words.example),
             example_translation = COALESCE(EXCLUDED.example_translation, words.example_translation)
-      RETURNING *
+      RETURNING *,
+        ARRAY(SELECT bundle_id FROM word_bundles WHERE word_id = words.id ORDER BY bundle_id) AS bundle_ids
     `;
-    return Response.json({ word: rows[0] ?? null });
+    const saved = rows[0] ?? null;
+
+    // The membership needs the word's id, so it cannot ride along in the upsert.
+    // There is no transaction to pair them in either: a save that lands without
+    // its membership is the half-completed state this has to be safe in, and it
+    // is — the word is saved and keeps its translation, it is simply in no
+    // bundle. Nothing retries it, so a reload does not put it right; adding the
+    // word again does, which is one tap on a word the list shows untagged.
+    if (saved && bundleId != null && await addWordToBundle(sql, user.id, saved.id, bundleId)) {
+      saved.bundle_ids = [...new Set([...(saved.bundle_ids ?? []), bundleId])].sort((a, b) => a - b);
+    }
+
+    return Response.json({ word: saved });
+  });
+}
+
+/** Bundle membership for a word that is already saved. */
+export async function PATCH(request) {
+  const { data: session } = await getAuth().getSession();
+  const user = session?.user;
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id, bundleId, action } = await request.json();
+  if (!isValidWordId(id)) return Response.json({ error: "Invalid id" }, { status: 400 });
+  if (!isValidBundleId(bundleId)) return Response.json({ error: "Invalid bundleId" }, { status: 400 });
+  if (action !== "add" && action !== "remove") {
+    return Response.json({ error: "Invalid action" }, { status: 400 });
+  }
+
+  return withSchemaGuard(async () => {
+    const sql = getDb();
+    if (!await getWord(sql, user.id, id)) return Response.json({ error: "Not found" }, { status: 404 });
+
+    if (action === "add") {
+      // False here means the bundle is not this user's; the word already was.
+      if (!await addWordToBundle(sql, user.id, id, bundleId)) {
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
+    } else {
+      // Removing a membership that isn't there is the state the caller asked for.
+      await removeWordFromBundle(sql, user.id, id, bundleId);
+    }
+
+    return Response.json({ bundleIds: await wordBundleIds(sql, user.id, id) });
   });
 }

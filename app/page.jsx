@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, inBundle, isDue, shuffled } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -17,6 +17,7 @@ import { useApiKey } from "./hooks/useApiKey.js";
 import { useServerKey } from "./hooks/useServerKey.js";
 import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
+import { useBundles } from "./hooks/useBundles.js";
 import { useReview } from "./hooks/useReview.js";
 import { useImageProcessing } from "./hooks/useImageProcessing.js";
 
@@ -59,12 +60,13 @@ export default function Luku() {
   // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
-  // A failed action, shown in the same banner as a failed load. These used to
-  // reach only console.error, which on a screen whose empty state looks exactly
-  // like the failed one told the reader nothing.
+  // A failed bundle action, shown in the same banner as a failed load. These
+  // used to reach only console.error, which on a screen whose empty state
+  // looks exactly like the failed one told the reader nothing.
   const [actionError, setActionError] = useState(null);
 
   const words = useWords(user?.id);
+  const bundles = useBundles(user?.id);
 
   const handleTextReady = useCallback((rawText, { resetSession = false } = {}) => {
     setText(rawText);
@@ -110,7 +112,12 @@ export default function Luku() {
     );
   }
 
-  const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  // A load failure wins over an action failure: it explains the empty screen
+  // the reader is looking at, and it does not go away by dismissing it.
+  const loadError = words.wordsError || bundles.bundlesError;
+  const banner = loadError || actionError;
+
+  const allDueWords = words.dbWords.filter((w) => isDue(w));
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
   // out of the regular due queue until the user is done triaging them.
@@ -119,6 +126,25 @@ export default function Luku() {
   const repeatWords = allDueWords.length === 0
     ? [...words.dbWords].sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0)).slice(0, 5)
     : [];
+
+  // Counts come from the word list already on screen rather than from the
+  // server, so an optimistic add or delete moves them at once and a bundle
+  // review always offers exactly what the review would walk.
+  const bundleStats = bundles.bundles.map((b) => {
+    // One pass, no intermediate array: this runs per bundle on every render,
+    // and the counts are only ever read together.
+    let wordCount = 0;
+    let dueCount = 0;
+    for (const w of words.dbWords) {
+      if (!inBundle(w, b.id)) continue;
+      wordCount++;
+      // The same exclusion the main due queue makes: a word added this session
+      // is triaged in the new-word pass before it joins the SRS schedule, so
+      // counting it here would offer a review that grades it early.
+      if (!newWordIds.has(w.id) && isDue(w)) dueCount++;
+    }
+    return { ...b, wordCount, dueCount };
+  });
 
   const handleStartReview = () => {
     if (words.loadingWords || review.grading) return;
@@ -170,13 +196,62 @@ export default function Luku() {
     const pool = [...words.dbWords]
       .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
       .slice(0, 15);
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    review.startRepeat(pool.slice(0, 5));
+    review.startRepeat(shuffled(pool).slice(0, 5));
     setPopup(null);
     setStage(2);
+  };
+
+  /**
+   * Review one bundle by name. Cards that are due go through the normal SRS
+   * pass; a bundle with nothing due gets a practice pass over its words, the
+   * same distinction the whole-vocabulary buttons make.
+   */
+  const handleStartBundleReview = (bundleId) => {
+    if (words.loadingWords || review.grading) return;
+    const bundle = bundles.bundles.find((b) => b.id === bundleId);
+    if (!bundle) return;
+    const inIt = words.dbWords.filter((w) => inBundle(w, bundleId));
+    if (inIt.length === 0) return;
+    // One instant for the whole pass, so a card cannot fall on both sides of
+    // the line while the queue is being built. Freshly added words are held
+    // back exactly as they are from the whole-vocabulary queue: they are due
+    // the moment they are saved, and grading them here would put them on a
+    // schedule before the keep-or-remove pass has decided they belong. They
+    // still take part in the practice pass below, which writes no schedule.
+    const clickedAt = Date.now();
+    const due = inIt.filter((w) => !newWordIds.has(w.id) && isDue(w, clickedAt));
+    if (due.length > 0) review.startReview(due, bundle.name);
+    else review.startRepeat(shuffled(inIt).slice(0, 20), bundle.name);
+    setPopup(null);
+    setStage(2);
+  };
+
+  // The server cascades the memberships away with the bundle; this drops them
+  // from the copy on screen so the tags and filters go with it. useBundles puts
+  // a refused delete's bundle back, so the memberships have to come back too —
+  // otherwise the restored bundle would look empty until a reload.
+  const handleDeleteBundle = async (bundleId) => {
+    const affected = words.dbWords.filter((w) => inBundle(w, bundleId)).map((w) => w.id);
+    words.forgetBundle(bundleId);
+    setActionError(null);
+    try { await bundles.deleteBundle(bundleId); }
+    catch (e) {
+      console.error("delete bundle failed", e);
+      words.restoreBundle(bundleId, affected);
+      setActionError("Could not delete that bundle.");
+    }
+  };
+
+  const handleAddToBundle = async (wordId, bundleId) => {
+    setActionError(null);
+    try { await words.addWordToBundle(wordId, bundleId); }
+    catch (e) { console.error("add to bundle failed", e); setActionError(e.message || "Could not add that word to the bundle."); }
+  };
+
+  const handleRemoveFromBundle = async (wordId, bundleId) => {
+    setActionError(null);
+    try { await words.removeWordFromBundle(wordId, bundleId); }
+    catch (e) { console.error("remove from bundle failed", e); setActionError(e.message || "Could not take that word out of the bundle."); }
   };
 
   const handleScanAnother = () => {
@@ -264,7 +339,7 @@ export default function Luku() {
     setPopup((p) => ({ ...p, added: true }));
     setActionError(null);
     try {
-      const saved = await words.saveWord(entry);
+      const saved = await words.saveWord(entry, bundles.activeBundleId);
       if (saved?.id != null) {
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -361,8 +436,6 @@ export default function Luku() {
     }
   };
 
-  const banner = words.wordsError || actionError;
-
   return (
     <div style={{ minHeight: "100vh", background: D, color: "#e8e0d5", fontFamily: "Georgia,serif" }} onClick={() => setPopup(null)}>
 
@@ -401,16 +474,16 @@ export default function Luku() {
         </div>
       </div>
 
-      {/* A load failure wins over an action failure: it explains the empty
-          screen the reader is looking at, and unlike a failed action it does
-          not go away by dismissing it. */}
-      {banner && (
+      {/* Suppressed while the word list is open: that overlay declares
+          aria-modal and sits above this, so it renders the same message inside
+          itself instead. Every action that can fail from there is taken there. */}
+      {banner && !showWordList && (
         <div
           role="alert"
           style={{ margin: "14px 18px 0", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a", display: "flex", alignItems: "flex-start", gap: 10 }}
         >
           <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {banner}</span>
-          {!words.wordsError && (
+          {!loadError && (
             <button
               onClick={(e) => { e.stopPropagation(); setActionError(null); }}
               aria-label="Dismiss"
@@ -422,7 +495,20 @@ export default function Luku() {
         </div>
       )}
 
-      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} />}
+      {stage === 0 && (
+        <ScanStage
+          image={image}
+          dueWords={dueWords}
+          onStartReview={handleStartReview}
+          repeatWords={repeatWords}
+          onStartRepeat={handleStartRepeat}
+          bundleStats={bundleStats}
+          activeBundleId={bundles.activeBundleId}
+          onSelectBundle={bundles.setActiveBundleId}
+          onCreateBundle={bundles.createBundle}
+          onStartBundleReview={handleStartBundleReview}
+        />
+      )}
       {stage === 1 && (
         <ReadStage
           tokens={tokens}
@@ -437,6 +523,10 @@ export default function Luku() {
           loadingWords={words.loadingWords}
           dueWords={dueWords}
           newWords={newWords}
+          bundleStats={bundleStats}
+          activeBundleId={bundles.activeBundleId}
+          onSelectBundle={bundles.setActiveBundleId}
+          onCreateBundle={bundles.createBundle}
           onWord={onWord}
           onAddWord={handleAddWord}
           onRescanWithAI={image.rescanWithAI}
@@ -454,6 +544,7 @@ export default function Luku() {
           grading={review.grading}
           isRepeat={review.isRepeat}
           isNewReview={review.isNewReview}
+          scope={review.scope}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={review.gradeWord}
@@ -466,11 +557,23 @@ export default function Luku() {
           onStartReview={handleStartReview}
           repeatWords={repeatWords}
           onStartRepeat={handleStartRepeat}
+          bundleStats={bundleStats}
+          onStartBundleReview={handleStartBundleReview}
         />
       )}
 
       {showWordList && (
-        <WordList words={words.dbWords} onClose={() => setShowWordList(false)} onDelete={handleDeleteWord} />
+        <WordList
+          words={words.dbWords}
+          bundles={bundleStats}
+          onClose={() => setShowWordList(false)}
+          onDelete={handleDeleteWord}
+          onAddToBundle={handleAddToBundle}
+          onRemoveFromBundle={handleRemoveFromBundle}
+          onDeleteBundle={handleDeleteBundle}
+          error={banner}
+          onDismissError={loadError ? undefined : () => setActionError(null)}
+        />
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}

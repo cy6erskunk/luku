@@ -110,3 +110,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS telegram_link_codes_active
 -- claimCodeAndLink omits it, and while the old NOT NULL column is still there
 -- every attempt to link an account fails.
 ALTER TABLE telegram_links DROP COLUMN IF EXISTS secret_hash;
+
+-- ── Word bundles ─────────────────────────────────────────────────────────────
+-- A bundle is a named group of words — in practice "the words from this page".
+-- Membership is many-to-many rather than a column on words: words are unique
+-- per (user_id, base), so a word met again on a second page has to be able to
+-- belong to both bundles instead of being moved out of the first.
+
+CREATE TABLE IF NOT EXISTS bundles (
+  id         SERIAL PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- One bundle per name per user, case-insensitively: the picker offers bundles
+-- by name, so "Kotimaa" and "kotimaa" would be two rows nobody could tell
+-- apart. An expression index rather than a UNIQUE constraint, because a
+-- constraint cannot carry lower(). It is also the conflict target that makes
+-- "create a bundle called X" idempotent — the driver has no interactive
+-- transaction, so a select-then-insert pair could otherwise create two.
+CREATE UNIQUE INDEX IF NOT EXISTS bundles_user_name ON bundles (user_id, lower(name));
+
+CREATE TABLE IF NOT EXISTS word_bundles (
+  word_id   INT NOT NULL REFERENCES words (id) ON DELETE CASCADE,
+  bundle_id INT NOT NULL REFERENCES bundles (id) ON DELETE CASCADE,
+  added_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (word_id, bundle_id)
+);
+
+-- Both cascades matter for the same reason: deleting a word or a bundle is a
+-- single statement, and without them the membership rows it leaves behind
+-- would have no second statement to clean them up.
+CREATE INDEX IF NOT EXISTS word_bundles_bundle ON word_bundles (bundle_id);
