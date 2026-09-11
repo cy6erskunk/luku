@@ -64,12 +64,19 @@ export default function Luku() {
   // used to reach only console.error, which on a screen whose empty state
   // looks exactly like the failed one told the reader nothing.
   const [actionError, setActionError] = useState(null);
-  // The account as of the latest render. Handlers here await, and the one that
-  // resumes cannot read `user` — its closure holds whoever was signed in when
-  // it started. The hooks guard their own writes this way; these are the
-  // writes page.jsx owns.
+  // Which screen is on display. Handlers here await, and the one that resumes
+  // cannot read `user` — its closure holds whoever was signed in when it
+  // started. The hooks guard their own writes by account id, which answers
+  // *whose* list a row belongs in. This asks a narrower question: is the
+  // screen still the one that asked? Signing out and back in as the same
+  // account passes an id comparison but has already wiped the page below, so
+  // a counter that moves on every change is what the resets are keyed to.
   const accountRef = useRef(user?.id);
-  accountRef.current = user?.id;
+  const screenRef = useRef(0);
+  if (accountRef.current !== user?.id) {
+    accountRef.current = user?.id;
+    screenRef.current += 1;
+  }
 
   const words = useWords(user?.id);
   const bundles = useBundles(user?.id);
@@ -105,6 +112,10 @@ export default function Luku() {
     setPopup(null);
     setXlating(null);
     setShowWordList(false);
+    // TelegramConnect loads its status once on mount and never again, so a
+    // panel left open across a switch shows the previous account's linked
+    // handle to the next one.
+    setShowTelegram(false);
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
     resetReview();
@@ -304,7 +315,7 @@ export default function Luku() {
 
   const onWord = async (e, tok, containerRef) => {
     e.stopPropagation(); if (xlating) return;
-    const forAccount = accountRef.current;
+    const forScreen = screenRef.current;
     // A word hyphenated across a line break is two tokens on screen but one
     // word to look up; both halves carry the whole word in `w`.
     const form = tok.w || tok.v;
@@ -338,8 +349,9 @@ export default function Luku() {
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       // The cache is keyed by account, but setSession writes under whoever is
       // signed in when it runs — so a lookup that answers after a sign-out
-      // would file this account's word under the next one's key.
-      if (accountRef.current !== forAccount) return;
+      // would file this account's word under the next one's key. The popup
+      // is worse: its x/y and token key describe a page that is gone.
+      if (screenRef.current !== forScreen) return;
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
       // The reader may have dismissed the popup while the request was in
@@ -348,7 +360,7 @@ export default function Luku() {
       // what marks the word as seen in the text.
       setPopup((p) => p?.k === tok.k ? { ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing } : p);
     } catch (e) {
-      if (accountRef.current !== forAccount) return;
+      if (screenRef.current !== forScreen) return;
       setPopup((p) => {
         if (p?.k !== tok.k) return p;
         // A word from the list keeps the translation it already had: the
@@ -372,11 +384,17 @@ export default function Luku() {
     // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
+    const forScreen = screenRef.current;
     setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
     setActionError(null);
     try {
       const saved = await words.saveWord(entry, bundles.activeBundleId);
+      // saveWord withholds a row from another account, but "new this session"
+      // is the screen's bookkeeping, not the list's: a save that lands after
+      // the page was reset would hold a word out of the due queue for a
+      // session that never added it.
+      if (screenRef.current !== forScreen) return;
       if (saved?.id != null) {
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -394,6 +412,7 @@ export default function Luku() {
         }
       }
     } catch (e) {
+      if (screenRef.current !== forScreen) return;
       console.error("save word failed", e);
       // Nothing was saved, so the tick and the highlight have to go. Leaving
       // them is worse than never having shown them: the popup replaces its
@@ -406,7 +425,7 @@ export default function Luku() {
   };
 
   const handleDeleteWord = async (id) => {
-    const forAccount = accountRef.current;
+    const forScreen = screenRef.current;
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
@@ -445,10 +464,10 @@ export default function Luku() {
       if (!res.ok) throw await responseError(res, "Could not delete that word");
     } catch (e) {
       console.error("delete word failed", e);
-      // Nothing is restored or reported under an account that did not ask for
-      // the delete: the word belongs to the previous one, and the effect above
-      // has already cleared the banner this would refill.
-      if (accountRef.current !== forAccount) return;
+      // Nothing is restored or reported on a screen that did not ask for the
+      // delete: the row belongs to the session before the switch, and the
+      // effect above has already cleared the banner this would refill.
+      if (screenRef.current !== forScreen) return;
       // The row comes back on screen, which on its own reads as the delete
       // never having been asked for. Saying why is the difference between a
       // reader who retries and one who thinks they mis-clicked.
