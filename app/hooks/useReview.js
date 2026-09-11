@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export function useReview({ dbWords, updateWord, stage }) {
   const [queue, setQueue] = useState([]);
@@ -116,14 +116,16 @@ export function useReview({ dbWords, updateWord, stage }) {
     if (revIdxAdjust > 0) setRevIdx((i) => i + revIdxAdjust);
   };
 
-  const reset = () => {
+  // Stable, so callers can depend on it without re-running an effect every
+  // render.
+  const reset = useCallback(() => {
     setQueue([]);
     setRevIdx(0);
     setShowAnswer(false);
     setGrading(false);
     setMode("due");
     setScope(null);
-  };
+  }, []);
 
   return {
     queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, mode, scope, isRepeat, isNewReview,

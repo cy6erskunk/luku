@@ -64,6 +64,12 @@ export default function Luku() {
   // used to reach only console.error, which on a screen whose empty state
   // looks exactly like the failed one told the reader nothing.
   const [actionError, setActionError] = useState(null);
+  // The account as of the latest render. Handlers here await, and the one that
+  // resumes cannot read `user` — its closure holds whoever was signed in when
+  // it started. The hooks guard their own writes this way; these are the
+  // writes page.jsx owns.
+  const accountRef = useRef(user?.id);
+  accountRef.current = user?.id;
 
   const words = useWords(user?.id);
   const bundles = useBundles(user?.id);
@@ -77,14 +83,33 @@ export default function Luku() {
 
   const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
   const review = useReview({ dbWords: words.dbWords, updateWord: words.updateWord, stage });
+  // Both hooks hand back a new object every render; these two are the stable
+  // callbacks inside them, pulled out so the effect below can depend on what
+  // it actually calls rather than on the objects carrying them.
+  const { reset: resetReview } = review;
+  const { reset: resetImage } = image;
 
   useEffect(() => () => resetTesseractWorker(), []);
 
-  // An action failure belongs to the account that produced it. This component
-  // stays mounted while it renders <SignIn />, so without this the banner
-  // carries one account's failed save into the next account's session, where
-  // it describes nothing the reader did and nothing they can act on.
-  useEffect(() => { setActionError(null); }, [user?.id]);
+  // Everything on screen belongs to the account that put it there. This
+  // component stays mounted while it renders <SignIn />, so without this the
+  // next account opens on the previous one's scanned page, their popup, their
+  // new-word bookkeeping and their failed action — none of it theirs, and the
+  // word ids in it are not theirs either. `useSession` and `useWords` swap
+  // their own state on the same id; this is the rest of it.
+  useEffect(() => {
+    setActionError(null);
+    setStage(0);
+    setText("");
+    setTokens([]);
+    setPopup(null);
+    setXlating(null);
+    setShowWordList(false);
+    setNewWordIds(new Set());
+    setPreexistingNewIds(new Set());
+    resetReview();
+    resetImage();
+  }, [user?.id, resetReview, resetImage]);
 
   if (authLoading) {
     return (
@@ -279,6 +304,7 @@ export default function Luku() {
 
   const onWord = async (e, tok, containerRef) => {
     e.stopPropagation(); if (xlating) return;
+    const forAccount = accountRef.current;
     // A word hyphenated across a line break is two tokens on screen but one
     // word to look up; both halves carry the whole word in `w`.
     const form = tok.w || tok.v;
@@ -310,6 +336,10 @@ export default function Luku() {
     try {
       const d = await translateWord(effectiveKey, form, sentenceOf(text, form));
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
+      // The cache is keyed by account, but setSession writes under whoever is
+      // signed in when it runs — so a lookup that answers after a sign-out
+      // would file this account's word under the next one's key.
+      if (accountRef.current !== forAccount) return;
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
       // The reader may have dismissed the popup while the request was in
@@ -318,6 +348,7 @@ export default function Luku() {
       // what marks the word as seen in the text.
       setPopup((p) => p?.k === tok.k ? { ...entry, word: form, k: tok.k, x, y, existsInDb: !!existing } : p);
     } catch (e) {
+      if (accountRef.current !== forAccount) return;
       setPopup((p) => {
         if (p?.k !== tok.k) return p;
         // A word from the list keeps the translation it already had: the
@@ -375,6 +406,7 @@ export default function Luku() {
   };
 
   const handleDeleteWord = async (id) => {
+    const forAccount = accountRef.current;
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
@@ -413,6 +445,10 @@ export default function Luku() {
       if (!res.ok) throw await responseError(res, "Could not delete that word");
     } catch (e) {
       console.error("delete word failed", e);
+      // Nothing is restored or reported under an account that did not ask for
+      // the delete: the word belongs to the previous one, and the effect above
+      // has already cleared the banner this would refill.
+      if (accountRef.current !== forAccount) return;
       // The row comes back on screen, which on its own reads as the delete
       // never having been asked for. Saying why is the difference between a
       // reader who retries and one who thinks they mis-clicked.

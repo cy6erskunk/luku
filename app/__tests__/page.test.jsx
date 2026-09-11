@@ -824,3 +824,83 @@ describe("an action failure from a previous account", () => {
   });
 });
 
+describe("signing in as someone else", () => {
+  const SCANNED = "Koira juoksee.";
+
+  beforeEach(() => {
+    signedIn();
+    localStorage.setItem("luku_api_key", "sk-ant-test");
+  });
+
+  /** Scans a page so there is something on screen that belongs to user u1. */
+  async function scanAsFirstAccount() {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    ocrLocal.mockResolvedValue(SCANNED);
+    const view = render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    return view;
+  }
+
+  const switchTo = async (rerender, id) => {
+    mocks.session = { data: { user: { id } }, isPending: false };
+    await act(async () => { rerender(<Luku />); });
+  };
+
+  it("does not open on the previous account's scanned page", async () => {
+    mockApi({ words: [] });
+    const { rerender } = await scanAsFirstAccount();
+
+    await switchTo(rerender, "u2");
+
+    expect(screen.queryByText("Koira")).toBeNull();
+    await screen.findByText("Photograph a Finnish page");
+  });
+
+  it("does not file a translation that answered after the switch under the new account", async () => {
+    // The cache is keyed per account, but the setter writes under whoever is
+    // signed in when it runs — so the guard has to be at the call site.
+    mockApi({ words: [] });
+    let resolveLookup;
+    mocks.translateWord.mockImplementation(() => new Promise((r) => { resolveLookup = r; }));
+    const { rerender } = await scanAsFirstAccount();
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+
+    await switchTo(rerender, "u2");
+    await act(async () => {
+      resolveLookup({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(localStorage.getItem("luku_session:u2")).toBeNull();
+  });
+
+  it("does not restore the previous account's word when its delete fails after the switch", async () => {
+    let rejectDelete;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return new Promise((_r, rej) => { rejectDelete = rej; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    await switchTo(rerender, "u2");
+    await act(async () => {
+      rejectDelete(new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // u2's own load answered with the same fixture, but nothing from u1's
+    // rollback may appear: no banner, and no word put back by that catch.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
