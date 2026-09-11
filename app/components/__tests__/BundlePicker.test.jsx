@@ -76,6 +76,23 @@ describe("BundlePicker", () => {
     await waitFor(() => expect(screen.getByRole("combobox")).toBeTruthy());
   });
 
+  it("keeps the typed name when the create was withheld", async () => {
+    // createBundle answers null when the account moved under it, or when it
+    // named a bundle this session has already deleted. Nothing was created, so
+    // clearing the field would throw away what the reader — who by then may be
+    // a different account — has typed.
+    const onCreate = vi.fn(() => Promise.resolve(null));
+    const onSelect = vi.fn();
+    render(<BundlePicker bundles={BUNDLES} activeBundleId={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Uusi" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith("Uusi"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/new bundle name/i).value).toBe("Uusi");
+  });
+
   it("trims the typed name before creating", async () => {
     const { onCreate } = renderPicker();
     fireEvent.click(screen.getByRole("button", { name: /new/i }));

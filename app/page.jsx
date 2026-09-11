@@ -273,27 +273,43 @@ export default function Luku() {
   // a refused delete's bundle back, so the memberships have to come back too —
   // otherwise the restored bundle would look empty until a reload.
   const handleDeleteBundle = async (bundleId) => {
+    const forScreen = screenRef.current;
     const affected = words.dbWords.filter((w) => inBundle(w, bundleId)).map((w) => w.id);
     words.forgetBundle(bundleId);
     setActionError(null);
     try { await bundles.deleteBundle(bundleId); }
     catch (e) {
       console.error("delete bundle failed", e);
+      // As handleDeleteWord: nothing is restored or reported on a screen that
+      // did not ask for it. The hook withholds a failure from a *different*
+      // account, but signing out and back in as the same one restores the id
+      // it compares, so the screen counter is what settles it here.
+      if (screenRef.current !== forScreen) return;
       words.restoreBundle(bundleId, affected);
       setActionError("Could not delete that bundle.");
     }
   };
 
   const handleAddToBundle = async (wordId, bundleId) => {
+    const forScreen = screenRef.current;
     setActionError(null);
     try { await words.addWordToBundle(wordId, bundleId); }
-    catch (e) { console.error("add to bundle failed", e); setActionError(e.message || "Could not add that word to the bundle."); }
+    catch (e) {
+      console.error("add to bundle failed", e);
+      if (screenRef.current !== forScreen) return;
+      setActionError(e.message || "Could not add that word to the bundle.");
+    }
   };
 
   const handleRemoveFromBundle = async (wordId, bundleId) => {
+    const forScreen = screenRef.current;
     setActionError(null);
     try { await words.removeWordFromBundle(wordId, bundleId); }
-    catch (e) { console.error("remove from bundle failed", e); setActionError(e.message || "Could not take that word out of the bundle."); }
+    catch (e) {
+      console.error("remove from bundle failed", e);
+      if (screenRef.current !== forScreen) return;
+      setActionError(e.message || "Could not take that word out of the bundle.");
+    }
   };
 
   const handleScanAnother = () => {

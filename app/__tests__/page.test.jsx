@@ -416,6 +416,42 @@ describe("bundles", () => {
     localStorage.setItem("luku_api_key", "sk-ant-test");
   });
 
+  it("does not report a bundle-membership failure on a screen that moved on", async () => {
+    // The same guard handleDeleteWord has, on the three bundle handlers that
+    // were left without it. A -> B -> A restores the id the hooks compare, so
+    // the failure does reach page.jsx; the screen counter is what stops it.
+    let rejectPatch;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "PATCH") {
+        return new Promise((_r, rej) => { rejectPatch = rej; });
+      }
+      if (String(url).startsWith("/api/bundles")) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ bundles: [KOTIMAA] }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [ELSEWHERE] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: /1 words/i }));
+    // Open the word's bundle menu, then put it in Kotimaa — the PATCH that
+    // this test leaves hanging.
+    fireEvent.click(await screen.findByRole("button", { name: /add kissa to a bundle/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /\+ Kotimaa/i }));
+
+    const swap = async (id) => {
+      mocks.session = { data: { user: { id } }, isPending: false };
+      await act(async () => { rerender(<Luku />); });
+    };
+    await swap("u2");
+    await swap("u1");
+    await act(async () => {
+      rejectPatch(new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("can still reach a bundle created before any word was saved", async () => {
     // The overlay is the only place a bundle can be deleted, and its launcher
     // used to be gated on the word count — so a bundle made before the first

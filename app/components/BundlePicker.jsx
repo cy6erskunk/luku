@@ -33,7 +33,12 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
     setErr("");
     try {
       const bundle = await onCreate(clean);
-      if (bundle?.id != null) onSelect(bundle.id);
+      // A null answer means the create was withheld, not that it succeeded:
+      // the account moved under it, or it named a bundle this session has
+      // since deleted. Nothing happened, so the form stays as the reader left
+      // it — clearing it would wipe a name the next account is typing.
+      if (bundle?.id == null) return;
+      onSelect(bundle.id);
       setName("");
       setAdding(false);
     } catch {

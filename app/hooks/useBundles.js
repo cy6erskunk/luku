@@ -128,13 +128,23 @@ export function useBundles(userId) {
    *  which is what the server answers with, so both land here the same way. */
   const createBundle = async (name) => {
     const forAccount = userId;
-    const r = await fetch("/api/bundles", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!r.ok) throw await responseError(r, "Could not create that bundle");
-    const { bundle } = await r.json();
+    let bundle;
+    try {
+      const r = await fetch("/api/bundles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw await responseError(r, "Could not create that bundle");
+      ({ bundle } = await r.json());
+    } catch (e) {
+      // A failure is withheld on the same terms as a success, as saveWord and
+      // deleteBundle already do. BundlePicker stays mounted across a switch,
+      // so a throw reaching it would put the previous account's failure in
+      // front of the next one — and clear the form they were typing into.
+      if (accountRef.current !== forAccount) return null;
+      throw e;
+    }
     // Guarded like the load: a create that answers after a sign-out would
     // otherwise drop one account's bundle into the next account's list, where
     // the picker would happily offer it. Withheld from the caller too, not

@@ -252,6 +252,30 @@ describe("useBundles – createBundle", () => {
     expect(result.current.activeBundleId).toBeNull();
   });
 
+  it("withholds a failure from the next account, as it does a success", async () => {
+    // The mirror of the test above. BundlePicker outlives the switch too, so a
+    // throw reaching it raises the previous account's failure in front of the
+    // next one — and clears the name they were typing.
+    let rejectCreate;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts.method === "POST") return new Promise((_r, rej) => { rejectCreate = rej; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundles: [] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useBundles(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    let created;
+    await act(async () => { created = result.current.createBundle("Kotimaa"); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingBundles).toBe(false));
+
+    await act(async () => {
+      rejectCreate(new Error("offline"));
+      expect(await created).toBeNull();
+    });
+  });
+
   it("does not drop a bundle into the next account's list", async () => {
     // The create answers after a sign-out. Its bundle belongs to the account
     // that asked for it, not the one now on screen.

@@ -240,10 +240,24 @@ These rules keep that from happening again:
   session's new words, and the hooks holding both are still mounted after a
   switch. Guarding only the `setState` leaves the stale row travelling by
   return value. **A failure is withheld on the same terms as a success**:
-  `saveWord` and `deleteBundle` return rather than throw when the account moved
-  under them, because `page.jsx` outlives the switch — its catch would roll
-  back a popup belonging to the old session and raise its error in the new
-  one's banner.
+  `saveWord`, `createBundle` and `deleteBundle` return rather than throw when
+  the account moved under them, because `page.jsx` and `BundlePicker` both
+  outlive the switch — a catch there would roll back a popup belonging to the
+  old session, raise its error in the new one's banner, or clear the name the
+  next account is typing.
+- **The page's own guards compare a screen counter, not the account id.**
+  Signing out and back in as the *same* account restores the id, so an id
+  comparison cannot tell that work apart from work the current screen started
+  — and the screen was reset in between. `screenRef` in `page.jsx` moves on
+  every account change and is what every handler there captures. The hooks
+  keep comparing ids deliberately: they ask whose *list* a row belongs in, and
+  that answer does not change across a sign-out and back.
+- **A reset stops the work, not just the drawing.** `useImageProcessing.reset()`
+  and `useReview.reset()` bump a run counter that every async completion
+  checks — including the `finally` clauses, which were clearing the busy and
+  grading flags out from under whatever the next account had started. Without
+  it an OCR pass outlived the screen that began it and called `onTextReady`,
+  putting the previous account's photographed page in front of the next one.
 - **A confirmed delete reasserts itself against the list as it stands.** The
   optimistic removal is not the last word: until the DELETE lands the name is
   still taken server-side, so creating a bundle by that name in the meantime
