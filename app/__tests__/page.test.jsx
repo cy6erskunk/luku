@@ -660,6 +660,50 @@ describe("signing in as someone else", () => {
     expect(localStorage.getItem("luku_session:u2")).toBeNull();
   });
 
+  it("does not mark a word new when its save lands after signing back in", async () => {
+    // The guard used to compare account ids, which cannot tell an
+    // A -> B -> A round trip from the original A session: the id matches
+    // again, so a save from before the sign-out passes and marks its word
+    // "new this session" on a screen that was reset — holding it out of the
+    // due queue for a session that never added it.
+    let resolveSave;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "POST") {
+        return new Promise((r) => { resolveSave = r; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [] }) });
+    }));
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+
+    const { rerender } = await scanAsFirstAccount();
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /add to review/i }));
+
+    await switchTo(rerender, "u2");
+    await switchTo(rerender, "u1");
+    await act(async () => {
+      resolveSave({ ok: true, status: 200, json: () => Promise.resolve({ word: { ...WORD, id: 7, base: "koira" } }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.queryByRole("button", { name: /\d+ new/ })).toBeNull();
+  });
+
+  it("closes the Telegram panel, which never reloads its own status", async () => {
+    // TelegramConnect fetches once on mount, so a panel carried across the
+    // switch keeps showing the previous account's linked handle.
+    mockApi({ words: [] });
+    const { rerender } = render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    fireEvent.click(screen.getByRole("button", { name: /menu/i }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /telegram/i }));
+    await screen.findByRole("dialog");
+
+    await switchTo(rerender, "u2");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("does not restore the previous account's word when its delete fails after the switch", async () => {
     let rejectDelete;
     vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
