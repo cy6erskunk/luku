@@ -201,9 +201,12 @@ describe("WordList – bundles", () => {
   });
 
   it("shows the count its caller derived, without re-deriving it", () => {
-    withBundles();
-    expect(screen.getByRole("button", { name: "Kotimaa (2)" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Luku 3 (1)" })).toBeTruthy();
+    // The counts come from bundleStats, which page.jsx derives from the whole
+    // vocabulary — not from the words this overlay happens to hold. Deliberately
+    // disagreeing numbers are the only way to see which source won.
+    withBundles({ bundles: [{ id: 10, name: "Kotimaa", wordCount: 7, dueCount: 0 }] });
+    expect(screen.getByRole("button", { name: "Kotimaa (7)" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Kotimaa (2)" })).toBeNull();
   });
 
   it("removes a word from a bundle it is tagged with", () => {

@@ -162,13 +162,10 @@ export function useBundles(userId) {
         if (activeRef.current === id) setActiveBundleId(null);
       }
     } catch (e) {
-      // A rollback undoes its own optimistic change and nothing else: not
-      // another account's list, and not a selection the reader made while this
-      // request was in flight. The bundle comes back either way; the selection
-      // only if nothing has claimed it since. A failure that lands after the
-      // account changed is not reported either — like the writes above it
-      // belongs to the session that asked for it, and the caller would put it
-      // in the banner of the account that did not.
+      // A rollback undoes its own optimistic change and nothing else. The
+      // failure is withheld from a changed account as the writes above are, or
+      // the caller would raise it in the banner of a session that never asked;
+      // the selection comes back only if nothing has claimed it since.
       if (accountRef.current !== forAccount) return;
       setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
       if (wasActive && activeRef.current == null) setActiveBundleId(id);
