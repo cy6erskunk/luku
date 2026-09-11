@@ -77,6 +77,16 @@ export default function Luku() {
     accountRef.current = user?.id;
     screenRef.current += 1;
   }
+  // Anything that throws away the page's work starts a new screen, not just a
+  // change of account: scanning another page and an AI re-scan both empty the
+  // session and the new-word bookkeeping, and a lookup or save still running
+  // from the last page would otherwise pass the guard and repopulate them —
+  // token keys collide across scans, so the same word on two pages is enough.
+  // Releases the in-flight marker as it goes, the way useImageProcessing's
+  // reset clears `busy`: the lookup it belonged to is abandoned, and leaving
+  // the flag set would refuse every tap on the new page until that lookup
+  // happened to answer.
+  const newScreen = useCallback(() => { screenRef.current += 1; setXlating(null); }, []);
 
   const words = useWords(user?.id);
   const bundles = useBundles(user?.id);
@@ -85,8 +95,8 @@ export default function Luku() {
     setText(rawText);
     setTokens(tokenize(rawText));
     setStage(1);
-    if (resetSession) { setSession({}); setPopup(null); }
-  }, [setSession]);
+    if (resetSession) { newScreen(); setSession({}); setPopup(null); }
+  }, [setSession, newScreen]);
 
   const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
   const review = useReview({ dbWords: words.dbWords, updateWord: words.updateWord, stage });
@@ -313,6 +323,7 @@ export default function Luku() {
   };
 
   const handleScanAnother = () => {
+    newScreen();
     setStage(0);
     setSession({});
     setNewWordIds(new Set());
@@ -386,7 +397,10 @@ export default function Luku() {
           : { ...p, loading: false, translations: [`(${e.message || "error"})`] };
       });
     }
-    finally { setXlating(null); }
+    // As in useImageProcessing: the cleanup needs the same token as the rest.
+    // An obsolete lookup clearing this would release the marker the *current*
+    // lookup is holding, letting a second one start beside it.
+    finally { if (screenRef.current === forScreen) setXlating(null); }
   };
 
   const handleAddWord = async () => {
@@ -401,7 +415,13 @@ export default function Luku() {
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
     const forScreen = screenRef.current;
-    setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
+    // The tick goes on the popup, which is ephemeral, and not into the session
+    // cache, which is persisted under the account and survives a sign-out. A
+    // save that fails once the screen is gone has no rollback path — there is
+    // no popup left and the cache may belong to someone else — so a cache that
+    // recorded the claim up front would keep telling this account the word is
+    // on their list, with the Add button gone and no way to retry. It is
+    // written below, once there is a row to point at.
     setPopup((p) => ({ ...p, added: true }));
     setActionError(null);
     try {
@@ -412,6 +432,7 @@ export default function Luku() {
       // session that never added it.
       if (screenRef.current !== forScreen) return;
       if (saved?.id != null) {
+        setSession((s) => (s[key] ? { ...s, [key]: { ...s[key], added: true } } : s));
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
           const next = new Set(prev);
@@ -434,7 +455,6 @@ export default function Luku() {
       // them is worse than never having shown them: the popup replaces its
       // Add button with "✓ Added to review", so the reader both believes the
       // word is on the list and has no way to try again.
-      setSession((s) => s[key] ? { ...s, [key]: { ...s[key], added: false } } : s);
       setPopup((p) => p?.k === key ? { ...p, added: false } : p);
       setActionError(e.message || "Could not save that word.");
     }
