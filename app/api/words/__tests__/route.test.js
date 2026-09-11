@@ -273,12 +273,12 @@ describe("POST /api/words", () => {
     expect(text).toContain("example = COALESCE(EXCLUDED.example, words.example)");
   });
 
-  it("writes the word itself in one statement, so a half-saved word is not possible", async () => {
+  it("saves in one statement, so a half-saved word is not possible", async () => {
     // The HTTP driver has no interactive transactions: anything split across
-    // two tagged templates can land half-done. The word is therefore one
-    // statement. A bundle membership is the deliberate exception below — it
-    // needs the word's id, so it cannot ride along, and the half-completed
-    // state it allows is a saved word that joined nothing.
+    // two tagged templates can land half-done. The save is therefore one
+    // statement — including the bundle membership, which rides in a
+    // data-modifying CTE rather than a second request precisely so that no
+    // half-completed save-and-attach state exists. See the bundle cases below.
     mocks.sql = fakeSql([[WORD]]);
     await POST(jsonRequest(BODY));
 

@@ -174,7 +174,10 @@ A bundle is a named group of words — normally "the words from this page".
   can be created and deleted while the initial GET is still out, and that
   snapshot was taken before the delete. `useBundles` keeps the ids it has
   confirmed deleted since the load began and filters them out of the merge, or
-  the row comes back as a ghost that every later delete can only 404 on.
+  the row comes back as a ghost that every later delete can only 404 on. The
+  same tombstone refuses a *create* that answers with a deleted id: its insert
+  ran while the name was still taken, so the row it names is gone. A genuine
+  re-create of that name gets a new id, which is what tells the two apart.
 - **A membership edit names one membership at every step** — the optimistic
   update, the reconcile against the response, and the rollback. The PATCH
   answers with the word's whole `bundle_ids`, and applying all of it would let

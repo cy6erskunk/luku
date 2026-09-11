@@ -141,6 +141,12 @@ export function useBundles(userId) {
     // just from the list — BundlePicker selects whatever comes back, and the
     // hook that would store that selection is still mounted after the switch.
     if (accountRef.current !== forAccount) return null;
+    // A create whose insert ran before a delete of the same row answers with
+    // the row that is now gone — the name was still taken when it looked. The
+    // tombstone is what tells the two apart: a genuine re-create of that name
+    // gets a new id, since the old one was deleted. Withheld from the caller
+    // as well, or BundlePicker selects a bundle the server no longer has.
+    if (bundle && deletedSinceLoad.current.has(bundle.id)) return null;
     if (bundle) {
       setBundles((prev) => prev.some((b) => b.id === bundle.id)
         ? prev.map((b) => (b.id === bundle.id ? bundle : b))

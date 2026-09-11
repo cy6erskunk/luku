@@ -402,6 +402,32 @@ describe("useBundles – deleteBundle", () => {
     expect(result.current.bundles).toEqual([]);
   });
 
+  it("refuses a create that answers with the row it has just deleted", async () => {
+    // The insert ran before the DELETE, so the name was still taken and the
+    // upsert answered with the row on its way out. Taking it would put a
+    // bundle the server no longer has back in the list, and select it.
+    const result = await loaded([KOTIMAA, LUKU3]);
+
+    let finishCreate;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((r) => { finishCreate = r; }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) })));
+
+    let creating;
+    act(() => { creating = result.current.createBundle("Kotimaa"); });
+    await act(() => result.current.deleteBundle(1));
+    expect(result.current.bundles).toEqual([LUKU3]);
+
+    let created;
+    await act(async () => {
+      finishCreate({ ok: true, json: () => Promise.resolve({ bundle: KOTIMAA }) });
+      created = await creating;
+    });
+
+    expect(created).toBeNull();
+    expect(result.current.bundles).toEqual([LUKU3]);
+  });
+
   it("says nothing about a failed delete once the account has changed", async () => {
     // Like the create and the save: the caller would put this in the banner of
     // an account that never asked for the delete.
