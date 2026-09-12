@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, responseError, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -319,5 +319,34 @@ describe("savedWordEntry", () => {
 
   it("returns null when there is no saved word", () => {
     expect(savedWordEntry(null, "koira")).toBeNull();
+  });
+});
+
+describe("responseError", () => {
+  const response = (status, body) => ({
+    status,
+    json: () => body === undefined ? Promise.reject(new SyntaxError("not JSON")) : Promise.resolve(body),
+  });
+
+  it("prefers the message the server sent", async () => {
+    // A route that knows why it failed says so; the status alone would not
+    // tell the reader that a schema file needs running.
+    const e = await responseError(response(503, { error: "Run db/schema.sql against it." }), "Could not load");
+    expect(e.message).toBe("Run db/schema.sql against it.");
+  });
+
+  it("falls back to the status when the body is not JSON", async () => {
+    // An unhandled 500 from the framework has no body of ours to read.
+    const e = await responseError(response(500), "Could not load your saved words");
+    expect(e.message).toBe("Could not load your saved words (500)");
+  });
+
+  it("falls back when the JSON carries no error field", async () => {
+    const e = await responseError(response(500, { words: [] }), "Could not load");
+    expect(e.message).toBe("Could not load (500)");
+  });
+
+  it("returns an Error, so callers can throw it", async () => {
+    expect(await responseError(response(500), "x")).toBeInstanceOf(Error);
   });
 });

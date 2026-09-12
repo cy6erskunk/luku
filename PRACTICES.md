@@ -108,10 +108,12 @@ writes anywhere other than `lib/reviews.js`.
 Neon Postgres over HTTP, no ORM, no migration tool. Two properties dominate
 every decision here.
 
-### The HTTP driver has no transactions
+### The HTTP driver has no *interactive* transactions
 
-Each tagged template is its own request. A read cannot be held against a
-subsequent write.
+Each tagged template is its own request. `sql.transaction([...])` does exist and
+is atomic, but it takes a list of queries built before the call, so no statement
+in it can use an earlier one's result. A read still cannot be held against a
+subsequent write, which is what every rule below follows from.
 
 **Do**
 
@@ -133,6 +135,10 @@ subsequent write.
 
 - Don't write read-then-write sequences that assume nothing moved in between.
 - Don't use `BEGIN`/`COMMIT`. They will not do what you expect on this driver.
+- Don't reach for `sql.transaction([...])` to fix a read-then-write: it cannot
+  see its own results. It only helps when a *fixed* set of statements must
+  land together, and `fakeSql` has no `.transaction`, so using it means
+  extending the helper too.
 
 ### Migrations are appended to `db/schema.sql`, by hand
 

@@ -9,6 +9,21 @@ export const SERVER_KEY = "__server__";
 
 export const hasApiKey = (key) => key && key !== SKIP_KEY;
 
+/**
+ * The message to show for a request that came back not-ok.
+ *
+ * Prefers the server's own `error` field, so a route that knows *why* it
+ * failed — a database missing a table names the schema file to run — says so
+ * instead of the reader seeing a bare status code. Falls back to the status
+ * when the body is empty or is not JSON at all, which is what an unhandled
+ * 500 looks like.
+ */
+export async function responseError(response, fallback) {
+  let served = null;
+  try { served = (await response.json())?.error; } catch {}
+  return new Error(served || `${fallback} (${response.status})`);
+}
+
 // Hyphen-minus plus the unicode hyphen (U+2010) and non-breaking hyphen
 // (U+2011); the tokenizer's punctuation class carries all three.
 const HYPHEN = /^[-‐‑]$/;

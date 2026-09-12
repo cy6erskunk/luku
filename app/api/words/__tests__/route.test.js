@@ -3,8 +3,11 @@
  * is about the two things a caller must not be able to influence: whose rows
  * are read, written and deleted, and what a malformed body or query is allowed
  * to store.
+ *
+ * The last group covers what every handler answers on a database
+ * `db/schema.sql` has not been run against.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
 
 const mocks = vi.hoisted(() => ({ session: null, sql: null }));
@@ -12,7 +15,12 @@ const mocks = vi.hoisted(() => ({ session: null, sql: null }));
 vi.mock("@/lib/auth/server", () => ({
   getAuth: () => ({ getSession: () => Promise.resolve({ data: mocks.session }) }),
 }));
-vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
+// Only getDb is faked: withSchemaGuard is the behaviour under test in the
+// "schema out of date" cases below, so it has to be the real one.
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDb: () => mocks.sql,
+}));
 
 const { GET, POST, DELETE } = await import("../route.js");
 
@@ -250,5 +258,40 @@ describe("POST /api/words", () => {
     await POST(postRequest(BODY));
 
     expect(mocks.sql.calls).toHaveLength(1);
+  });
+});
+
+describe("a database the migration has not been run against", () => {
+  /** What the driver throws for a table `db/schema.sql` would have created:
+   *  Postgres' undefined_table SQLSTATE on `code`. */
+  function undefinedTable() {
+    const e = new Error('relation "words" does not exist');
+    e.code = "42P01";
+    return e;
+  }
+
+  beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+  afterEach(() => vi.restoreAllMocks());
+
+  it("answers the word list with a 503 that names the fix", async () => {
+    // The reported symptom: this used to throw, Next answered 500 with no body
+    // of ours, and the client showed an empty vocabulary and no error at all.
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.schemaOutOfDate).toBe(true);
+    expect(body.error).toMatch(/db\/schema\.sql/);
+  });
+
+  it("answers a save the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await POST(postRequest({ word: "juosta", base: "juosta", translations: ["to run"] }));
+    expect(res.status).toBe(503);
+  });
+
+  it("lets an unrelated database failure stay a 500", async () => {
+    mocks.sql = fakeSql([new Error("connection reset")]);
+    await expect(GET()).rejects.toThrow("connection reset");
   });
 });

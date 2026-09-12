@@ -64,14 +64,27 @@ npm run telegram:status   # what webhook Telegram currently has registered
 
 Neon Postgres over HTTP, no ORM and no migration tool.
 
-- **The HTTP driver has no transactions.** Each tagged template is its own
-  request, so a read cannot be held against a later write. Make multi-step
-  writes safe half-completed, collapse them into one statement, or guard the
-  write with a compare-and-swap on what you read.
+- **The HTTP driver has no *interactive* transactions.** `sql.transaction([...])`
+  does exist and is atomic, but it takes a list of queries built before the
+  call, so no statement in it can use an earlier one's result. A read cannot
+  be held against a later write. Make multi-step writes safe half-completed,
+  collapse them into one statement, or guard the write with a compare-and-swap
+  on what you read. (`fakeSql` has no `.transaction`, so reaching for it means
+  extending the helper too.)
 - Migrations are appended to `db/schema.sql` by hand and run in the Neon SQL
   editor. Every statement must be idempotent (`IF NOT EXISTS`,
   `ADD COLUMN IF NOT EXISTS`) and safe to re-run against both a populated
   database and an empty one. Deploying does not migrate anything.
+- Because of that, **a route reading a table the schema file creates wraps its
+  body in `withSchemaGuard()`** (`lib/db.js`), so a database that has not had
+  the file run against it answers 503 with the fix instead of an unexplained
+  500. And **never swallow a failed load in a hook**: an empty list is the
+  app's normal state, so a silent failure there looks exactly like success.
+- Errors from the driver carry Postgres' SQLSTATE on `.code` (`NeonDbError`),
+  which is what lets that guard key off `42P01` and `42703` exactly rather than
+  matching on message text. Both, because migrations are appended as
+  `ALTER TABLE ... ADD COLUMN` more often than as new tables: an older database
+  usually has every table and only some of the columns.
 - Every query touching user data is scoped by `user.id`.
 - Interpolate values through the tagged template — never concatenate them
   into SQL.
