@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 /**
  * The per-scan translation cache holds the text the reader scanned and what
@@ -20,14 +20,17 @@ function readSession(userId) {
 }
 
 export function useSession(userId) {
-  const [session, _setSession] = useState(() => readSession(userId));
+  const [session, setSession] = useState(() => readSession(userId));
 
-  const setSession = useCallback((v) => {
-    let next;
-    _setSession((prev) => { next = typeof v === "function" ? v(prev) : v; return next; });
+  // Persisting follows the rendered state rather than the call that asked for
+  // it. React runs a state updater only when it processes the update, so
+  // reading the next value out of the updater in order to write it here left
+  // the string "undefined" in storage whenever another update was already
+  // pending on this component — and the whole scan's cache with it.
+  useEffect(() => {
     if (!userId) return;
-    try { localStorage.setItem(sessionStorageKey(userId), JSON.stringify(next)); } catch {}
-  }, [userId]);
+    try { localStorage.setItem(sessionStorageKey(userId), JSON.stringify(session)); } catch {}
+  }, [userId, session]);
 
   return { session, setSession };
 }

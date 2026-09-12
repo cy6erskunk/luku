@@ -55,6 +55,38 @@ describe("useSession – setSession", () => {
     expect(result.current.session.talo.added).toBe(true);
   });
 
+  it("persists a functional update that is queued behind another update", () => {
+    // React only runs a state updater when it processes the update. With
+    // another update already pending on this component, the updater does not
+    // run at call time — so anything read out of it to persist is not there
+    // yet, and the whole cache is what gets lost.
+    const { result } = renderHook(() => useSession(U1));
+
+    act(() => {
+      result.current.setSession({ talo: { base: "talo" } });
+      result.current.setSession((prev) => ({ ...prev, koira: { base: "koira" } }));
+    });
+
+    const both = { talo: { base: "talo" }, koira: { base: "koira" } };
+    expect(result.current.session).toEqual(both);
+    expect(localStorage.getItem(KEY_U1)).not.toBe("undefined");
+    expect(JSON.parse(localStorage.getItem(KEY_U1))).toEqual(both);
+  });
+
+  it("persists a replacement that is queued behind another update", () => {
+    // Same hazard without a functional updater: the value was only read
+    // inside the updater, so a plain object was lost the same way.
+    const { result } = renderHook(() => useSession(U1));
+
+    act(() => {
+      result.current.setSession({ talo: { base: "talo" } });
+      result.current.setSession({});
+    });
+
+    expect(result.current.session).toEqual({});
+    expect(JSON.parse(localStorage.getItem(KEY_U1))).toEqual({});
+  });
+
   it("clears the session when set to empty object", () => {
     localStorage.setItem(KEY_U1, JSON.stringify({ koira: {} }));
     const { result } = renderHook(() => useSession(U1));
