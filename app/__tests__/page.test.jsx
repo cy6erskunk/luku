@@ -1148,10 +1148,10 @@ describe("signing in as someone else", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("does not let the logo carry a scan's translations into the next one", async () => {
-    // The logo is "back to scan", but it kept the session cache, so the next
-    // local scan reused the previous page's translations wherever a token key
-    // collided — and token keys collide on the same word.
+  it("does not carry one scan's translations into the next", async () => {
+    // Token keys are derived from the words, so they collide across pages.
+    // Keeping the cache would show the previous page's translation — and its
+    // "added" tick — against the new page's identical token.
     const { ocrLocal } = await import("../lib/ocr.js");
     ocrLocal.mockResolvedValue("Koira juoksee.");
     mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
@@ -1159,15 +1159,23 @@ describe("signing in as someone else", () => {
 
     render(<Luku />);
     await screen.findByText("Photograph a Finnish page");
-    const input = document.querySelector('input[type="file"]');
-    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
-    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    const scan = async () => {
+      const input = document.querySelector('input[type="file"]');
+      await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+      fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    };
+    await scan();
     await screen.findByText("Koira");
     await act(async () => { fireEvent.click(screen.getByText("Koira")); });
     await waitFor(() => expect(JSON.parse(localStorage.getItem("luku_session:u1") || "{}")).not.toEqual({}));
 
+    // Back to scan via the logo — which keeps the session — then scan again.
     fireEvent.click(screen.getByText("Luku"));
+    expect(JSON.parse(localStorage.getItem("luku_session:u1") || "{}")).not.toEqual({});
+    await scan();
+    await screen.findByText("Koira");
 
+    // The new page starts with no cached translations.
     expect(JSON.parse(localStorage.getItem("luku_session:u1") || "{}")).toEqual({});
   });
 

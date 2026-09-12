@@ -55,7 +55,8 @@ export function useWords(userId) {
     const existing = bundleId == null ? null : findExistingWord(dbWords, { base: entry.base });
     if (bundleId == null || !existing) return saveWordNow(entry, bundleId, null, null);
     const key = membershipKey(existing.id, bundleId);
-    const version = claimIntent(key, "add");
+    const version = claimIntent(key, "add",
+      wordBundleIds(existing).includes(bundleId) ? "add" : "remove");
     return serializePerMembership(key, () => saveWordNow(entry, bundleId, key, version));
   };
 
@@ -182,18 +183,29 @@ export function useWords(userId) {
   const membershipKey = (id, bundleId) => `${id}:${bundleId}`;
 
   /** Records what the reader last asked for, and stamps it. */
-  const claimIntent = (key, want) => {
-    const version = (intents.current.get(key)?.version ?? 0) + 1;
-    intents.current.set(key, { version, want });
+  /** Claims the next version for a membership. `confirmed` is what the server
+   *  is last known to have said about it — seeded from the list on the first
+   *  edit, and moved only by an answer, never by an optimistic change. */
+  const claimIntent = (key, want, confirmedNow) => {
+    const current = intents.current.get(key);
+    const version = (current?.version ?? 0) + 1;
+    intents.current.set(key, {
+      version,
+      want,
+      confirmed: current?.confirmed ?? confirmedNow,
+    });
     return version;
   };
 
   const isLatestIntent = (key, version) => intents.current.get(key)?.version === version;
 
-  /** What the membership is believed to be now, after the last settled edit. */
+  const confirmedState = (key) => intents.current.get(key)?.confirmed ?? "remove";
+
+  /** Records what the server said. This is the only thing that moves
+   *  `confirmed`, so a rollback has something true to fall back to. */
   const settleIntent = (key, want) => {
     const current = intents.current.get(key);
-    if (current) intents.current.set(key, { ...current, want });
+    if (current) intents.current.set(key, { ...current, want, confirmed: want });
   };
 
   const serializePerMembership = (key, run) => {
@@ -220,7 +232,8 @@ export function useWords(userId) {
     // send, and a stale answer here only costs a request the server 404s.
     if (!dbWords.some((w) => w.id === id)) return;
     const key = membershipKey(id, bundleId);
-    const version = claimIntent(key, action);
+    const version = claimIntent(key, action,
+      wordBundleIds(dbWords.find((w) => w.id === id)).includes(bundleId) ? "add" : "remove");
     // Applied before the queue, so the UI answers the tap even while an
     // earlier request for the same membership is still outstanding.
     applyBundleChange(id, bundleId, action);
@@ -262,10 +275,12 @@ export function useWords(userId) {
         // A rollback is as stale as a reconcile: undoing this edit once the
         // reader has asked for something newer would undo theirs instead.
         if (!isLatestIntent(key, version)) throw e;
-        // The inverse of what was applied. The UI only offers "add" for a
-        // bundle the word is not in and "remove" for one it is, so inverting
-        // restores exactly the state this call changed — and nothing else.
-        const undone = action === "add" ? "remove" : "add";
+        // Back to what the server is last known to have said, not to the
+        // inverse of this action. Inverting assumes the edit before this one
+        // succeeded: offline, a quick add then remove leaves the add failing
+        // silently (it was not the latest) and the remove inverting to "add",
+        // so the word ends up tagged with a membership that never existed.
+        const undone = confirmedState(key);
         applyBundleChange(id, bundleId, undone);
         settleIntent(key, undone);
         throw e;

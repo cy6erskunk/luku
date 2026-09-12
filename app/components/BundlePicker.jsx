@@ -32,7 +32,14 @@ export default function BundlePicker({ bundles, activeBundleId, onSelect, onCrea
   // the reader is no longer collecting into, into their selection and their
   // localStorage.
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(() => {
+    // Set on the way in as well as cleared on the way out. Strict Mode runs
+    // setup/cleanup twice in development, and a cleanup-only version left the
+    // flag false for the whole life of the component — so *every* create was
+    // treated as coming from an unmounted picker and none was ever selected.
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();

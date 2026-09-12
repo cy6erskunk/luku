@@ -44,6 +44,11 @@ export function useBundles(userId) {
   // the same tick as the clear it is undoing, so a render-time assignment
   // would still be reporting the value from before that clear.
   const activeRef = useRef(activeBundleId);
+  // How many times the selection has been set. `activeRef.current == null` is
+  // not proof that nobody touched it since the optimistic clear: the reader can
+  // pick another bundle and then pick "No bundle" again, and a refused delete
+  // would overwrite that choice with the row it failed to remove.
+  const selectionRef = useRef(0);
   // Bundles this session has confirmed deleted since the current load began.
   // The snapshot that load is waiting on was taken before the delete, so
   // without this the merge below hands the row back as a ghost that every
@@ -52,6 +57,7 @@ export function useBundles(userId) {
 
   const setActiveBundleId = useCallback((id) => {
     const value = id ?? null;
+    selectionRef.current += 1;
     activeRef.current = value;
     _setActiveBundleId(value);
     const account = accountRef.current;
@@ -173,9 +179,13 @@ export function useBundles(userId) {
     const wasActive = activeBundleId === id;
     setBundles((prev) => prev.filter((b) => b.id !== id));
     if (wasActive) setActiveBundleId(null);
+    const clearedAt = selectionRef.current;
     try {
       const r = await fetch(`/api/bundles?id=${id}`, { method: "DELETE" });
-      if (!r.ok) throw await responseError(r, "Could not delete that bundle");
+      // 404 is success here: another tab deleted it first, so what was asked
+      // for is already true. Treating it as a failure restored the row and its
+      // memberships as a ghost that every retry would 404 on and restore again.
+      if (!r.ok && r.status !== 404) throw await responseError(r, "Could not delete that bundle");
       // The row is gone now, so say so against the list as it stands rather
       // than resting on the optimistic removal. Creating a bundle by the same
       // name while this request was in flight puts it back: until the delete
@@ -194,7 +204,7 @@ export function useBundles(userId) {
       // the selection comes back only if nothing has claimed it since.
       if (accountRef.current !== forAccount) return;
       setBundles((prev) => prev.some((b) => b.id === id) ? prev : [removed, ...prev]);
-      if (wasActive && activeRef.current == null) setActiveBundleId(id);
+      if (wasActive && selectionRef.current === clearedAt) setActiveBundleId(id);
       throw e;
     }
   };

@@ -126,7 +126,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
       if (stale(run)) return;
       if (!out?.trim()) { setErr("AI found no text — try a different photo."); return; }
       setOcrSource("ai");
-      onTextReady(out.trim(), { resetSession: true });
+      onTextReady(out.trim());
     } catch (e) { if (!stale(run)) setErr(e.message); }
     finally { if (!stale(run)) { setBusy(false); setStep(""); } }
   };

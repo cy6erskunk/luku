@@ -370,6 +370,31 @@ describe("useWords – bundle membership", () => {
     expect(result.current.dbWords[0].bundle_ids).toEqual([]);
   });
 
+  it("rolls back to what the server confirmed, not to the inverse", async () => {
+    // Offline, starting absent: add then remove. The add fails but its rollback
+    // is skipped (no longer the latest intent); the remove then fails and
+    // inverting it says "add", leaving a tag that never existed server-side.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add, remove;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await add.catch(() => {});
+    });
+    await settle();
+    await act(async () => {
+      resolvers[1]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await remove.catch(() => {});
+    });
+
+    // The server never had it, so neither does the screen.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
   it("does not roll back an edit the reader has already replaced", async () => {
     // Same shape for the failure path. Add, remove, add again — then let the
     // first add fail. Its rollback is "remove", which would take off the tag

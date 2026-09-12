@@ -217,6 +217,43 @@ describe("useBundles – the active bundle", () => {
   });
 });
 
+describe("useBundles – deleteBundle edge cases", () => {
+  it("treats a 404 as done, not as a failure", async () => {
+    // Another tab deleted it first. The postcondition already holds, so
+    // restoring it makes a ghost that every retry 404s on and restores again.
+    const result = await loaded([KOTIMAA]);
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 404, json: () => Promise.resolve({ error: "Not found" }),
+    })));
+
+    await act(async () => { await result.current.deleteBundle(KOTIMAA.id); });
+    expect(result.current.bundles).toEqual([]);
+  });
+
+  it("does not overwrite a selection the reader changed while the delete ran", async () => {
+    // Delete the active bundle (which clears the selection), then pick another
+    // and explicitly pick "No bundle" again. A refused delete must not put the
+    // deleted bundle back as the selection.
+    const result = await loaded([KOTIMAA, LUKU3]);
+    act(() => result.current.setActiveBundleId(KOTIMAA.id));
+
+    let rejectDelete;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((_r, rej) => { rejectDelete = rej; })));
+
+    let pending;
+    await act(async () => { pending = result.current.deleteBundle(KOTIMAA.id); });
+    act(() => result.current.setActiveBundleId(LUKU3.id));
+    act(() => result.current.setActiveBundleId(null));
+
+    await act(async () => {
+      rejectDelete(new Error("offline"));
+      await pending.catch(() => {});
+    });
+
+    expect(result.current.activeBundleId).toBeNull();
+  });
+});
+
 describe("useBundles – createBundle", () => {
   it("prepends the new bundle and returns it", async () => {
     const result = await loaded([KOTIMAA]);

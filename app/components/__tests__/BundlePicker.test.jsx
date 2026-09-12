@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
+import { StrictMode } from "react";
 import BundlePicker from "../BundlePicker.jsx";
 
 const BUNDLES = [
@@ -91,6 +92,25 @@ describe("BundlePicker", () => {
     await waitFor(() => expect(onCreate).toHaveBeenCalledWith("Uusi"));
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/new bundle name/i).value).toBe("Uusi");
+  });
+
+  it("still selects under Strict Mode, which mounts twice", async () => {
+    // The App Router runs development in Strict Mode, so the effect's
+    // setup/cleanup pair runs twice. A cleanup-only mounted flag is left false
+    // by the first cleanup and never set again, so every create looks like it
+    // came from an unmounted picker and none is ever selected.
+    const onCreate = vi.fn(() => Promise.resolve({ id: 3, name: "Uusi" }));
+    const onSelect = vi.fn();
+    render(
+      <StrictMode>
+        <BundlePicker bundles={BUNDLES} activeBundleId={null} onSelect={onSelect} onCreate={onCreate} />
+      </StrictMode>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /new/i }));
+    fireEvent.change(screen.getByLabelText(/new bundle name/i), { target: { value: "Uusi" } });
+    fireEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(3));
   });
 
   it("does not select a bundle created by a picker that is gone", async () => {
