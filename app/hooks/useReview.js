@@ -35,8 +35,10 @@ export function useReview({ dbWords, updateWord, stage }) {
 
   const startReview = (dueWords, scopeLabel = null) => {
     // A new queue invalidates the old one's pending grade as surely as a reset
-    // does: its answer would advance or requeue cards it has never seen.
+    // does: its answer would advance or requeue cards it has never seen — and
+    // its error belongs to that queue too, not to the cards replacing it.
     runRef.current += 1;
+    setGradeError(null);
     setMode("due");
     setScope(scopeLabel);
     setQueue(dueWords.map((w) => w.id));
@@ -47,6 +49,7 @@ export function useReview({ dbWords, updateWord, stage }) {
 
   const startRepeat = (words, scopeLabel = null) => {
     runRef.current += 1;
+    setGradeError(null);
     setMode("repeat");
     setScope(scopeLabel);
     setQueue(words.map((w) => w.id));
@@ -57,6 +60,7 @@ export function useReview({ dbWords, updateWord, stage }) {
 
   const startNewReview = (words, scopeLabel = null) => {
     runRef.current += 1;
+    setGradeError(null);
     setMode("new");
     setScope(scopeLabel);
     setQueue(words.map((w) => w.id));
@@ -145,6 +149,8 @@ export function useReview({ dbWords, updateWord, stage }) {
 
   // Stable, so callers can depend on it without re-running an effect every
   // render.
+  const clearGradeError = useCallback(() => setGradeError(null), []);
+
   const reset = useCallback(() => {
     runRef.current += 1;
     setGradeError(null);
@@ -157,7 +163,7 @@ export function useReview({ dbWords, updateWord, stage }) {
   }, []);
 
   return {
-    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, gradeError, mode, scope, isRepeat, isNewReview,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, gradeError, clearGradeError, mode, scope, isRepeat, isNewReview,
     startReview, startRepeat, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }

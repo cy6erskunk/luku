@@ -1148,6 +1148,110 @@ describe("signing in as someone else", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("does not let the logo carry a scan's translations into the next one", async () => {
+    // The logo is "back to scan", but it kept the session cache, so the next
+    // local scan reused the previous page's translations wherever a token key
+    // collided — and token keys collide on the same word.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    ocrLocal.mockResolvedValue("Koira juoksee.");
+    mocks.translateWord.mockResolvedValue({ base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun" });
+    mockApi({ words: [] });
+
+    render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+    const input = document.querySelector('input[type="file"]');
+    await act(async () => { fireEvent.change(input, { target: { files: [new File(["x"], "p.jpg", { type: "image/jpeg" })] } }); });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("luku_session:u1") || "{}")).not.toEqual({}));
+
+    fireEvent.click(screen.getByText("Luku"));
+
+    expect(JSON.parse(localStorage.getItem("luku_session:u1") || "{}")).toEqual({});
+  });
+
+  it("does not restore a row a newer delete has already removed", async () => {
+    // The first delete is still in flight when the account round-trips and the
+    // list reloads with the row (the server still has it). A second delete then
+    // succeeds. When the first finally fails, restoring would put back a row
+    // the server has since dropped.
+    const rejects = [];
+    const resolves = [];
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return new Promise((res, rej) => { resolves.push(res); rejects.push(rej); });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+
+    const { rerender } = render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    const swap = async (id) => {
+      mocks.session = { data: { user: { id } }, isPending: false };
+      await act(async () => { rerender(<Luku />); });
+    };
+    await swap("u2");
+    await swap("u1");
+
+    // u1's reload brought the row back; delete it again, and let that succeed.
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+    await act(async () => {
+      resolves[1]({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // Now the first one fails. It must not resurrect the row.
+    await act(async () => {
+      rejects[0](new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.queryByRole("button", { name: "1 words" })).toBeNull();
+  });
+
+  it("does not strand a pending delete's id across a scan reset", async () => {
+    // The delete's finally is gated on the screen, so an id left in the
+    // re-entry guard after a reset is never released. The row comes back
+    // (a failed delete restores it on the account's terms) but can never be
+    // deleted again: every attempt returns immediately and silently.
+    let rejectDelete;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return new Promise((_r, rej) => { rejectDelete = rej; });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+
+    render(<Luku />);
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    // The header logo: a screen reset that is not an account change.
+    fireEvent.click(screen.getByText("Luku"));
+    await act(async () => {
+      rejectDelete(new Error("offline"));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // The row is back, because the server still has it. It must be deletable.
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /sure\?/i }));
+
+    await waitFor(() => {
+      const deletes = fetch.mock.calls.filter(([, o]) => o?.method === "DELETE");
+      expect(deletes.length).toBe(2);
+    });
+  });
+
   it("does not put the previous account's scan on the next one's screen", async () => {
     // OCR outlives the screen that started it. image.reset() cleared what was
     // drawn but not the run itself, so the old scan still called onTextReady —
