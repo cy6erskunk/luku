@@ -80,17 +80,19 @@ export default function Luku() {
     accountRef.current = user?.id;
     screenRef.current += 1;
   }
-  // Everything the screen owns, cleared wherever the screen is replaced. Each
-  // of these is gated on the screen somewhere, so leaving one behind does not
-  // merely look stale — it strands the thing that gates it. The delete
-  // bookkeeping is the sharp case: its `finally` only runs for the screen that
-  // started the request, so an id left here after a reset is never removed and
+  // The flags that are *gated* on the screen, cleared wherever the screen is
+  // replaced. Leaving one behind does not merely look stale — it strands the
+  // thing that gates it: the delete bookkeeping's `finally` only runs for the
+  // screen that started the request, so an id left here is never removed and
   // blocks every later attempt at that word.
+  //
+  // The new-word sets are deliberately not here. They are the session's triage
+  // bucket, not the screen's, and returning to the scan screen — to pick a
+  // bundle, or to start a review — has to keep them. Only starting a different
+  // page (handleScanAnother) or a different account clears them.
   const clearScreenState = useCallback(() => {
     setXlating(null);
     setActionError(null);
-    setNewWordIds(new Set());
-    setPreexistingNewIds(new Set());
     deletingRef.current = new Set();
     setDeletingIds(new Set());
   }, []);
@@ -106,11 +108,17 @@ export default function Luku() {
 
   const words = useWords(user?.id);
 
-  const handleTextReady = useCallback((rawText, { resetSession = false } = {}) => {
+  // Every caller here has produced fresh text — a scan, a crop, or an AI
+  // re-scan of the same image. Token keys are derived from the words, so they
+  // collide across pages: keeping the previous cache would show its
+  // translations, and its "added" ticks, against the new page's tokens.
+  const handleTextReady = useCallback((rawText) => {
+    newScreen();
     setText(rawText);
     setTokens(tokenize(rawText));
+    setSession({});
+    setPopup(null);
     setStage(1);
-    if (resetSession) { newScreen(); setSession({}); setPopup(null); }
   }, [setSession, newScreen]);
 
   const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
@@ -504,11 +512,11 @@ export default function Luku() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        {/* The same reset as Scan Another: there is no way back to the read
-            stage without scanning again, so keeping the old text, its
-            translation cache and its new-word sets only lets them attach to
-            the next page — token keys collide across scans. */}
-        <div onClick={(e) => { e.stopPropagation(); handleScanAnother(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
+        {/* Back to the scan screen, which is also how the reader reaches a
+            review — so this keeps the session's new-word triage. The stale
+            translations it used to leave behind are handled where they
+            actually matter: a new scan clears the cache. */}
+        <div onClick={(e) => { e.stopPropagation(); newScreen(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
           <LukuLogo size={32} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
