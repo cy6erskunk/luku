@@ -179,7 +179,7 @@ describe("useWords – saveWord", () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: WORD_A }) });
     }));
     await act(() => result.current.saveWord({ original: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran" }));
-    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null });
+    expect(body).toEqual({ word: "juoksin", base: "juosta", translations: ["to run"], pos: "verb", formTranslation: "I ran", example: null, example_translation: null, bundleId: null });
   });
 
   it("does not file a save that answered after the account changed", async () => {
@@ -254,6 +254,471 @@ describe("useWords – saveWord", () => {
     expect(result.current.wordsError).toBeNull();
   });
 
+  it("does not undo a membership edit that landed while the save was in flight", async () => {
+    // saved.bundle_ids is the route's snapshot from before its own membership
+    // insert. Replacing the whole row with it would restore a tag a concurrent
+    // PATCH had already removed.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10, 20] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let resolveSave;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "POST") return new Promise((r) => { resolveSave = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundleIds: [10] }) });
+    }));
+
+    let saving;
+    await act(async () => { saving = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 10); });
+    // A tag goes while the save is out.
+    await act(() => result.current.removeWordFromBundle(1, 20));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10]);
+
+    await act(async () => {
+      resolveSave({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [10, 20] } }) });
+      await saving;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10]);
+  });
+
+  it("adds the membership its own save settled", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [5] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    mockFetchJson({ word: { ...WORD_A, bundle_ids: [3] } });
+    await act(() => result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 3));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([3, 5]);
+  });
+
+  it("sends the bundle the reader is collecting into", async () => {
+    mockFetchJson({ words: [] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let body;
+    vi.stubGlobal("fetch", vi.fn((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [4] } }) });
+    }));
+    await act(() => result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"], pos: "verb" }, 4));
+    expect(body.bundleId).toBe(4);
+    expect(result.current.dbWords[0].bundle_ids).toEqual([4]);
+  });
+});
+
+describe("useWords – bundle membership", () => {
+  const inBundle = { ...WORD_A, bundle_ids: [2] };
+
+  async function loaded(words) {
+    mockFetchJson({ words });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    return result;
+  }
+
+  /** Queues a fetch per call and hands back the resolvers, so a test can
+   *  answer requests out of the order they were made. */
+  function pendingFetch(record) {
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn((_url, opts) => {
+      record?.(JSON.parse(opts.body));
+      return new Promise((r) => resolvers.push(r));
+    }));
+    return resolvers;
+  }
+
+  const ok = (bundleIds) => ({ ok: true, json: () => Promise.resolve({ bundleIds }) });
+
+  /** Requests are chained per membership, so issuing one only reaches fetch on
+   *  a later tick. Everything a test starts is settled before it ends. */
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+  it("adds a membership optimistically and confirms it against the server", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let pending;
+    await act(async () => { pending = result.current.addWordToBundle(1, 2); });
+    // Optimistic: the tag is there before the request comes back.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await act(async () => { resolvers[0](ok([2])); await pending; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("does not show the opposite of the reader's last action while it waits", async () => {
+    // Add then remove, in quick succession. The queue sends them in order, so
+    // the add answers first — and reconciling to it puts the tag back on
+    // screen, with the wrong control beside it, until the remove finally
+    // lands. Ordering the requests is not enough; the answer has to know it
+    // has been overruled.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add, remove;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await act(async () => { resolvers[0](ok([2])); await add; });
+    // The add's own answer says the tag is on. It is not the last word.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("rolls back to what the server confirmed, not to the inverse", async () => {
+    // Offline, starting absent: add then remove. The add fails but its rollback
+    // is skipped (no longer the latest intent); the remove then fails and
+    // inverting it says "add", leaving a tag that never existed server-side.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add, remove;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await add.catch(() => {});
+    });
+    await settle();
+    await act(async () => {
+      resolvers[1]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await remove.catch(() => {});
+    });
+
+    // The server never had it, so neither does the screen.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("does not roll back an edit the reader has already replaced", async () => {
+    // Same shape for the failure path. Add, remove, add again — then let the
+    // first add fail. Its rollback is "remove", which would take off the tag
+    // the reader's latest action just put on. Two actions are not enough to
+    // catch this: the inverse has to differ from where the reader left it.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let first, remove, again;
+    await act(async () => { first = result.current.addWordToBundle(1, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    await act(async () => { again = result.current.addWordToBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await first.catch(() => {});
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove.catch(() => {}); });
+    await settle();
+    await act(async () => { resolvers[2](ok([2])); await again.catch(() => {}); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("queues a save carrying a bundle behind a pending edit of that membership", async () => {
+    // The POST attaches membership in the same statement as the word, which is
+    // atomic in itself and says nothing about its order against a PATCH the
+    // reader issues meanwhile. Re-adding a word already in the bundle and then
+    // untagging it must not end with the tag back on.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2] }]);
+    const seen = [];
+    const resolvers = pendingFetch((body) => seen.push(body));
+
+    let save, remove;
+    await act(async () => { save = result.current.saveWord({ original: "juosta", base: "juosta", translations: ["to run"] }, 2); });
+    await act(async () => { remove = result.current.removeWordFromBundle(1, 2); });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    // The save is on the same queue, so the remove has not been sent yet.
+    expect(seen).toHaveLength(1);
+    expect(seen[0].bundleId).toBe(2);
+
+    await act(async () => {
+      resolvers[0]({ ok: true, json: () => Promise.resolve({ word: { ...WORD_A, bundle_ids: [2] } }) });
+      await save;
+    });
+    // The save's own attach is stale: the reader untagged it afterwards.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await settle();
+    await act(async () => { resolvers[1](ok([])); await remove; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("does not restore a membership that was only ever optimistic", async () => {
+    // Add a word to a bundle, delete the bundle while that PATCH is pending,
+    // let the add fail, then let the bundle delete fail too. restoreBundle is
+    // handed ids read off the screen, which included this one — but the server
+    // never had the membership.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let add;
+    await act(async () => { add = result.current.addWordToBundle(1, 2); });
+    act(() => result.current.forgetBundle(2));
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      await add.catch(() => {});
+    });
+
+    act(() => result.current.restoreBundle(2, [1]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("takes only the membership it asked about from the response", async () => {
+    // The response is the word's whole list as the server saw it. Applying all
+    // of it would let this answer speak for bundles other requests own.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    mockFetchJson({ bundleIds: [2, 5] });
+    await act(() => result.current.addWordToBundle(1, 2));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("does not resurrect a membership a faster request already removed", async () => {
+    // Remove 10 then 20. The server answers the first with [20] — a snapshot
+    // taken before the second landed. Applying that whole array after the
+    // second answer of [] would put bundle 20 back on screen despite both
+    // deletes having succeeded.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [10, 20] }]);
+    const resolvers = pendingFetch();
+
+    let pending;
+    await act(async () => {
+      pending = Promise.all([
+        result.current.removeWordFromBundle(1, 10),
+        result.current.removeWordFromBundle(1, 20),
+      ]);
+    });
+    expect(resolvers).toHaveLength(2);
+
+    await act(async () => {
+      resolvers[1](ok([]));      // the second request answers first
+      resolvers[0](ok([20]));    // ...the first answers with its older view
+      await pending;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("sends an add and a remove of the same membership one after the other", async () => {
+    // Each PATCH is several statements with no transaction around them, so run
+    // in parallel the DELETE could land before the INSERT and leave the word in
+    // the bundle it was just taken out of.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const sent = [];
+    const resolvers = pendingFetch((body) => sent.push(body.action));
+
+    let pending;
+    await act(async () => {
+      pending = Promise.all([
+        result.current.addWordToBundle(1, 2),
+        result.current.removeWordFromBundle(1, 2),
+      ]);
+    });
+    // Only the add has gone; the remove waits its turn.
+    expect(sent).toEqual(["add"]);
+    // The screen, though, already shows the reader's last action.
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await act(async () => { resolvers[0](ok([2])); await new Promise((r) => setTimeout(r, 0)); });
+    expect(sent).toEqual(["add", "remove"]);
+
+    await act(async () => { resolvers[1](ok([])); await pending; });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("lets edits to different memberships go in parallel", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const sent = [];
+    const resolvers = pendingFetch((body) => sent.push(body.bundleId));
+
+    let pending;
+    await act(async () => {
+      pending = Promise.all([
+        result.current.addWordToBundle(1, 2),
+        result.current.addWordToBundle(1, 3),
+      ]);
+    });
+    // Different memberships cannot race each other, so neither waits.
+    expect(sent).toEqual([2, 3]);
+
+    await act(async () => {
+      resolvers[0](ok([2, 3]));
+      resolvers[1](ok([2, 3]));
+      await pending;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2, 3]);
+  });
+
+  it("removes a membership optimistically", async () => {
+    const result = await loaded([inBundle]);
+    mockFetchJson({ bundleIds: [] });
+    await act(() => result.current.removeWordFromBundle(1, 2));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("puts the membership back when the server refuses", async () => {
+    const result = await loaded([inBundle]);
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    await expect(act(() => result.current.removeWordFromBundle(1, 2)))
+      .rejects.toThrow(/Could not take that word out of the bundle \(500\)/);
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("carries the server's own explanation when it sent one", async () => {
+    // A route that says why — the schema guard's 503, say — is more use to the
+    // reader than "(503)". The rollback happens either way.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    mockFetch({ ok: false, status: 503, json: () => Promise.resolve({ error: "Run db/schema.sql against it." }) });
+    await expect(act(() => result.current.addWordToBundle(1, 2))).rejects.toThrow("Run db/schema.sql against it.");
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("sends the word, bundle and action", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    let call;
+    vi.stubGlobal("fetch", vi.fn((url, opts) => {
+      call = { url, method: opts.method, body: JSON.parse(opts.body) };
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ bundleIds: [2] }) });
+    }));
+    await act(() => result.current.addWordToBundle(1, 2));
+    expect(call).toEqual({ url: "/api/words", method: "PATCH", body: { id: 1, bundleId: 2, action: "add" } });
+  });
+
+  it("does nothing for a word that is not on the list", async () => {
+    const result = await loaded([]);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await act(() => result.current.addWordToBundle(99, 2));
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not let a second edit issued from the same render undo the first", async () => {
+    // Both calls close over the same dbWords, so an update computed from that
+    // snapshot would have the second write [10] back over the first's [20].
+    const result = await loaded([{ ...WORD_A, bundle_ids: [10, 20] }]);
+    const resolvers = pendingFetch();
+
+    let pending;
+    await act(async () => {
+      pending = Promise.all([
+        result.current.removeWordFromBundle(1, 10),
+        result.current.removeWordFromBundle(1, 20),
+      ]);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+
+    await act(async () => {
+      resolvers.forEach((r) => r(ok([])));
+      await pending;
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
+  });
+
+  it("does not reconcile a membership edit that answered after the account changed", async () => {
+    let resolvePatch;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "PATCH") return new Promise((r) => { resolvePatch = r; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [{ ...WORD_A, bundle_ids: [] }] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let editing;
+    await act(async () => { editing = result.current.addWordToBundle(1, 10); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      resolvePatch({ ok: true, json: () => Promise.resolve({ bundleIds: [10] }) });
+      await editing;
+    });
+    // user-2's list is whatever their own load returned; nothing from the
+    // previous account's edit may appear in it.
+    expect(result.current.dbWords.every((w) => (w.bundle_ids || []).length === 0)).toBe(true);
+  });
+
+  it("does not report a membership edit that failed after the account changed", async () => {
+    let rejectPatch;
+    vi.stubGlobal("fetch", vi.fn((_url, opts = {}) => {
+      if (opts?.method === "PATCH") return new Promise((_r, rej) => { rejectPatch = rej; });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ words: [{ ...WORD_A, bundle_ids: [] }] }) });
+    }));
+
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), { initialProps: { uid: "user-1" } });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    let editing;
+    await act(async () => { editing = result.current.addWordToBundle(1, 10); });
+    rerender({ uid: "user-2" });
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+
+    await act(async () => {
+      rejectPatch(new Error("offline"));
+      // Resolves rather than throwing: page.jsx would put this in the new
+      // account's banner.
+      expect(await editing).toBeUndefined();
+    });
+  });
+
+  it("rolls back only the membership that failed, not the whole list", async () => {
+    // A rollback restoring the snapshot would drop the concurrent add of 20
+    // along with the failed add of 10.
+    const result = await loaded([{ ...WORD_A, bundle_ids: [] }]);
+    const resolvers = pendingFetch();
+
+    let failing, succeeding;
+    await act(async () => {
+      failing = result.current.addWordToBundle(1, 10).catch(() => {});
+      succeeding = result.current.addWordToBundle(1, 20);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10, 20]);
+
+    await act(async () => {
+      resolvers[0]({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+      resolvers[1](ok([20]));
+      await Promise.all([failing, succeeding]);
+    });
+    expect(result.current.dbWords[0].bundle_ids).toEqual([20]);
+  });
+
+  it("is idempotent, so a rollback cannot double-remove", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2] }]);
+    mockFetchJson({ bundleIds: [2] });
+    await act(() => result.current.addWordToBundle(1, 2));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+  });
+
+  it("drops a deleted bundle from every word that carried it", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2, 3] }, { ...WORD_B, bundle_ids: [3] }]);
+    act(() => result.current.forgetBundle(3));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([]);
+  });
+
+  it("puts the memberships back when the bundle delete turns out to have failed", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [2, 3] }, { ...WORD_B, bundle_ids: [3] }]);
+    act(() => result.current.forgetBundle(3));
+    act(() => result.current.restoreBundle(3, [1, 2]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([2, 3]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([3]);
+  });
+
+  it("restores only the words that actually carried the bundle", async () => {
+    const result = await loaded([{ ...WORD_A, bundle_ids: [3] }, { ...WORD_B, bundle_ids: [] }]);
+    act(() => result.current.forgetBundle(3));
+    act(() => result.current.restoreBundle(3, [1]));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([3]);
+    expect(result.current.dbWords[1].bundle_ids).toEqual([]);
+  });
 });
 
 describe("useWords – updateWord", () => {
@@ -266,6 +731,33 @@ describe("useWords – updateWord", () => {
     act(() => result.current.updateWord(updated));
     expect(result.current.dbWords.find((w) => w.id === 1).translations).toEqual(["to sprint"]);
     expect(result.current.dbWords).toHaveLength(2);
+  });
+
+  it("keeps the word's bundles when the fresher row does not carry them", async () => {
+    // /api/reviews grades through `RETURNING *` on `words`, and membership is
+    // not a column there — so the row that comes back after every grade has no
+    // bundle_ids at all. Taking it literally dropped every tag on the word the
+    // moment it was reviewed.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10, 20] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    const graded = { ...WORD_A, interval_days: 6 };
+    delete graded.bundle_ids;
+    act(() => result.current.updateWord(graded));
+
+    expect(result.current.dbWords[0].bundle_ids).toEqual([10, 20]);
+    expect(result.current.dbWords[0].interval_days).toBe(6);
+  });
+
+  it("still accepts an explicit empty list as 'no bundles'", async () => {
+    // Absence is what means "unmentioned"; [] is an answer.
+    mockFetchJson({ words: [{ ...WORD_A, bundle_ids: [10] }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    act(() => result.current.updateWord({ ...WORD_A, bundle_ids: [] }));
+    expect(result.current.dbWords[0].bundle_ids).toEqual([]);
   });
 });
 

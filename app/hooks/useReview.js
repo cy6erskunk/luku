@@ -7,6 +7,9 @@ export function useReview({ dbWords, updateWord, stage }) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [grading, setGrading] = useState(false);
   const [mode, setMode] = useState("due");
+  // The bundle a scoped session was started from, purely so the review screen
+  // can name it. Null for a session over the whole vocabulary.
+  const [scope, setScope] = useState(null);
   const [gradeError, setGradeError] = useState(null);
   // Which review the grading request belongs to, bumped by reset(). A grade is
   // a round trip, and reset() runs when the account changes — so without this
@@ -30,33 +33,36 @@ export function useReview({ dbWords, updateWord, stage }) {
     if (adjust > 0) setRevIdx((i) => i - adjust);
   }, [stage, revIdx, queue, dbWords]);
 
-  const startReview = (dueWords) => {
+  const startReview = (dueWords, scopeLabel = null) => {
     // A new queue invalidates the old one's pending grade as surely as a reset
     // does: its answer would advance or requeue cards it has never seen — and
     // its error belongs to that queue too, not to the cards replacing it.
     runRef.current += 1;
     setGradeError(null);
     setMode("due");
+    setScope(scopeLabel);
     setQueue(dueWords.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
     setGrading(false);
   };
 
-  const startRepeat = (words) => {
+  const startRepeat = (words, scopeLabel = null) => {
     runRef.current += 1;
     setGradeError(null);
     setMode("repeat");
+    setScope(scopeLabel);
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
     setGrading(false);
   };
 
-  const startNewReview = (words) => {
+  const startNewReview = (words, scopeLabel = null) => {
     runRef.current += 1;
     setGradeError(null);
     setMode("new");
+    setScope(scopeLabel);
     setQueue(words.map((w) => w.id));
     setRevIdx(0);
     setShowAnswer(false);
@@ -153,10 +159,11 @@ export function useReview({ dbWords, updateWord, stage }) {
     setShowAnswer(false);
     setGrading(false);
     setMode("due");
+    setScope(null);
   }, []);
 
   return {
-    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, gradeError, clearGradeError, mode, isRepeat, isNewReview,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, gradeError, clearGradeError, mode, scope, isRepeat, isNewReview,
     startReview, startRepeat, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }

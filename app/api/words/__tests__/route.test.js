@@ -4,8 +4,9 @@
  * are read, written and deleted, and what a malformed body or query is allowed
  * to store.
  *
- * The last group covers what every handler answers on a database
- * `db/schema.sql` has not been run against.
+ * The bundle-aware parts sit alongside them: the membership that rides along
+ * with a save, the PATCH that edits one afterwards, and what every handler
+ * answers on a database the schema file has not been re-run against.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
@@ -22,7 +23,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
   getDb: () => mocks.sql,
 }));
 
-const { GET, POST, DELETE } = await import("../route.js");
+const { GET, POST, DELETE, PATCH } = await import("../route.js");
 
 const WORD = {
   id: 7,
@@ -36,9 +37,20 @@ const WORD = {
   next_review_at: "2026-08-13T06:00:00.000Z",
 };
 
-const postRequest = (body) => ({ json: () => Promise.resolve(body) });
+/** The same word as the route hands it back once bundles exist. */
+const SAVED = { id: 7, base: "juosta", translations: ["to run"], bundle_ids: [] };
+
+const jsonRequest = (body) => ({ json: () => Promise.resolve(body) });
 const deleteRequest = (id) =>
   ({ url: `https://luku.test/api/words${id === undefined ? "" : `?id=${encodeURIComponent(id)}`}` });
+
+/** What the driver throws on a database the schema file has not been re-run
+ *  against: Postgres' undefined_table SQLSTATE on `code`. */
+function undefinedTable() {
+  const e = new Error('relation "word_bundles" does not exist');
+  e.code = "42P01";
+  return e;
+}
 
 beforeEach(() => {
   mocks.session = { user: { id: "u1" } };
@@ -69,6 +81,16 @@ describe("GET /api/words", () => {
 
     expect(mocks.sql.calls[0].values).toEqual(["u1"]);
     expect(mocks.sql.calls[0].text).toContain("ORDER BY next_review_at ASC");
+  });
+
+  it("carries each word's bundle membership", async () => {
+    // In the same statement: the client groups, filters and reviews by bundle,
+    // and a request per word to find out would be an N+1 over HTTP.
+    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [2, 5] }]]);
+    const res = await GET();
+
+    expect((await res.json()).words[0].bundle_ids).toEqual([2, 5]);
+    expect(mocks.sql.calls[0].text).toContain("FROM word_bundles WHERE word_id = words.id");
   });
 });
 
@@ -146,7 +168,7 @@ describe("POST /api/words", () => {
 
   it("returns 401 when signed out", async () => {
     mocks.session = null;
-    const res = await POST(postRequest(BODY));
+    const res = await POST(jsonRequest(BODY));
 
     expect(res.status).toBe(401);
     expect((await res.json()).error).toBe("Unauthorized");
@@ -154,21 +176,21 @@ describe("POST /api/words", () => {
   });
 
   it("returns the stored row", async () => {
-    mocks.sql = fakeSql([[WORD]]);
-    const res = await POST(postRequest(BODY));
+    mocks.sql = fakeSql([[{ ...WORD, bundle_ids: [] }]]);
+    const res = await POST(jsonRequest(BODY));
 
     expect(res.status).toBe(200);
-    expect((await res.json()).word).toEqual(WORD);
+    expect((await res.json()).word).toEqual({ ...WORD, bundle_ids: [] });
   });
 
   it("returns null rather than undefined when the write returned no row", async () => {
     mocks.sql = fakeSql([[]]);
-    expect((await (await POST(postRequest(BODY))).json()).word).toBeNull();
+    expect((await (await POST(jsonRequest(BODY))).json()).word).toBeNull();
   });
 
   it("stores the row against the session's user, not anything the body claims", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest({ ...BODY, user_id: "someone-else" }));
+    await POST(jsonRequest({ ...BODY, user_id: "someone-else" }));
 
     expect(inserted().userId).toBe("u1");
     expect(mocks.sql.calls[0].values).not.toContain("someone-else");
@@ -176,7 +198,7 @@ describe("POST /api/words", () => {
 
   it("records the tapped inflection and its translation", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest(BODY));
+    await POST(jsonRequest(BODY));
 
     const { base, forms } = inserted();
     expect(base).toBe("juosta");
@@ -185,7 +207,7 @@ describe("POST /api/words", () => {
 
   it("records the inflection with a null translation when none came back", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest({ ...BODY, formTranslation: undefined }));
+    await POST(jsonRequest({ ...BODY, formTranslation: undefined }));
 
     expect(inserted().forms).toEqual([{ word: "juoksin", translation: null }]);
   });
@@ -194,14 +216,14 @@ describe("POST /api/words", () => {
     mocks.sql = fakeSql([[WORD]]);
     // Capitalised at the start of a sentence — still the base form, not an
     // inflection worth listing under "seen in text".
-    await POST(postRequest({ ...BODY, word: "Juosta" }));
+    await POST(jsonRequest({ ...BODY, word: "Juosta" }));
 
     expect(inserted().forms).toEqual([]);
   });
 
   it("falls back to the tapped word when no base form was resolved", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest({ ...BODY, base: undefined }));
+    await POST(jsonRequest({ ...BODY, base: undefined }));
 
     const { base, forms } = inserted();
     expect(base).toBe("juoksin");
@@ -210,14 +232,14 @@ describe("POST /api/words", () => {
 
   it("defaults an unknown part of speech instead of writing null", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest({ ...BODY, pos: undefined }));
+    await POST(jsonRequest({ ...BODY, pos: undefined }));
 
     expect(inserted().pos).toBe("other");
   });
 
   it("writes a missing example as null", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest({ ...BODY, example: undefined, example_translation: undefined }));
+    await POST(jsonRequest({ ...BODY, example: undefined, example_translation: undefined }));
 
     const { example, exampleTranslation } = inserted();
     expect(example).toBeNull();
@@ -226,7 +248,7 @@ describe("POST /api/words", () => {
 
   it("upserts on the word rather than duplicating it", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest(BODY));
+    await POST(jsonRequest(BODY));
 
     expect(mocks.sql.calls[0].text).toContain("ON CONFLICT (user_id, base) DO UPDATE");
   });
@@ -235,7 +257,7 @@ describe("POST /api/words", () => {
     // Tapping the same word again must not wipe the forms collected on earlier
     // scans, and tapping the same inflection twice must not list it twice.
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest(BODY));
+    await POST(jsonRequest(BODY));
 
     const { text } = mocks.sql.calls[0];
     expect(text).toContain("WHEN jsonb_array_length(EXCLUDED.forms) = 0 THEN words.forms");
@@ -245,31 +267,149 @@ describe("POST /api/words", () => {
 
   it("keeps the stored example when the new one is empty", async () => {
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest(BODY));
+    await POST(jsonRequest(BODY));
 
     const { text } = mocks.sql.calls[0];
     expect(text).toContain("example = COALESCE(EXCLUDED.example, words.example)");
   });
 
-  it("writes one statement, so a half-applied save is not possible", async () => {
-    // The HTTP driver has no transactions: anything split across two tagged
-    // templates can land half-done.
+  it("saves in one statement, so a half-saved word is not possible", async () => {
+    // The HTTP driver has no interactive transactions: anything split across
+    // two tagged templates can land half-done. The save is therefore one
+    // statement — including the bundle membership, which rides in a
+    // data-modifying CTE rather than a second request precisely so that no
+    // half-completed save-and-attach state exists. See the bundle cases below.
     mocks.sql = fakeSql([[WORD]]);
-    await POST(postRequest(BODY));
+    await POST(jsonRequest(BODY));
 
     expect(mocks.sql.calls).toHaveLength(1);
   });
 });
 
-describe("a database the migration has not been run against", () => {
-  /** What the driver throws for a table `db/schema.sql` would have created:
-   *  Postgres' undefined_table SQLSTATE on `code`. */
-  function undefinedTable() {
-    const e = new Error('relation "words" does not exist');
-    e.code = "42P01";
-    return e;
-  }
+describe("POST /api/words with a bundle", () => {
+  it("saves and attaches in one statement", async () => {
+    // Two statements left a window: the reader could take the tag off between
+    // the word landing and the membership landing, and the attach would then
+    // put it back. The word's id is not known until it is written, so the
+    // attach rides in a data-modifying CTE rather than a second request.
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], pos: "verb", bundleId: 3 }));
+    expect((await res.json()).word.bundle_ids).toEqual([3]);
+    expect(mocks.sql.calls).toHaveLength(1);
+    expect(mocks.sql.calls[0].text).toContain("WITH saved AS");
+  });
 
+  it("scopes the attach to the caller's own bundle", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
+    await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    // The word side is the caller's by construction — it is the row this
+    // statement just wrote; the bundle side is checked here.
+    expect(mocks.sql.calls[0].text).toContain("b.user_id =");
+    expect(mocks.sql.calls[0].values).toContain(3);
+  });
+
+  it("passes a null bundle straight through rather than branching", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: null }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], pos: "verb" }));
+    expect((await res.json()).word.bundle_ids).toEqual([]);
+    expect(mocks.sql.calls).toHaveLength(1);
+    expect(mocks.sql.calls[0].values).toContain(null);
+  });
+
+  it("does not claim membership the insert refused", async () => {
+    // A bundle that is not this user's: the word is still saved, the attach
+    // matched no row, and the answer says truthfully that it joined nothing.
+    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [1], attached_bundle_id: null }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect((await res.json()).word.bundle_ids).toEqual([1]);
+  });
+
+  it("adds the attached id to the memberships the snapshot could not see", async () => {
+    // The CTEs share one snapshot, so bundle_ids cannot include the row being
+    // inserted beside it.
+    mocks.sql = fakeSql([[{ ...SAVED, bundle_ids: [1], attached_bundle_id: 3 }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect((await res.json()).word.bundle_ids).toEqual([1, 3]);
+  });
+
+  it("does not leak the internal column to the client", async () => {
+    mocks.sql = fakeSql([[{ ...SAVED, attached_bundle_id: 3 }]]);
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect((await res.json()).word).not.toHaveProperty("attached_bundle_id");
+  });
+
+  it("rejects a malformed bundleId before writing anything", async () => {
+    for (const bundleId of ["3", 0, -1, 1.5, 2147483648]) {
+      mocks.sql = fakeSql();
+      const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: [], bundleId }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("Invalid bundleId");
+      expect(mocks.sql.calls).toHaveLength(0);
+    }
+  });
+});
+
+describe("PATCH /api/words", () => {
+  it("returns 401 when signed out", async () => {
+    mocks.session = null;
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "add" }));
+    expect(res.status).toBe(401);
+    expect(mocks.sql.calls).toHaveLength(0);
+  });
+
+  it("validates the word id, the bundle id and the action", async () => {
+    const bad = [
+      [{ id: "7", bundleId: 3, action: "add" }, "Invalid id"],
+      [{ id: 7, bundleId: 0, action: "add" }, "Invalid bundleId"],
+      [{ id: 7, bundleId: 3, action: "move" }, "Invalid action"],
+      [{ id: 7, bundleId: 3 }, "Invalid action"],
+    ];
+    for (const [body, error] of bad) {
+      mocks.sql = fakeSql();
+      const res = await PATCH(jsonRequest(body));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe(error);
+      expect(mocks.sql.calls).toHaveLength(0);
+    }
+  });
+
+  it("404s on a word that is not this user's, before any membership write", async () => {
+    mocks.sql = fakeSql([[]]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "add" }));
+    expect(res.status).toBe(404);
+    expect(mocks.sql.calls).toHaveLength(1);
+  });
+
+  it("adds a membership and answers with the word's whole list", async () => {
+    mocks.sql = fakeSql([[SAVED], [{ bundle_id: 3 }], [{ bundle_id: 2 }, { bundle_id: 3 }]]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "add" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).bundleIds).toEqual([2, 3]);
+  });
+
+  it("404s when the bundle is not this user's", async () => {
+    mocks.sql = fakeSql([[SAVED], []]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "add" }));
+    expect(res.status).toBe(404);
+  });
+
+  it("removes a membership", async () => {
+    mocks.sql = fakeSql([[SAVED], [{ bundle_id: 3 }], []]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "remove" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).bundleIds).toEqual([]);
+  });
+
+  it("treats removing a membership that isn't there as done", async () => {
+    // The caller asked for the word not to be in that bundle, and it isn't.
+    mocks.sql = fakeSql([[SAVED], [], [{ bundle_id: 2 }]]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "remove" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).bundleIds).toEqual([2]);
+  });
+});
+
+describe("a database the migration has not been run against", () => {
   beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
   afterEach(() => vi.restoreAllMocks());
 
@@ -284,9 +424,15 @@ describe("a database the migration has not been run against", () => {
     expect(body.error).toMatch(/db\/schema\.sql/);
   });
 
-  it("answers a save the same way", async () => {
+  it("answers a save into a bundle the same way", async () => {
     mocks.sql = fakeSql([undefinedTable()]);
-    const res = await POST(postRequest({ word: "juosta", base: "juosta", translations: ["to run"] }));
+    const res = await POST(jsonRequest({ word: "juosta", base: "juosta", translations: ["to run"], bundleId: 3 }));
+    expect(res.status).toBe(503);
+  });
+
+  it("answers a membership edit the same way", async () => {
+    mocks.sql = fakeSql([undefinedTable()]);
+    const res = await PATCH(jsonRequest({ id: 7, bundleId: 3, action: "add" }));
     expect(res.status).toBe(503);
   });
 

@@ -28,6 +28,27 @@ Open http://localhost:3000
 - The API key is **never exposed in the browser bundle**
 - OCR and word translation both go through this server route
 
+### Word bundles
+
+Words can be grouped into named bundles — normally one per page or chapter.
+
+- Pick or create a bundle on the scan screen, or change it while reading; every
+  word added from then on joins it. The choice is remembered across reloads.
+- A word can be in several bundles at once, so meeting it again on another page
+  groups it there too rather than moving it.
+- Pick a bundle by name to review just its words: cards that are due go through
+  the normal schedule, and a bundle with nothing due gets a practice pass.
+- The word list filters by bundle, and words can be added to or taken out of one
+  there. Deleting a bundle removes the grouping only — the words, their
+  translations and their review schedules stay.
+- The Telegram bot is not bundle-aware: it reviews everything that is due.
+
+An existing deployment needs `db/schema.sql` re-run once for the two new
+tables. It is idempotent, so re-running the whole file is the intended way. If
+you forget, the app says so in a banner rather than quietly showing an empty
+vocabulary — the routes answer a missing table with a 503 naming the file to
+run.
+
 ## Telegram review bot (optional)
 
 Review your saved words from a Telegram chat and get one reminder a day when
