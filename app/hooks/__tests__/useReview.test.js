@@ -234,6 +234,33 @@ describe("useReview – a grade that answers after a new review starts", () => {
   });
 });
 
+describe("useReview – the grade error belongs to its own queue", () => {
+  it("is cleared when a new review is started", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 503, json: () => Promise.resolve({ error: "run db/schema.sql" }),
+    })));
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReview(WORDS));
+    await act(async () => { await result.current.gradeWord(1); });
+    expect(result.current.gradeError).toBeTruthy();
+
+    act(() => result.current.startReview([WORDS[2]]));
+    expect(result.current.gradeError).toBeNull();
+  });
+
+  it("can be dismissed", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 503, json: () => Promise.resolve({ error: "run db/schema.sql" }),
+    })));
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReview(WORDS));
+    await act(async () => { await result.current.gradeWord(1); });
+
+    act(() => result.current.clearGradeError());
+    expect(result.current.gradeError).toBeNull();
+  });
+});
+
 describe("useReview – grading is reset when starting a new session", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));

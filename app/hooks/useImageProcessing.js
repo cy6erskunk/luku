@@ -29,18 +29,19 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   // scanned page, on a screen that now belongs to someone else.
   const runRef = useRef(0);
   const stale = (run) => runRef.current !== run;
-  // Whether a recognition is actually outstanding. The run counter stops an
-  // abandoned pass from painting, but the work itself keeps the Tesseract
-  // worker busy and holds the module's serialized queue, so the next account's
-  // scan waits behind an image nobody is going to read.
-  const ocrRunning = useRef(false);
+  // Which run holds the Tesseract worker, or null. A shared boolean was not
+  // enough: reset() clears it and a new scan sets it again, so an abandoned
+  // run reaching its own `finally` afterwards would clear the *new* run's
+  // marker — and the next reset would then skip the terminate and leave that
+  // recognition running. The run number says whose marker it is.
+  const ocrRunning = useRef(null);
 
   const onCropComplete = useCallback((_, area) => setCroppedAreaPixels(area), []);
 
   const runOcr = async (base64, mediaType, run) => {
     setStep("Loading OCR engine…");
     setOcrProgress(0);
-    ocrRunning.current = true;
+    ocrRunning.current = run;
     try {
       const out = await ocrLocal(base64, mediaType, (label, p) => {
         if (stale(run)) return;
@@ -50,7 +51,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
       if (!stale(run)) setOcrProgress(1);
       return out;
     } finally {
-      ocrRunning.current = false;
+      if (ocrRunning.current === run) ocrRunning.current = null;
     }
   };
 
@@ -146,7 +147,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     // an image that will never be shown. Only when one is actually outstanding
     // — tearing the worker down on an idle reset would make the next scan pay
     // to load it again.
-    if (ocrRunning.current) { ocrRunning.current = false; resetTesseractWorker(); }
+    if (ocrRunning.current !== null) { ocrRunning.current = null; resetTesseractWorker(); }
     setBusy(false);
     setStep("");
     setPreview(null);

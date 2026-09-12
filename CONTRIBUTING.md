@@ -81,8 +81,10 @@ Neon Postgres over HTTP, no ORM and no migration tool.
   500. And **never swallow a failed load in a hook**: an empty list is the
   app's normal state, so a silent failure there looks exactly like success.
 - Errors from the driver carry Postgres' SQLSTATE on `.code` (`NeonDbError`),
-  which is what lets that guard key off `42P01` exactly rather than matching on
-  message text.
+  which is what lets that guard key off `42P01` and `42703` exactly rather than
+  matching on message text. Both, because migrations are appended as
+  `ALTER TABLE ... ADD COLUMN` more often than as new tables: an older database
+  usually has every table and only some of the columns.
 - Every query touching user data is scoped by `user.id`.
 - Interpolate values through the tagged template — never concatenate them
   into SQL.

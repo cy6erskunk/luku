@@ -72,20 +72,37 @@ export default function Luku() {
   // a counter that moves on every change is what the resets are keyed to.
   const accountRef = useRef(user?.id);
   const screenRef = useRef(0);
+  // The latest delete issued per word. A reset lets the same word be deleted
+  // again on a new screen; if the older request then fails, restoring the row
+  // would put back something the newer delete has already removed server-side.
+  const deleteRuns = useRef(new Map());
   if (accountRef.current !== user?.id) {
     accountRef.current = user?.id;
     screenRef.current += 1;
   }
+  // Everything the screen owns, cleared wherever the screen is replaced. Each
+  // of these is gated on the screen somewhere, so leaving one behind does not
+  // merely look stale — it strands the thing that gates it. The delete
+  // bookkeeping is the sharp case: its `finally` only runs for the screen that
+  // started the request, so an id left here after a reset is never removed and
+  // blocks every later attempt at that word.
+  const clearScreenState = useCallback(() => {
+    setXlating(null);
+    setActionError(null);
+    setNewWordIds(new Set());
+    setPreexistingNewIds(new Set());
+    deletingRef.current = new Set();
+    setDeletingIds(new Set());
+  }, []);
+
   // Anything that throws away the page's work starts a new screen, not just a
-  // change of account: scanning another page and an AI re-scan both empty the
-  // session and the new-word bookkeeping, and a lookup or save still running
-  // from the last page would otherwise pass the guard and repopulate them —
-  // token keys collide across scans, so the same word on two pages is enough.
-  // Releases the in-flight marker as it goes, the way useImageProcessing's
-  // reset clears `busy`: the lookup it belonged to is abandoned, and leaving
-  // the flag set would refuse every tap on the new page until that lookup
-  // happened to answer.
-  const newScreen = useCallback(() => { screenRef.current += 1; setXlating(null); }, []);
+  // change of account: a lookup or save still running from the last page would
+  // otherwise pass the guard and repopulate what was just cleared — token keys
+  // collide across scans, so the same word on two pages is enough.
+  const newScreen = useCallback(() => {
+    screenRef.current += 1;
+    clearScreenState();
+  }, [clearScreenState]);
 
   const words = useWords(user?.id);
 
@@ -113,28 +130,20 @@ export default function Luku() {
   // word ids in it are not theirs either. `useSession` and `useWords` swap
   // their own state on the same id; this is the rest of it.
   useEffect(() => {
-    setActionError(null);
+    // The counter was already bumped during render; this is the state half.
+    clearScreenState();
     setStage(0);
     setText("");
     setTokens([]);
     setPopup(null);
-    setXlating(null);
     setShowWordList(false);
     // TelegramConnect loads its status once on mount and never again, so a
     // panel left open across a switch shows the previous account's linked
     // handle to the next one.
     setShowTelegram(false);
-    setNewWordIds(new Set());
-    setPreexistingNewIds(new Set());
-    // As handleScanAnother does. Left behind, an id from a DELETE that is still
-    // in flight keeps the re-entry guard closed on the next screen: a fresh
-    // attempt at that word returns immediately and the control stays disabled
-    // until the old request settles, with nothing said about why.
-    deletingRef.current = new Set();
-    setDeletingIds(new Set());
     resetReview();
     resetImage();
-  }, [user?.id, resetReview, resetImage]);
+  }, [user?.id, resetReview, resetImage, clearScreenState]);
 
   if (authLoading) {
     return (
@@ -238,16 +247,12 @@ export default function Luku() {
   };
 
   const handleScanAnother = () => {
+    // newScreen clears the new-word sets and the delete bookkeeping, so the
+    // AI re-scan and the header logo get the same treatment this path used to
+    // spell out for itself.
     newScreen();
     setStage(0);
     setSession({});
-    setNewWordIds(new Set());
-    setPreexistingNewIds(new Set());
-    // Drop any in-flight delete bookkeeping. If a pending DELETE resolves
-    // after this reset, its finally block's functional setters are no-ops
-    // because the ids are already gone from both the ref and the state.
-    deletingRef.current = new Set();
-    setDeletingIds(new Set());
     review.reset();
     image.reset();
     setText("");
@@ -384,6 +389,8 @@ export default function Luku() {
   const handleDeleteWord = async (id) => {
     const forScreen = screenRef.current;
     const forAccount = accountRef.current;
+    const forDelete = (deleteRuns.current.get(id) ?? 0) + 1;
+    deleteRuns.current.set(id, forDelete);
     // As handleAddWord does. Without it a failure reported here outlives the
     // retry that succeeds, and the reader is still being told about a delete
     // that has since gone through.
@@ -441,6 +448,9 @@ export default function Luku() {
       // a reload. The banner, the queue and the new-word sets belong to the
       // *screen*, which has been reset and is not the one that asked.
       if (accountRef.current !== forAccount) return;
+      // And only while this is still the word's current delete: a newer one may
+      // have succeeded on a later screen, and the row is genuinely gone.
+      if (deleteRuns.current.get(id) !== forDelete) return;
       words.restoreWord(deletedWord);
       if (screenRef.current !== forScreen) return;
       // The row comes back on screen, which on its own reads as the delete
@@ -482,6 +492,8 @@ export default function Luku() {
   };
 
   const banner = words.wordsError || actionError || review.gradeError;
+  // Dismiss has to clear whichever source is showing, or the alert stays put.
+  const dismissAction = () => { setActionError(null); review.clearGradeError(); };
   // While the overlay is open it renders the banner itself, above its own
   // backdrop. Two copies would be one too many, and the page's is the one
   // nobody can see.
@@ -492,7 +504,11 @@ export default function Luku() {
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div onClick={(e) => { e.stopPropagation(); newScreen(); setStage(0); image.reset(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
+        {/* The same reset as Scan Another: there is no way back to the read
+            stage without scanning again, so keeping the old text, its
+            translation cache and its new-word sets only lets them attach to
+            the next page — token keys collide across scans. */}
+        <div onClick={(e) => { e.stopPropagation(); handleScanAnother(); }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minWidth: 0, flexShrink: 0 }}>
           <LukuLogo size={32} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Luku</div>
@@ -536,7 +552,7 @@ export default function Luku() {
           <span style={{ flex: 1, lineHeight: 1.5 }}>⚠ {pageBanner}</span>
           {!words.wordsError && (
             <button
-              onClick={(e) => { e.stopPropagation(); setActionError(null); }}
+              onClick={(e) => { e.stopPropagation(); dismissAction(); }}
               aria-label="Dismiss"
               style={{ background: "none", border: "none", color: "#c48a8a", fontSize: 14, cursor: "pointer", lineHeight: 1, padding: "0 2px" }}
             >
@@ -599,7 +615,7 @@ export default function Luku() {
           onClose={() => setShowWordList(false)}
           onDelete={handleDeleteWord}
           error={banner}
-          onDismissError={words.wordsError ? undefined : () => setActionError(null)}
+          onDismissError={words.wordsError ? undefined : dismissAction}
         />
       )}
 
