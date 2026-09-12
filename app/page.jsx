@@ -22,23 +22,46 @@ import { useImageProcessing } from "./hooks/useImageProcessing.js";
 
 const D = "#0f1117";
 
+function Loading() {
+  return (
+    <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
+    </div>
+  );
+}
+
+/**
+ * The auth gate, and nothing else.
+ *
+ * Every piece of reader state — the scanned photograph and its text, the
+ * translation cache, the API key, the word list — belongs to one account, and
+ * state declared above a gate outlives the gate closing. Held in LukuApp
+ * instead, signing out unmounts it; keyed by the user id, a session that flips
+ * straight from one account to another mounts a fresh one rather than showing
+ * the previous reader's page to whoever signed in next.
+ */
 export default function Luku() {
   const authSession = authClient.useSession();
   const user = authSession.data?.user ?? null;
-  const authLoading = authSession.isPending;
 
-  const { savedKey, setSavedKey } = useApiKey();
+  if (authSession.isPending) return <Loading />;
+  if (!user) return <SignIn />;
+  return <LukuApp key={user.id} user={user} />;
+}
+
+function LukuApp({ user }) {
+  const { savedKey, setSavedKey } = useApiKey(user.id);
   const [changingKey, setChangingKey] = useState(false);
   // Probe only when the answer can change what renders: either there is no
   // saved key, or the key screen is open and needs to know whether to offer
   // the development one. Someone who has typed their own key and never opens
   // that screen — the common case — costs no request at all.
-  const probeFor = user?.id && (!savedKey || changingKey) ? user.id : null;
+  const probeFor = !savedKey || changingKey ? user.id : null;
   const { serverKey, checking: checkingServerKey } = useServerKey(probeFor);
   // A key the user typed wins over the development one, so someone who wants
   // to spend their own credit still can.
   const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
-  const { session, setSession } = useSession();
+  const { session, setSession } = useSession(user.id);
 
   const [stage, setStage] = useState(0);
   const [text, setText] = useState("");
@@ -60,7 +83,7 @@ export default function Luku() {
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
 
-  const words = useWords(user?.id);
+  const words = useWords(user.id);
 
   const handleTextReady = useCallback((rawText, { resetSession = false } = {}) => {
     setText(rawText);
@@ -74,26 +97,12 @@ export default function Luku() {
 
   useEffect(() => () => resetTesseractWorker(), []);
 
-  if (authLoading) {
-    return (
-      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
-      </div>
-    );
-  }
-  if (!user) return <SignIn />;
   // Held until the probe answers, so a deployment with its own key never
   // flashes a key screen the user does not need. Only when there is no saved
   // key: someone who already has one is not waiting on an answer that cannot
   // change what they see, and blocking them on a network round-trip would put
   // a spinner in front of every visit.
-  if (checkingServerKey && !savedKey) {
-    return (
-      <div style={{ minHeight: "100vh", background: D, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#4a7c9e", fontFamily: "Georgia,serif", fontSize: 14 }}>Loading…</div>
-      </div>
-    );
-  }
+  if (checkingServerKey && !savedKey) return <Loading />;
   if (changingKey || !effectiveKey) {
     return (
       <ApiKeyScreen
