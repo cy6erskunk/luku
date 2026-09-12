@@ -40,6 +40,7 @@ vi.mock("../lib/image.js", () => ({
 vi.mock("react-easy-crop", () => ({ default: () => null }));
 
 const Luku = (await import("../page.jsx")).default;
+const { apiKeyStorageKey } = await import("../hooks/useApiKey.js");
 
 const WORD = {
   id: 1,
@@ -51,7 +52,11 @@ const WORD = {
   next_review_at: "2020-01-01T00:00:00.000Z", // long overdue
 };
 
-const signedIn = () => { mocks.session = { data: { user: { id: "u1" } }, isPending: false }; };
+const signedIn = (id = "u1") => { mocks.session = { data: { user: { id } }, isPending: false }; };
+const signedOut = () => { mocks.session = { data: null, isPending: false }; };
+
+/** A key already saved by the given account. */
+const saveKey = (key = "sk-ant-test", id = "u1") => localStorage.setItem(apiKeyStorageKey(id), key);
 
 /** Routes by URL and method so a test can fail one call and not the others. */
 function mockApi({ words = [], deleteOk = true, saved = null } = {}) {
@@ -109,7 +114,7 @@ describe("page gates", () => {
     fireEvent.click(screen.getByRole("button", { name: /Start reading/ }));
 
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
-    expect(localStorage.getItem("luku_api_key")).toBe("sk-ant-test");
+    expect(localStorage.getItem(apiKeyStorageKey("u1"))).toBe("sk-ant-test");
   });
 
   it("does not make a user who has a key wait for the deployment probe", () => {
@@ -117,7 +122,7 @@ describe("page gates", () => {
     // who already has one of their own must not sit behind a spinner for an
     // answer that cannot change what they see.
     signedIn();
-    localStorage.setItem("luku_api_key", "sk-ant-test");
+    saveKey();
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
 
     render(<Luku />);
@@ -128,7 +133,7 @@ describe("page gates", () => {
 
   it("never probes for a development key when the user has one saved", async () => {
     signedIn();
-    localStorage.setItem("luku_api_key", "sk-ant-test");
+    saveKey();
     const fetchMock = mockApi({ words: [] });
 
     render(<Luku />);
@@ -142,7 +147,7 @@ describe("page gates", () => {
 
   it("probes once the key screen is opened, so it can offer the development key", async () => {
     signedIn();
-    localStorage.setItem("luku_api_key", "sk-ant-test");
+    saveKey();
     const fetchMock = vi.fn((url, opts = {}) => {
       if (String(url) === "/api/claude" && !opts.method) {
         return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ serverKey: true }) });
@@ -174,7 +179,7 @@ describe("page gates", () => {
 describe("page with a signed-in user", () => {
   beforeEach(() => {
     signedIn();
-    localStorage.setItem("luku_api_key", "sk-ant-test");
+    saveKey();
   });
 
   it("loads the user's words and offers the due review", async () => {
@@ -259,7 +264,7 @@ describe("reading a scanned page", () => {
 
   beforeEach(() => {
     signedIn();
-    localStorage.setItem("luku_api_key", "sk-ant-test");
+    saveKey();
   });
 
   /** Walks the scan stage far enough to reach the tappable text. */
@@ -327,7 +332,7 @@ describe("reading a scanned page", () => {
 
   it("answers from the list without a key when the word is already saved", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
-    localStorage.setItem("luku_api_key", "__skip__");
+    saveKey("__skip__");
     mockApi({ words: [{ ...WORD, id: 3, base: "koira", translations: ["dog"], pos: "noun" }] });
     render(<Luku />);
 
@@ -386,7 +391,7 @@ describe("reading a scanned page", () => {
 
   it("offers the key screen instead of translating when the key was skipped", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
-    localStorage.setItem("luku_api_key", "__skip__");
+    saveKey("__skip__");
     mockApi();
     render(<Luku />);
 
@@ -399,3 +404,63 @@ describe("reading a scanned page", () => {
   });
 });
 
+
+/**
+ * A sign-out and a sign-in as somebody else never reload the page, so
+ * everything the first reader accumulated has to go with their session rather
+ * than sit in state the next one inherits.
+ */
+describe("switching accounts", () => {
+  const SCANNED = "Koira juoksee.";
+
+  async function scan(ocr) {
+    ocr.mockResolvedValue(SCANNED);
+    const file = new File(["x"], "page.jpg", { type: "image/jpeg" });
+    await act(async () => {
+      fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+  }
+
+  /** Sign out, then in as `id`, without the page ever reloading. */
+  async function switchTo(id, rerender) {
+    signedOut();
+    await act(async () => { rerender(<Luku />); });
+    expect(screen.getByRole("button", { name: "Sign in with email" })).toBeTruthy();
+    signedIn(id);
+    await act(async () => { rerender(<Luku />); });
+  }
+
+  it("does not hand the previous reader's API key to the next one", async () => {
+    signedIn("u1");
+    saveKey("sk-ant-u1", "u1");
+    mockApi({ words: [] });
+    const { rerender } = render(<Luku />);
+    await screen.findByText("Photograph a Finnish page");
+
+    await switchTo("u2", rerender);
+
+    // u1's credit is not u2's to spend, so u2 is asked for their own key.
+    expect(await screen.findByLabelText("Anthropic API key")).toBeTruthy();
+  });
+
+  it("does not show the previous reader's scanned page or word list", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    signedIn("u1");
+    saveKey("sk-ant-u1", "u1");
+    saveKey("sk-ant-u2", "u2");
+    mockApi({ words: [WORD] });
+    const { rerender } = render(<Luku />);
+
+    await scan(ocrLocal);
+    await screen.findByRole("button", { name: "1 words" });
+
+    mockApi({ words: [] });
+    await switchTo("u2", rerender);
+
+    expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
+    expect(screen.queryByText("juoksee")).toBeNull();
+    expect(screen.queryByRole("button", { name: "1 words" })).toBeNull();
+  });
+});

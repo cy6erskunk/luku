@@ -39,8 +39,8 @@ app/
 ├── page.jsx                    # Root orchestrator — composes hooks and stage components
 ├── layout.jsx                  # Root layout (metadata, lang="fi")
 ├── hooks/
-│   ├── useApiKey.js            # Saved API key with localStorage sync
-│   ├── useSession.js           # Per-scan translation session with localStorage sync
+│   ├── useApiKey.js            # Saved API key, in per-account localStorage
+│   ├── useSession.js           # Per-scan translation session, in per-account localStorage
 │   ├── useWords.js             # DB word list: fetch, save, update, remove/restore
 │   ├── useReview.js            # Flashcard queue: grading, self-correction, reset
 │   └── useImageProcessing.js  # File pick, crop UI, Tesseract OCR, AI rescan
@@ -92,12 +92,19 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 
 ### State organisation
 
-`page.jsx` is a thin orchestrator. All domain state lives in custom hooks:
+`page.jsx` splits in two: `Luku` is the auth gate and holds no state at all,
+and `LukuApp` — keyed on `user.id` — holds everything else. That split is
+load-bearing rather than cosmetic. State declared above a gate outlives the
+gate closing, so reader state declared in `Luku` would survive a sign-out and
+be inherited by whoever signed in next; held in `LukuApp` it is unmounted
+instead. Keep new state inside `LukuApp`.
+
+All domain state lives in custom hooks:
 
 | Hook | Owns |
 |------|------|
-| `useApiKey` | `savedKey` + localStorage persistence |
-| `useSession` | Per-scan translation cache + localStorage persistence |
+| `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
+| `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
 | `useWords` | `dbWords`, `loadingWords`, word CRUD |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
@@ -148,7 +155,12 @@ changing it:
 ### API Key Handling
 
 - Users enter their Anthropic API key on first load
-- Key is persisted to `localStorage` (not server-side)
+- Key is persisted to `localStorage` (not server-side), under a key carrying
+  the account's own id. Both hooks take a `userId` for that reason: one shared
+  name handed the key to whoever signed in next on a shared browser, and every
+  translation was then billed to its owner with nothing on screen to say so.
+  The pre-scoping name is cleared rather than adopted on load — the next person
+  to sign in is not necessarily the key's owner
 - The server route (`route.js`) receives the key per-request and forwards it to Anthropic
 - Optional, **development only**: set `ANTHROPIC_API_KEY` in `.env.local` and
   `/api/claude` falls back to it, while `useServerKey` (a `GET` on the same

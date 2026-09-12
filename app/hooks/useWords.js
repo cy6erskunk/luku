@@ -5,14 +5,24 @@ export function useWords(userId) {
   const [loadingWords, setLoadingWords] = useState(true);
 
   useEffect(() => {
-    if (!userId) { setDbWords([]); setLoadingWords(false); return; }
+    if (!userId) { setDbWords([]); setLoadingWords(false); return undefined; }
     setDbWords([]);
     setLoadingWords(true);
+
+    // The list belongs to the account that asked for it. A sign-out and a
+    // sign-in as somebody else leave this hook mounted with the earlier
+    // request still outstanding, and its response carries the earlier
+    // account's words — so a late arrival is dropped rather than rendered
+    // under the new account's name.
+    let cancelled = false;
+
     fetch("/api/words")
       .then((r) => r.json())
-      .then(({ words }) => setDbWords(words || []))
+      .then(({ words }) => { if (!cancelled) setDbWords(words || []); })
       .catch(() => {})
-      .finally(() => setLoadingWords(false));
+      .finally(() => { if (!cancelled) setLoadingWords(false); });
+
+    return () => { cancelled = true; };
   }, [userId]);
 
   const saveWord = async (entry) => {

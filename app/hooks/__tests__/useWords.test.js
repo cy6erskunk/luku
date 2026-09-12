@@ -146,3 +146,45 @@ describe("useWords – removeWord / restoreWord", () => {
     expect(result.current.dbWords).toHaveLength(1);
   });
 });
+
+describe("useWords – account changes mid-flight", () => {
+  /** fetch that hands each call's resolver to the caller, newest last. */
+  function deferredFetch() {
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((resolve) => { resolvers.push(resolve); })));
+    return resolvers;
+  }
+
+  const respond = (resolve, words) =>
+    act(async () => { resolve({ ok: true, json: () => Promise.resolve({ words }) }); });
+
+  it("discards the previous account's list when it lands after a re-login", async () => {
+    const resolvers = deferredFetch();
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), {
+      initialProps: { uid: "user-1" },
+    });
+
+    // Sign out, then straight back in as somebody else. The page is never
+    // unmounted, so user-1's request is still outstanding.
+    rerender({ uid: null });
+    rerender({ uid: "user-2" });
+
+    await respond(resolvers[1], [WORD_B]);
+    await respond(resolvers[0], [WORD_A]);
+
+    expect(result.current.dbWords).toEqual([WORD_B]);
+  });
+
+  it("keeps the new account loading when the previous account's request settles", async () => {
+    const resolvers = deferredFetch();
+    const { result, rerender } = renderHook(({ uid }) => useWords(uid), {
+      initialProps: { uid: "user-1" },
+    });
+
+    rerender({ uid: "user-2" });
+    await respond(resolvers[0], [WORD_A]);
+
+    expect(result.current.dbWords).toEqual([]);
+    expect(result.current.loadingWords).toBe(true);
+  });
+});
