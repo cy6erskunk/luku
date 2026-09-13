@@ -354,6 +354,47 @@ describe("page with a signed-in user", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("retires a notice when the reader leaves the screen it was about", async () => {
+    mockApi({ words: [WORD], gradeOk: false });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
+    expect(screen.getByRole("alert").textContent).toContain("the card stays due");
+
+    // "The card stays due" means nothing on the scan screen...
+    fireEvent.click(screen.getByText("Luku"));
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    // ...and it is retired, not merely hidden: coming back to the review must
+    // not resurrect a complaint about a grade the reader has moved past.
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not raise a notice about a card the reader has already left", async () => {
+    // The grade is still in flight when the reader returns to Scan, so the
+    // failure lands tagged with a stage they are no longer on.
+    let failGrade;
+    vi.stubGlobal("fetch", vi.fn((url) => {
+      if (String(url).startsWith("/api/reviews")) {
+        return new Promise((resolve) => { failGrade = () => resolve(failed()); });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Easy" }));
+    fireEvent.click(screen.getByText("Luku"));
+
+    await act(async () => { failGrade(); });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("lets the reader dismiss a notice", async () => {
     mockApi({ words: [WORD], deleteOk: false });
     render(<Luku />);

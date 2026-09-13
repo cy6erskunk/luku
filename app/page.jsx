@@ -72,8 +72,9 @@ function LukuApp({ user }) {
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
   // Composed here rather than in a hook: the failures come from three of them,
-  // and the reader is only ever told about the newest.
-  const [notice, setNotice] = useState("");
+  // and the reader is only ever told about the newest. `stage` is the screen
+  // the message is about, or null for one true anywhere.
+  const [notice, setNotice] = useState(null);
   const [showTelegram, setShowTelegram] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
@@ -106,10 +107,15 @@ function LukuApp({ user }) {
     dbWords: words.dbWords,
     updateWord: words.updateWord,
     stage,
-    onGradeError: () => setNotice("Couldn't save that answer — the card stays due. Check your connection and try again."),
+    onGradeError: () => setNotice({ stage: 2, message: "Couldn't save that answer — the card stays due. Check your connection and try again." }),
   });
 
   useEffect(() => () => resetTesseractWorker(), []);
+
+  // A notice is about the screen that raised it, so leaving that screen retires
+  // it. That covers a failure still in flight as well: it lands tagged with a
+  // stage the reader is no longer on, and nothing renders it.
+  useEffect(() => { setNotice(null); }, [stage]);
 
   // Held until the probe answers, so a deployment with its own key never
   // flashes a key screen the user does not need. Only when there is no saved
@@ -129,6 +135,7 @@ function LukuApp({ user }) {
     );
   }
 
+  const noticeMessage = !notice || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
@@ -171,7 +178,7 @@ function LukuApp({ user }) {
   // Each attempt clears the last one's complaint, so it cannot outlive the
   // card it was about.
   const handleGrade = (grade) => {
-    setNotice("");
+    setNotice(null);
     return review.gradeWord(grade);
   };
 
@@ -209,7 +216,6 @@ function LukuApp({ user }) {
     scanIdRef.current++;
     setStage(0);
     setSession({});
-    setNotice("");
     setNewWordIds(new Set());
     setPreexistingNewIds(new Set());
     // Drop any in-flight delete bookkeeping. If a pending DELETE resolves
@@ -288,7 +294,7 @@ function LukuApp({ user }) {
     const scanId = scanIdRef.current;
     setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
-    setNotice("");
+    setNotice(null);
     try {
       const saved = await words.saveWord(entry);
       if (scanIdRef.current !== scanId) return;
@@ -318,9 +324,12 @@ function LukuApp({ user }) {
       // A refused save leaves an already-saved base form exactly where it was:
       // only the new inflection is lost, and saying otherwise is a lie the
       // reader would find contradicted by their own list.
-      setNotice(wasPreexisting
-        ? "Couldn't add that form — the word itself is still on your review list."
-        : "Couldn't save that word — it is not on your review list. Try adding it again.");
+      setNotice({
+        stage: 1,
+        message: wasPreexisting
+          ? "Couldn't add that form — the word itself is still on your review list."
+          : "Couldn't save that word — it is not on your review list. Try adding it again.",
+      });
     }
   };
 
@@ -338,7 +347,7 @@ function LukuApp({ user }) {
       next.add(id);
       return next;
     });
-    setNotice("");
+    setNotice(null);
     const wasNew = newWordIds.has(id);
     const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
@@ -366,7 +375,8 @@ function LukuApp({ user }) {
       reportClientError("delete word", e);
       // Everything below puts the word back, which unexplained reads as a
       // delete button that undid itself.
-      setNotice("Couldn't delete that word — it is still on your review list.");
+      // No stage: a word missing from the list is true wherever the reader is.
+      setNotice({ stage: null, message: "Couldn't delete that word — it is still on your review list." });
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
@@ -493,7 +503,7 @@ function LukuApp({ user }) {
           to looking like an account with no words in it. */}
       {words.loadError
         ? <Notice message="Couldn't load your word list." onRetry={words.reloadWords} />
-        : <Notice message={notice} onDismiss={() => setNotice("")} />}
+        : <Notice message={noticeMessage} onDismiss={() => setNotice(null)} />}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
