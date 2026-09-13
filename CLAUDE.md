@@ -194,7 +194,11 @@ changing it:
   review" is withdrawn when the save is refused, because the word list is the
   only other place the reader would find out
 - Every write that fails leaves a line in `Notice` — what the reader lost,
-  never why. The cause goes to Sentry through `reportClientError()`
+  never why, and never what the `catch` cannot know: a refusal and a response
+  lost after the write committed are indistinguishable there. A failure raised
+  inside a dialog is reported by that dialog (`WordList` owns its delete
+  error), because a page-level banner beneath an `aria-modal` overlay is
+  unreachable and unannounced. The cause goes to Sentry through `reportClientError()`
   (`app/lib/report.js`), which the browser needs because `onRequestError` only
   sees requests that reached a route handler. A deployment whose database never
   had `db/schema.sql` re-run fails exactly this way, and `SELECT *` names no

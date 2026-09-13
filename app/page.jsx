@@ -107,7 +107,7 @@ function LukuApp({ user }) {
     dbWords: words.dbWords,
     updateWord: words.updateWord,
     stage,
-    onGradeError: () => setNotice({ stage: 2, message: "Couldn't save that answer — the card stays due. Check your connection and try again." }),
+    onGradeError: () => setNotice({ stage: 2, message: "Couldn't confirm that answer was saved." }),
   });
 
   useEffect(() => () => resetTesseractWorker(), []);
@@ -135,7 +135,11 @@ function LukuApp({ user }) {
     );
   }
 
-  const noticeMessage = !notice || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
+  // A dialog traps focus and declares the rest of the page inert, so this
+  // banner would be visible, unreachable and unannounced beneath one. It waits
+  // instead; a failure raised inside a dialog is that dialog's to report.
+  const dialogOpen = showWordList || showTelegram;
+  const noticeMessage = !notice || dialogOpen || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
@@ -195,7 +199,9 @@ function LukuApp({ user }) {
       retireFromNew(id);
       return;
     }
-    await handleDeleteWord(id);
+    if (!await handleDeleteWord(id)) {
+      setNotice({ stage: 2, message: "Couldn't confirm that deletion — the word may still be on your list." });
+    }
   };
 
   const handleStartRepeat = () => {
@@ -324,22 +330,26 @@ function LukuApp({ user }) {
       // A refused save leaves an already-saved base form exactly where it was:
       // only the new inflection is lost, and saying otherwise is a lie the
       // reader would find contradicted by their own list.
+      // Neither message asserts what the catch cannot distinguish: a refusal and
+      // a lost response look identical here. The base form is safe either way,
+      // and the insert is an upsert, so re-adding costs nothing.
       setNotice({
         stage: 1,
         message: wasPreexisting
-          ? "Couldn't add that form — the word itself is still on your review list."
-          : "Couldn't save that word — it is not on your review list. Try adding it again.",
+          ? "Couldn't confirm that form was added — the word itself is still on your review list."
+          : "Couldn't confirm that word was saved. Adding it again is safe.",
       });
     }
   };
 
+  /** Resolves false only when the delete was refused; the caller reports it. */
   const handleDeleteWord = async (id) => {
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
-    if (deletingRef.current.has(id)) return;
+    if (deletingRef.current.has(id)) return true;
     const deletedWord = words.dbWords.find((w) => w.id === id);
-    if (!deletedWord) return;
+    if (!deletedWord) return true;
     deletingRef.current.add(id);
     setDeletingIds((prev) => {
       if (prev.has(id)) return prev;
@@ -368,15 +378,13 @@ function LukuApp({ user }) {
         return next;
       });
     }
+    let ok = true;
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
+      ok = false;
       reportClientError("delete word", e);
-      // Everything below puts the word back, which unexplained reads as a
-      // delete button that undid itself.
-      // No stage: a word missing from the list is true wherever the reader is.
-      setNotice({ stage: null, message: "Couldn't delete that word — it is still on your review list." });
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
@@ -404,6 +412,7 @@ function LukuApp({ user }) {
         return next;
       });
     }
+    return ok;
   };
 
   return (

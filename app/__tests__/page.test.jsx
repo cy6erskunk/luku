@@ -300,7 +300,9 @@ describe("page with a signed-in user", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("says so when the server refuses to delete a word", async () => {
+  it("reports a refused delete inside the dialog that asked for it", async () => {
+    // The page's own banner is a sibling of this dialog: it would render
+    // outside the focus trap and inside the subtree aria-modal calls inert.
     mockApi({ words: [WORD], deleteOk: false });
     render(<Luku />);
 
@@ -308,8 +310,26 @@ describe("page with a signed-in user", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
 
-    const banner = await screen.findByRole("alert");
-    expect(banner.textContent).toContain("still on your review list");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("may still be on your list");
+    expect(screen.getByRole("dialog").contains(alert)).toBe(true);
+  });
+
+  it("does not float the page banner over an open dialog", async () => {
+    mockApi({ words: [WORD], gradeOk: false });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "1 words" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    // Withheld, not lost: the card it is about is still on screen behind.
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("alert").textContent).toContain("Couldn't confirm that answer was saved");
   });
 
   it("says so when a graded card is not saved", async () => {
@@ -323,7 +343,7 @@ describe("page with a signed-in user", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
 
     const banner = await screen.findByRole("alert");
-    expect(banner.textContent).toContain("the card stays due");
+    expect(banner.textContent).toContain("Couldn't confirm that answer was saved");
   });
 
   it("clears a failed delete's notice when the next delete succeeds", async () => {
@@ -361,7 +381,7 @@ describe("page with a signed-in user", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
     fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
-    expect(screen.getByRole("alert").textContent).toContain("the card stays due");
+    expect(screen.getByRole("alert").textContent).toContain("Couldn't confirm that answer was saved");
 
     // "The card stays due" means nothing on the scan screen...
     fireEvent.click(screen.getByText("Luku"));
@@ -396,12 +416,12 @@ describe("page with a signed-in user", () => {
   });
 
   it("lets the reader dismiss a notice", async () => {
-    mockApi({ words: [WORD], deleteOk: false });
+    mockApi({ words: [WORD], gradeOk: false });
     render(<Luku />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
     await screen.findByRole("alert");
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -493,7 +513,7 @@ describe("reading a scanned page", () => {
     expect(screen.queryByText("✓ Added to review")).toBeNull();
     expect(screen.getByRole("button", { name: /Add to review list/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "1 new" })).toBeNull();
-    expect(screen.getByRole("alert").textContent).toContain("not on your review list");
+    expect(screen.getByRole("alert").textContent).toContain("Adding it again is safe");
   });
 
   it("does not claim the word is gone when only a new form failed to save", async () => {

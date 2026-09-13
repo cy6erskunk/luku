@@ -253,9 +253,17 @@ URLs — travels with every event. Trace sampling is a variable
 - Withdraw an optimistic display when the write behind it fails. "✓ Added to
   review" is a claim the reader has no reason to re-check, so leaving it
   standing is worse than an error.
-- Say only what the failure actually cost. A refused save of a new inflection
-  leaves the base form on the list, and a message claiming otherwise is
-  contradicted by the list the reader is looking at.
+- Say only what the failure actually cost, and only what the catch can know. A
+  `catch` around a write covers both a refusal and a response lost after the
+  write committed, so a message asserting either ("it is not on your list",
+  "the card stays due") is a coin flip. Name what is certain — a refused save
+  of a new inflection still leaves the base form on the list — and let the rest
+  say "couldn't confirm".
+- Report a failure inside the dialog that caused it. A dialog declares the rest
+  of the page inert and traps Tab, so a page-level banner raised from one is
+  visible, unannounced and unreachable by keyboard. `WordList` owns its delete
+  error for that reason, and the page's `Notice` withholds itself while any
+  dialog is open.
 - Swallow a fetch failure only where the fallback is the whole answer.
   `useServerKey` may `.catch(() => {})` because a failed probe just shows the
   key screen; `useWords` did the same and made a word list that never arrived

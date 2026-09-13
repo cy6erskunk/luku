@@ -10,7 +10,7 @@ export default function Notice({ message, onRetry, retryLabel = "Retry", onDismi
   return (
     <div
       role="alert"
-      style={{ position: "fixed", left: 12, right: 12, bottom: 12, zIndex: 400, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, background: "#241a1a", border: "1px solid rgba(180,80,80,0.45)", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: "#c48a8a", boxShadow: "0 6px 24px rgba(0,0,0,0.45)" }}
+      style={{ position: "fixed", left: 12, right: 12, bottom: 12, zIndex: 100, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, background: "#241a1a", border: "1px solid rgba(180,80,80,0.45)", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: "#c48a8a", boxShadow: "0 6px 24px rgba(0,0,0,0.45)" }}
     >
       <span style={{ flex: 1, minWidth: 0 }}>⚠ {message}</span>
       {onRetry && (

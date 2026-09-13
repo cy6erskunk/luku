@@ -7,6 +7,11 @@ const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb
 
 export default function WordList({ words, onClose, onDelete }) {
   const [pendingId, setPendingId] = useState(null);
+  // A delete refused here is reported here. The page's own banner is a sibling
+  // of this dialog, so it would sit outside the focus trap and inside the
+  // subtree aria-modal declares inert: visible, announced to nobody, and its
+  // buttons unreachable by keyboard.
+  const [err, setErr] = useState("");
 
   const handleBackdropClick = () => { setPendingId(null); onClose(); };
   const panelRef = useDialog(handleBackdropClick);
@@ -33,6 +38,11 @@ export default function WordList({ words, onClose, onDelete }) {
           <div id="wordlist-heading" style={{ fontSize: 14, fontWeight: 600 }}>Vocabulary ({words.length})</div>
           <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: "#555", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>✕</button>
         </div>
+        {err && (
+          <div role="alert" style={{ padding: "10px 20px", fontSize: 12, color: "#c48a8a", background: "rgba(180,80,80,0.1)", borderBottom: "1px solid rgba(180,80,80,0.25)" }}>
+            ⚠ {err}
+          </div>
+        )}
         <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "8px 0" }}>
           {words.length === 0
             ? <div style={{ padding: "32px 20px", textAlign: "center", color: "#555", fontSize: 13 }}>No words saved yet.</div>
@@ -57,7 +67,13 @@ export default function WordList({ words, onClose, onDelete }) {
                 {pendingId === w.id
                   ? <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 5, flexShrink: 0 }}>
                       <button
-                        onClick={() => { onDelete(w.id); setPendingId(null); }}
+                        onClick={async () => {
+                          setPendingId(null);
+                          setErr("");
+                          if (!await onDelete(w.id)) {
+                            setErr("Couldn't confirm that deletion — the word may still be on your list.");
+                          }
+                        }}
                         style={{ background: "rgba(180,80,80,0.15)", border: "1px solid rgba(180,80,80,0.45)", color: "#c48a8a", borderRadius: 6, padding: "4px 9px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}
                       >
                         Sure?
