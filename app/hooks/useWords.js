@@ -1,29 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { reportClientError } from "../lib/report.js";
 
 export function useWords(userId) {
   const [dbWords, setDbWords] = useState([]);
   const [loadingWords, setLoadingWords] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    if (!userId) { setDbWords([]); setLoadingWords(false); return undefined; }
+  // Only the newest load may write. A sign-out and a sign-in as somebody else
+  // leave the earlier account's request outstanding; Retry leaves the load it
+  // supersedes outstanding. A counter covers both — a flag closed over by the
+  // effect cannot see the retry.
+  const loadIdRef = useRef(0);
+
+  const loadWords = useCallback(() => {
+    const id = ++loadIdRef.current;
+    const newest = () => loadIdRef.current === id;
+
+    if (!userId) { setDbWords([]); setLoadingWords(false); setLoadError(false); return; }
     setDbWords([]);
     setLoadingWords(true);
-
-    // The list belongs to the account that asked for it. A sign-out and a
-    // sign-in as somebody else leave this hook mounted with the earlier
-    // request still outstanding, and its response carries the earlier
-    // account's words — so a late arrival is dropped rather than rendered
-    // under the new account's name.
-    let cancelled = false;
+    setLoadError(false);
 
     fetch("/api/words")
-      .then((r) => r.json())
-      .then(({ words }) => { if (!cancelled) setDbWords(words || []); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoadingWords(false); });
-
-    return () => { cancelled = true; };
+      .then((r) => {
+        // A route handler that threw answers with a bare 500 carrying no JSON,
+        // so parsing first would replace the real failure with a syntax error.
+        if (!r.ok) throw new Error(`Failed to load words (${r.status})`);
+        return r.json();
+      })
+      .then(({ words }) => { if (newest()) setDbWords(words || []); })
+      .catch((e) => {
+        // Swallowed, this looked like a brand-new account: an empty list, no
+        // review offered, and nothing to say the list had failed to arrive.
+        reportClientError("load words", e);
+        if (newest()) setLoadError(true);
+      })
+      .finally(() => { if (newest()) setLoadingWords(false); });
   }, [userId]);
+
+  // No cleanup: starting a load retires the one before it, and an unmount
+  // leaves a request whose resolution writes to nothing.
+  useEffect(() => { loadWords(); }, [loadWords]);
 
   const saveWord = async (entry) => {
     const r = await fetch("/api/words", {
@@ -49,5 +66,5 @@ export function useWords(userId) {
     setDbWords((prev) => prev.some((w) => w.id === word.id) ? prev : [...prev, word]);
   };
 
-  return { dbWords, loadingWords, saveWord, updateWord, removeWord, restoreWord };
+  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, updateWord, removeWord, restoreWord };
 }

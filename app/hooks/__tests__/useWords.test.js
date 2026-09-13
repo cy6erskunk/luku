@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+// Mocked wherever the module graph reaches it: the real package pulls in a
+// Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
+// is where the reporting contract itself is tested.
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+
 import { useWords } from "../useWords.js";
 
 const WORD_A = { id: 1, base: "juosta", translations: ["to run"], pos: "verb" };
@@ -54,6 +59,56 @@ describe("useWords – initial fetch", () => {
     // Immediately after rerender, before new fetch resolves, words should be cleared.
     expect(result.current.dbWords).toEqual([]);
     await waitFor(() => expect(result.current.dbWords).toEqual([WORD_B]));
+  });
+});
+
+describe("useWords – a load that fails", () => {
+  it("reports the failure instead of settling on an empty list", async () => {
+    // Swallowed, this is indistinguishable from an account with no words —
+    // which is what a deployment missing a migration looked like.
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.dbWords).toEqual([]);
+  });
+
+  it("does not parse the body of a failed response", async () => {
+    // A route handler that threw answers with a bare 500 carrying no JSON, so
+    // reading the body first would replace the real failure with a parse error.
+    const json = vi.fn(() => Promise.reject(new SyntaxError("not JSON")));
+    mockFetch({ ok: false, status: 500, json });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it("clears the error and loads the list when retried", async () => {
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+
+    mockFetchJson({ words: [WORD_A] });
+    await act(async () => { result.current.reloadWords(); });
+    await waitFor(() => expect(result.current.dbWords).toEqual([WORD_A]));
+    expect(result.current.loadError).toBe(false);
+  });
+
+  it("discards the load a retry superseded", async () => {
+    // The flag the effect used to close over could not see a retry: the
+    // superseded load and the retry would both count as current, and whichever
+    // landed last would win.
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((resolve) => { resolvers.push(resolve); })));
+    const { result } = renderHook(() => useWords("user-1"));
+
+    await act(async () => { result.current.reloadWords(); });
+    const respond = (resolve, words) =>
+      act(async () => { resolve({ ok: true, status: 200, json: () => Promise.resolve({ words }) }); });
+    await respond(resolvers[1], [WORD_B]);
+    await respond(resolvers[0], [WORD_A]);
+
+    expect(result.current.dbWords).toEqual([WORD_B]);
   });
 });
 

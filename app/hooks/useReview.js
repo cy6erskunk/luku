@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { reportClientError } from "../lib/report.js";
 
-export function useReview({ dbWords, updateWord, stage }) {
+export function useReview({ dbWords, updateWord, stage, onGradeError }) {
   const [queue, setQueue] = useState([]);
   const [revIdx, setRevIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -84,7 +85,12 @@ export function useReview({ dbWords, updateWord, stage }) {
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
-    } catch (e) { console.error("grade failed", e); }
+    } catch (e) {
+      // The card stays put, which on its own reads as a button that did
+      // nothing. The caller says so on screen.
+      reportClientError("grade word", e);
+      onGradeError?.(e);
+    }
     finally { setGrading(false); }
   };
 

@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+// Mocked wherever the module graph reaches it: the real package pulls in a
+// Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
+// is where the reporting contract itself is tested.
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+
 import { useReview } from "../useReview.js";
 
 const WORDS = [
@@ -79,6 +84,25 @@ describe("useReview – gradeWord", () => {
     await act(() => result.current.gradeWord(1));
     expect(result.current.revIdx).toBe(0);
     expect(result.current.queue).toEqual([1, 2, 3]);
+  });
+
+  it("tells the caller when a grade the server refused leaves the card where it is", async () => {
+    // Standing still is the whole symptom: nothing advances, nothing is saved,
+    // and the buttons re-enable as if the tap had been ignored.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500 })));
+    const onGradeError = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ onGradeError })));
+    act(() => result.current.startReview(WORDS));
+    await act(() => result.current.gradeWord(5));
+    expect(onGradeError).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report an error for a grade the server accepted", async () => {
+    const onGradeError = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ onGradeError })));
+    act(() => result.current.startReview(WORDS));
+    await act(() => result.current.gradeWord(5));
+    expect(onGradeError).not.toHaveBeenCalled();
   });
 
   it("calls updateWord with the server response", async () => {

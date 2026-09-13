@@ -3,12 +3,14 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
+import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
 import TelegramConnect from "./components/TelegramConnect.jsx";
 import LukuLogo from "./components/LukuLogo.jsx";
+import Notice from "./components/Notice.jsx";
 import HeaderMenu from "./components/HeaderMenu.jsx";
 import ScanStage from "./components/ScanStage.jsx";
 import ReadStage from "./components/ReadStage.jsx";
@@ -69,6 +71,10 @@ function LukuApp({ user }) {
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
+  // Composed here rather than in a hook: the failures come from three of them,
+  // and the reader is only ever told about the newest. `stage` is the screen
+  // the message is about, or null for one true anywhere.
+  const [notice, setNotice] = useState(null);
   const [showTelegram, setShowTelegram] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
@@ -82,6 +88,10 @@ function LukuApp({ user }) {
   // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
+  // A save outlives the scan that started it. Its bookkeeping — the queue of
+  // new words, the ✓, the notice — belongs to that scan, so a late arrival
+  // must not write any of it into the next one.
+  const scanIdRef = useRef(0);
 
   const words = useWords(user.id);
 
@@ -93,9 +103,19 @@ function LukuApp({ user }) {
   }, [setSession]);
 
   const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
-  const review = useReview({ dbWords: words.dbWords, updateWord: words.updateWord, stage });
+  const review = useReview({
+    dbWords: words.dbWords,
+    updateWord: words.updateWord,
+    stage,
+    onGradeError: () => setNotice({ stage: 2, message: "Couldn't confirm that answer was saved." }),
+  });
 
   useEffect(() => () => resetTesseractWorker(), []);
+
+  // A notice is about the screen that raised it, so leaving that screen retires
+  // it. That covers a failure still in flight as well: it lands tagged with a
+  // stage the reader is no longer on, and nothing renders it.
+  useEffect(() => { setNotice(null); }, [stage]);
 
   // Held until the probe answers, so a deployment with its own key never
   // flashes a key screen the user does not need. Only when there is no saved
@@ -115,6 +135,11 @@ function LukuApp({ user }) {
     );
   }
 
+  // A dialog traps focus and declares the rest of the page inert, so this
+  // banner would be visible, unreachable and unannounced beneath one. It waits
+  // instead; a failure raised inside a dialog is that dialog's to report.
+  const dialogOpen = showWordList || showTelegram;
+  const noticeMessage = !notice || dialogOpen || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
@@ -154,6 +179,13 @@ function LukuApp({ user }) {
     });
   };
 
+  // Each attempt clears the last one's complaint, so it cannot outlive the
+  // card it was about.
+  const handleGrade = (grade) => {
+    setNotice(null);
+    return review.gradeWord(grade);
+  };
+
   const handleKeepNew = (id) => {
     retireFromNew(id);
     review.gradeWord(5);
@@ -167,7 +199,9 @@ function LukuApp({ user }) {
       retireFromNew(id);
       return;
     }
-    await handleDeleteWord(id);
+    if (!await handleDeleteWord(id)) {
+      setNotice({ stage: 2, message: "Couldn't confirm that deletion — the word may still be on your list." });
+    }
   };
 
   const handleStartRepeat = () => {
@@ -185,6 +219,7 @@ function LukuApp({ user }) {
   };
 
   const handleScanAnother = () => {
+    scanIdRef.current++;
     setStage(0);
     setSession({});
     setNewWordIds(new Set());
@@ -261,10 +296,14 @@ function LukuApp({ user }) {
     // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
-    setSession((s) => ({ ...s, [popup.k]: { ...s[popup.k], added: true } }));
+    const key = popup.k;
+    const scanId = scanIdRef.current;
+    setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
+    setNotice(null);
     try {
       const saved = await words.saveWord(entry);
+      if (scanIdRef.current !== scanId) return;
       if (saved?.id != null) {
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -281,16 +320,36 @@ function LukuApp({ user }) {
           });
         }
       }
-    } catch (e) { console.error("save word failed", e); }
+    } catch (e) {
+      reportClientError("save word", e);
+      if (scanIdRef.current !== scanId) return;
+      // The ✓ was optimistic, and the word list is the only other place the
+      // reader would ever find out it did not land.
+      setSession((s) => s[key] ? { ...s, [key]: { ...s[key], added: false } } : s);
+      setPopup((p) => p?.k === key ? { ...p, added: false } : p);
+      // A refused save leaves an already-saved base form exactly where it was:
+      // only the new inflection is lost, and saying otherwise is a lie the
+      // reader would find contradicted by their own list.
+      // Neither message asserts what the catch cannot distinguish: a refusal and
+      // a lost response look identical here. The base form is safe either way,
+      // and the insert is an upsert, so re-adding costs nothing.
+      setNotice({
+        stage: 1,
+        message: wasPreexisting
+          ? "Couldn't confirm that form was added — the word itself is still on your review list."
+          : "Couldn't confirm that word was saved. Adding it again is safe.",
+      });
+    }
   };
 
+  /** Resolves false only when the delete was refused; the caller reports it. */
   const handleDeleteWord = async (id) => {
     // Synchronous guard against rapid double-clicks: React state updates are
     // async, so a Set stored only in useState can't stop the second click
     // before its own render cycle. A ref lets us reject re-entry immediately.
-    if (deletingRef.current.has(id)) return;
+    if (deletingRef.current.has(id)) return true;
     const deletedWord = words.dbWords.find((w) => w.id === id);
-    if (!deletedWord) return;
+    if (!deletedWord) return true;
     deletingRef.current.add(id);
     setDeletingIds((prev) => {
       if (prev.has(id)) return prev;
@@ -298,6 +357,7 @@ function LukuApp({ user }) {
       next.add(id);
       return next;
     });
+    setNotice(null);
     const wasNew = newWordIds.has(id);
     const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
@@ -318,11 +378,13 @@ function LukuApp({ user }) {
         return next;
       });
     }
+    let ok = true;
     try {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
-      console.error("delete word failed", e);
+      ok = false;
+      reportClientError("delete word", e);
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
       if (wasNew) {
@@ -350,6 +412,7 @@ function LukuApp({ user }) {
         return next;
       });
     }
+    return ok;
   };
 
   return (
@@ -424,7 +487,7 @@ function LukuApp({ user }) {
           isNewReview={review.isNewReview}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
-          onGrade={review.gradeWord}
+          onGrade={handleGrade}
           onKeepNew={handleKeepNew}
           onRemoveNew={handleRemoveNew}
           preexistingNewIds={preexistingNewIds}
@@ -442,6 +505,14 @@ function LukuApp({ user }) {
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}
+
+      {/* Fixed above the overlays: a delete refused from inside the word list
+          has to be readable from inside it. A failed load outranks the rest
+          and cannot be dismissed — the page behind it would go straight back
+          to looking like an account with no words in it. */}
+      {words.loadError
+        ? <Notice message="Couldn't load your word list." onRetry={words.reloadWords} />
+        : <Notice message={noticeMessage} onDismiss={() => setNotice(null)} />}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }

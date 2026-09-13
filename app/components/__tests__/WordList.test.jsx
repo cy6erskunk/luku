@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import WordList from "../WordList.jsx";
 
 afterEach(cleanup);
@@ -13,7 +13,9 @@ const WORDS = [
 
 const setup = (props = {}) => {
   const onClose = props.onClose ?? vi.fn();
-  const onDelete = props.onDelete ?? vi.fn();
+  // A delete resolves true when nothing needs reporting; the default models
+  // one that worked.
+  const onDelete = props.onDelete ?? vi.fn(() => true);
   const words = props.words ?? WORDS;
   render(<WordList words={words} onClose={onClose} onDelete={onDelete} />);
   return { onClose, onDelete };
@@ -115,6 +117,38 @@ describe("WordList", () => {
       fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
       fireEvent.click(screen.getByRole("button", { name: /sure\?/i }));
       expect(onDelete).toHaveBeenCalledWith(WORDS[1].id);
+    });
+
+    it("reports a refused delete inside its own panel", async () => {
+      // Inside the dialog, so it is within the focus trap and the subtree
+      // aria-modal declares inert. The page's banner is a sibling of both.
+      setup({ onDelete: vi.fn(() => false) });
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /sure\?/i })); });
+
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toContain("may still be on your list");
+      expect(screen.getByRole("dialog").contains(alert)).toBe(true);
+    });
+
+    it("says nothing when the delete succeeds", async () => {
+      setup();
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /sure\?/i })); });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("clears a previous failure when the next delete is attempted", async () => {
+      const onDelete = vi.fn(() => false);
+      setup({ onDelete });
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /sure\?/i })); });
+      expect(screen.getByRole("alert")).toBeTruthy();
+
+      onDelete.mockImplementation(() => true);
+      fireEvent.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /sure\?/i })); });
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("cancels and restores Delete button when Cancel is clicked", () => {

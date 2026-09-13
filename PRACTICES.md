@@ -240,6 +240,35 @@ URLs — travels with every event. Trace sampling is a variable
   warning; a request with no secret header at all is just a scanner and stays
   silent.
 
+- Tell the reader what they lost, and tell Sentry why. `Notice` carries one
+  line; the cause goes through `reportClientError()`. The commonest cause is a
+  database that never had `db/schema.sql` re-run, which a `SELECT *` will not
+  reveal — it names no columns, so a half-applied schema serves the word list
+  happily and rejects every insert.
+- Report browser-side failures explicitly, through `app/lib/report.js`.
+  `onRequestError` only sees requests that reached a route handler, and the
+  browser config has no console integration, so a `console.error` alone reaches
+  nobody. A browser that is actually offline is the exception: nothing at the
+  other end is broken, and every retry would be another event.
+- Withdraw an optimistic display when the write behind it fails. "✓ Added to
+  review" is a claim the reader has no reason to re-check, so leaving it
+  standing is worse than an error.
+- Say only what the failure actually cost, and only what the catch can know. A
+  `catch` around a write covers both a refusal and a response lost after the
+  write committed, so a message asserting either ("it is not on your list",
+  "the card stays due") is a coin flip. Name what is certain — a refused save
+  of a new inflection still leaves the base form on the list — and let the rest
+  say "couldn't confirm".
+- Report a failure inside the dialog that caused it. A dialog declares the rest
+  of the page inert and traps Tab, so a page-level banner raised from one is
+  visible, unannounced and unreachable by keyboard. `WordList` owns its delete
+  error for that reason, and the page's `Notice` withholds itself while any
+  dialog is open.
+- Swallow a fetch failure only where the fallback is the whole answer.
+  `useServerKey` may `.catch(() => {})` because a failed probe just shows the
+  key screen; `useWords` did the same and made a word list that never arrived
+  indistinguishable from an account with no words in it.
+
 - Fall back rather than trust a configured value. `sampleRate()` treats an
   absent, blank or nonsensical rate as unset, because `Number("")` and
   `Number("   ")` are both `0` — which reads as "sample nothing" and looks
