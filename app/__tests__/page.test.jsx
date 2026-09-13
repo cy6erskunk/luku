@@ -58,19 +58,41 @@ const signedOut = () => { mocks.session = { data: null, isPending: false }; };
 /** A key already saved by the given account. */
 const saveKey = (key = "sk-ant-test", id = "u1") => localStorage.setItem(apiKeyStorageKey(id), key);
 
+/**
+ * What a route handler that threw actually returns: a 500 whose body is not
+ * JSON. Every failure option below uses it, so a test proves the client
+ * survives the real shape rather than a tidy `{ error }` it will never see.
+ * This is the shape a database missing a migration produces.
+ */
+const failed = () => Promise.resolve({
+  ok: false,
+  status: 500,
+  statusText: "Internal Server Error",
+  json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+});
+
 /** Routes by URL and method so a test can fail one call and not the others. */
-function mockApi({ words = [], deleteOk = true, saved = null } = {}) {
+function mockApi({ words = [], wordsOk = true, deleteOk = true, saveOk = true, gradeOk = true, saved = null } = {}) {
   const fetchMock = vi.fn((url, opts = {}) => {
+    if (String(url).startsWith("/api/reviews")) {
+      return gradeOk
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) })
+        : failed();
+    }
     if (String(url).startsWith("/api/words") && opts.method === "POST") {
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word: saved }) });
+      return saveOk
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word: saved }) })
+        : failed();
     }
     if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
-      return Promise.resolve(deleteOk
-        ? { ok: true, status: 200, json: () => Promise.resolve({ ok: true }) }
-        : { ok: false, status: 500, statusText: "Server Error", json: () => Promise.resolve({ error: "nope" }) });
+      return deleteOk
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) })
+        : failed();
     }
     if (String(url).startsWith("/api/words")) {
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words }) });
+      return wordsOk
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words }) })
+        : failed();
     }
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
   });
@@ -247,6 +269,71 @@ describe("page with a signed-in user", () => {
     expect(deletes()).toBe(1);
   });
 
+  it("says the word list failed rather than looking like an account with no words", async () => {
+    // The silent version of this is indistinguishable from a new account: an
+    // empty list, no review offered, and nothing to say the request failed.
+    // A deployment whose database never had db/schema.sql re-run lands here.
+    mockApi({ words: [WORD], wordsOk: false });
+    render(<Luku />);
+
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("Couldn't load your word list.");
+    expect(screen.queryByRole("button", { name: "1 words" })).toBeNull();
+  });
+
+  it("loads the word list on retry after a failed load", async () => {
+    const fetchMock = mockApi({ words: [WORD], wordsOk: false });
+    render(<Luku />);
+    await screen.findByRole("alert");
+
+    // Only the retry succeeds, so a list on screen can only have come from it.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("button", { name: "1 words" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says so when the server refuses to delete a word", async () => {
+    mockApi({ words: [WORD], deleteOk: false });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("still on your review list");
+  });
+
+  it("says so when a graded card is not saved", async () => {
+    // Without this the card simply does not advance, which reads as a button
+    // that did nothing.
+    mockApi({ words: [WORD], gradeOk: false });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
+
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toContain("the card stays due");
+  });
+
+  it("lets the reader dismiss a notice", async () => {
+    mockApi({ words: [WORD], deleteOk: false });
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("opens the key screen again from the header menu", async () => {
     mockApi({ words: [WORD] });
     render(<Luku />);
@@ -309,6 +396,30 @@ describe("reading a scanned page", () => {
 
     expect(await screen.findByText("✓ Added to review")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "1 new" })).toBeTruthy();
+  });
+
+  it("takes back the ✓ when the server refuses to save the word", async () => {
+    // The ✓ is optimistic, and it was never withdrawn. A deployment missing
+    // the `example` columns rejects every insert while the word list still
+    // loads, so the reader is told each word was added and finds none of them
+    // there later.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({
+      base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun",
+    });
+    mockApi({ saveOk: false });
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+    });
+
+    expect(screen.queryByText("✓ Added to review")).toBeNull();
+    expect(screen.getByRole("button", { name: /Add to review list/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "1 new" })).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("not on your review list");
   });
 
   it("shows the stored translation at once for a word already on the list", async () => {

@@ -240,6 +240,19 @@ URLs — travels with every event. Trace sampling is a variable
   warning; a request with no secret header at all is just a scanner and stays
   silent.
 
+- Tell the reader what they lost, and tell Sentry why. `Notice` carries one
+  line — "Couldn't save that word — it is not on your review list" — and the
+  cause goes to `console.error` and to Sentry. The commonest cause is a
+  database that never had `db/schema.sql` re-run, which nothing the browser
+  says would help the reader with, and which a `SELECT *` will not even reveal:
+  it names no columns, so a half-applied schema serves the word list happily
+  and rejects every insert.
+- Withdraw an optimistic display when the write behind it fails. An optimistic
+  insert that rolls back silently is worse than an error, because "✓ Added to
+  review" is a claim the reader has no reason to re-check.
+- Never `.catch(() => {})` a fetch. `useWords` did, and a word list that failed
+  to load became indistinguishable from an account with no words in it.
+
 - Fall back rather than trust a configured value. `sampleRate()` treats an
   absent, blank or nonsensical rate as unset, because `Number("")` and
   `Number("   ")` are both `0` — which reads as "sample nothing" and looks

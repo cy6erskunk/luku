@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export function useReview({ dbWords, updateWord, stage }) {
+export function useReview({ dbWords, updateWord, stage, onGradeError }) {
   const [queue, setQueue] = useState([]);
   const [revIdx, setRevIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -84,7 +84,13 @@ export function useReview({ dbWords, updateWord, stage }) {
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
-    } catch (e) { console.error("grade failed", e); }
+    } catch (e) {
+      // The card stays where it is, which on its own looks like a button that
+      // did nothing: the answer is not saved, the queue does not advance, and
+      // the next card never comes. The caller says so on screen.
+      console.error("grade failed", e);
+      onGradeError?.(e);
+    }
     finally { setGrading(false); }
   };
 

@@ -53,6 +53,7 @@ app/
 │   ├── ApiKeyScreen.jsx        # API key entry screen
 │   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
 │   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / key / sign out)
+│   ├── Notice.jsx              # One-line banner for a write that did not land
 │   ├── SignIn.jsx              # Auth screen
 │   └── LukuLogo.jsx            # SVG logo
 └── api/
@@ -105,7 +106,7 @@ All domain state lives in custom hooks:
 |------|------|
 | `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
 | `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
-| `useWords` | `dbWords`, `loadingWords`, word CRUD |
+| `useWords` | `dbWords`, `loadingWords`, `loadError`, word CRUD |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
@@ -187,7 +188,17 @@ changing it:
 
 - No external state management (no Redux, Zustand, etc.)
 - Claude API responses for translations are parsed as JSON with a regex fallback for markdown fences
-- Optimistic UI updates for word add/delete with server-side rollback on failure
+- Optimistic UI updates for word add/delete with server-side rollback on
+  failure. The rollback covers the *display* too: the popup's "✓ Added to
+  review" is withdrawn when the save is refused, because the word list is the
+  only other place the reader would find out
+- Every write that fails leaves a line in `Notice` — what the reader lost,
+  never why. A deployment running against a database that never had
+  `db/schema.sql` re-run fails exactly this way, and nothing the browser can
+  say would help the reader; the cause goes to `console.error` and to Sentry
+  instead. `SELECT *` names no columns, so a half-applied schema serves the
+  word list happily and rejects every insert — which is why the withdrawn "✓"
+  matters
 - `useReview` self-corrects the queue when a word is deleted externally (e.g. another tab)
 - SRS reads and writes go through `lib/reviews.js` so the web app and the bot share one path
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and

@@ -81,6 +81,25 @@ describe("useReview – gradeWord", () => {
     expect(result.current.queue).toEqual([1, 2, 3]);
   });
 
+  it("tells the caller when a grade the server refused leaves the card where it is", async () => {
+    // Standing still is the whole symptom: nothing advances, nothing is saved,
+    // and the buttons re-enable as if the tap had been ignored.
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500 })));
+    const onGradeError = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ onGradeError })));
+    act(() => result.current.startReview(WORDS));
+    await act(() => result.current.gradeWord(5));
+    expect(onGradeError).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report an error for a grade the server accepted", async () => {
+    const onGradeError = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ onGradeError })));
+    act(() => result.current.startReview(WORDS));
+    await act(() => result.current.gradeWord(5));
+    expect(onGradeError).not.toHaveBeenCalled();
+  });
+
   it("calls updateWord with the server response", async () => {
     const updated = { ...WORDS[0], interval_days: 3 };
     vi.stubGlobal("fetch", vi.fn(() =>

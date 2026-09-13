@@ -57,6 +57,56 @@ describe("useWords – initial fetch", () => {
   });
 });
 
+describe("useWords – a load that fails", () => {
+  it("reports the failure instead of settling on an empty list", async () => {
+    // Swallowed, this is indistinguishable from an account with no words —
+    // which is what a deployment missing a migration looked like.
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadingWords).toBe(false));
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.dbWords).toEqual([]);
+  });
+
+  it("does not parse the body of a failed response", async () => {
+    // A route handler that threw answers with a bare 500 carrying no JSON, so
+    // reading the body first would replace the real failure with a parse error.
+    const json = vi.fn(() => Promise.reject(new SyntaxError("not JSON")));
+    mockFetch({ ok: false, status: 500, json });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it("clears the error and loads the list when retried", async () => {
+    mockFetch({ ok: false, status: 500, json: () => Promise.reject(new SyntaxError("not JSON")) });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+
+    mockFetchJson({ words: [WORD_A] });
+    await act(async () => { result.current.reloadWords(); });
+    await waitFor(() => expect(result.current.dbWords).toEqual([WORD_A]));
+    expect(result.current.loadError).toBe(false);
+  });
+
+  it("discards the load a retry superseded", async () => {
+    // The flag the effect used to close over could not see a retry: the
+    // superseded load and the retry would both count as current, and whichever
+    // landed last would win.
+    const resolvers = [];
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((resolve) => { resolvers.push(resolve); })));
+    const { result } = renderHook(() => useWords("user-1"));
+
+    await act(async () => { result.current.reloadWords(); });
+    const respond = (resolve, words) =>
+      act(async () => { resolve({ ok: true, status: 200, json: () => Promise.resolve({ words }) }); });
+    await respond(resolvers[1], [WORD_B]);
+    await respond(resolvers[0], [WORD_A]);
+
+    expect(result.current.dbWords).toEqual([WORD_B]);
+  });
+});
+
 describe("useWords – saveWord", () => {
   it("appends the saved word to dbWords", async () => {
     mockFetchJson({ words: [] });
