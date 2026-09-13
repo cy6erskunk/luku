@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { reportClientError } from "../lib/report.js";
 
 export function useReview({ dbWords, updateWord, stage, onGradeError }) {
   const [queue, setQueue] = useState([]);
@@ -85,10 +86,9 @@ export function useReview({ dbWords, updateWord, stage, onGradeError }) {
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
     } catch (e) {
-      // The card stays where it is, which on its own looks like a button that
-      // did nothing: the answer is not saved, the queue does not advance, and
-      // the next card never comes. The caller says so on screen.
-      console.error("grade failed", e);
+      // The card stays put, which on its own reads as a button that did
+      // nothing. The caller says so on screen.
+      reportClientError("grade word", e);
       onGradeError?.(e);
     }
     finally { setGrading(false); }

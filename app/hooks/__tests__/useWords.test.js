@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+// Mocked wherever the module graph reaches it: the real package pulls in a
+// Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
+// is where the reporting contract itself is tested.
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+
 import { useWords } from "../useWords.js";
 
 const WORD_A = { id: 1, base: "juosta", translations: ["to run"], pos: "verb" };

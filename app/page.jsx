@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
 import { translateWord } from "./lib/api.js";
+import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
@@ -70,9 +71,8 @@ function LukuApp({ user }) {
   const [popup, setPopup] = useState(null);
   const [xlating, setXlating] = useState(null);
   const [showWordList, setShowWordList] = useState(false);
-  // One line of visible fallout from a write that did not land. Composed here
-  // rather than in a hook because the failures come from three of them, and
-  // because the reader only ever needs to be told about the newest one.
+  // Composed here rather than in a hook: the failures come from three of them,
+  // and the reader is only ever told about the newest.
   const [notice, setNotice] = useState("");
   const [showTelegram, setShowTelegram] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
@@ -87,6 +87,10 @@ function LukuApp({ user }) {
   // its own two-step confirm flow and doesn't consume this.
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const deletingRef = useRef(new Set());
+  // A save outlives the scan that started it. Its bookkeeping — the queue of
+  // new words, the ✓, the notice — belongs to that scan, so a late arrival
+  // must not write any of it into the next one.
+  const scanIdRef = useRef(0);
 
   const words = useWords(user.id);
 
@@ -164,8 +168,8 @@ function LukuApp({ user }) {
     });
   };
 
-  // Each attempt clears the last one's complaint, so "couldn't save that
-  // answer" cannot outlive the card it was about.
+  // Each attempt clears the last one's complaint, so it cannot outlive the
+  // card it was about.
   const handleGrade = (grade) => {
     setNotice("");
     return review.gradeWord(grade);
@@ -202,6 +206,7 @@ function LukuApp({ user }) {
   };
 
   const handleScanAnother = () => {
+    scanIdRef.current++;
     setStage(0);
     setSession({});
     setNotice("");
@@ -280,11 +285,13 @@ function LukuApp({ user }) {
     // the DB" from "re-added something already there".
     const wasPreexisting = !!findExistingWord(words.dbWords, { base: entry.base });
     const key = popup.k;
+    const scanId = scanIdRef.current;
     setSession((s) => ({ ...s, [key]: { ...s[key], added: true } }));
     setPopup((p) => ({ ...p, added: true }));
     setNotice("");
     try {
       const saved = await words.saveWord(entry);
+      if (scanIdRef.current !== scanId) return;
       if (saved?.id != null) {
         setNewWordIds((prev) => {
           if (prev.has(saved.id)) return prev;
@@ -302,14 +309,18 @@ function LukuApp({ user }) {
         }
       }
     } catch (e) {
-      console.error("save word failed", e);
-      // The ✓ was optimistic. Left standing it tells the reader a word is on
-      // their review list when the save never landed — and since the list is
-      // the only place they would find out otherwise, the lie survives until
-      // they go looking for a word that was never there.
+      reportClientError("save word", e);
+      if (scanIdRef.current !== scanId) return;
+      // The ✓ was optimistic, and the word list is the only other place the
+      // reader would ever find out it did not land.
       setSession((s) => s[key] ? { ...s, [key]: { ...s[key], added: false } } : s);
       setPopup((p) => p?.k === key ? { ...p, added: false } : p);
-      setNotice("Couldn't save that word — it is not on your review list. Try adding it again.");
+      // A refused save leaves an already-saved base form exactly where it was:
+      // only the new inflection is lost, and saying otherwise is a lie the
+      // reader would find contradicted by their own list.
+      setNotice(wasPreexisting
+        ? "Couldn't add that form — the word itself is still on your review list."
+        : "Couldn't save that word — it is not on your review list. Try adding it again.");
     }
   };
 
@@ -327,6 +338,7 @@ function LukuApp({ user }) {
       next.add(id);
       return next;
     });
+    setNotice("");
     const wasNew = newWordIds.has(id);
     const wasPreexisting = preexistingNewIds.has(id);
     const { queueIndices, revIdxAdjust } = review.removeWordFromQueue(id);
@@ -351,9 +363,9 @@ function LukuApp({ user }) {
       const res = await fetch(`/api/words?id=${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (e) {
-      console.error("delete word failed", e);
-      // Everything below puts the word back where it was, which without a word
-      // of explanation reads as a delete button that undid itself.
+      reportClientError("delete word", e);
+      // Everything below puts the word back, which unexplained reads as a
+      // delete button that undid itself.
       setNotice("Couldn't delete that word — it is still on your review list.");
       words.restoreWord(deletedWord);
       review.restoreWordInQueue(id, queueIndices, revIdxAdjust);
@@ -475,12 +487,10 @@ function LukuApp({ user }) {
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}
 
-      {/* Last, and fixed above the overlays, because a failure raised from
-          inside the word list has to be readable from inside it. A list that
-          failed to load outranks the rest: every other message is about one
-          word, this one is about all of them, and it is not dismissible —
-          the page behind it would go straight back to looking like an account
-          with no words in it. */}
+      {/* Fixed above the overlays: a delete refused from inside the word list
+          has to be readable from inside it. A failed load outranks the rest
+          and cannot be dismissed — the page behind it would go straight back
+          to looking like an account with no words in it. */}
       {words.loadError
         ? <Notice message="Couldn't load your word list." onRetry={words.reloadWords} />
         : <Notice message={notice} onDismiss={() => setNotice("")} />}

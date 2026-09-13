@@ -1,27 +1,10 @@
 "use client";
 
-/**
- * The one place a background failure becomes visible to the reader.
- *
- * Every write this app makes is optimistic, and until this banner existed
- * every one of them failed silently: a word list that never arrived looked
- * like a brand-new account, and a save the server rejected still showed
- * "✓ Added to review". The commonest cause is a deployment running against a
- * database that never had `db/schema.sql` re-run, which no amount of client
- * retrying fixes — so the message says what the reader lost, not why. The
- * cause goes to the console and to Sentry, where whoever forgot the migration
- * will look.
- *
- * Fixed, and above the overlays at zIndex 300, because a delete refused from
- * inside the word list has to be readable from inside it rather than reported
- * onto the page hidden behind. Anchored to the bottom so it displaces neither
- * the header nor the word the reader just tapped.
- */
+/** One line of visible fallout from a write that did not land. */
 export default function Notice({ message, onRetry, retryLabel = "Retry", onDismiss }) {
   if (!message) return null;
 
   // The page closes the translation popup on any click that reaches it.
-  // Dismissing a banner is not a click on the page behind it.
   const contain = (fn) => (e) => { e.stopPropagation(); fn(); };
 
   return (

@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   translateWord: vi.fn(),
 }));
 
+// Mocked wherever the module graph reaches it: the real package pulls in a
+// Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
+// is where the reporting contract itself is tested.
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+
 vi.mock("../lib/authClient.js", () => ({
   authClient: {
     useSession: () => mocks.session,
@@ -321,6 +326,34 @@ describe("page with a signed-in user", () => {
     expect(banner.textContent).toContain("the card stays due");
   });
 
+  it("clears a failed delete's notice when the next delete succeeds", async () => {
+    let deleteOk = false;
+    const fetchMock = vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "DELETE") {
+        return deleteOk
+          ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) })
+          : failed();
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "1 words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    await screen.findByRole("alert");
+
+    // Left standing, the banner claims the word is still on the list while the
+    // reader watches it disappear.
+    deleteOk = true;
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+
+    await waitFor(() => expect(screen.getByText("No words saved yet.")).toBeTruthy());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("lets the reader dismiss a notice", async () => {
     mockApi({ words: [WORD], deleteOk: false });
     render(<Luku />);
@@ -420,6 +453,64 @@ describe("reading a scanned page", () => {
     expect(screen.getByRole("button", { name: /Add to review list/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "1 new" })).toBeNull();
     expect(screen.getByRole("alert").textContent).toContain("not on your review list");
+  });
+
+  it("does not claim the word is gone when only a new form failed to save", async () => {
+    // The base form was already saved, so a refused POST loses the inflection
+    // and nothing else. Saying it is not on the review list is a lie the
+    // reader's own list contradicts.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({
+      base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun",
+    });
+    mockApi({ words: [{ ...WORD, id: 3, base: "koira", translations: ["dog"], pos: "noun" }], saveOk: false });
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await screen.findByRole("button", { name: "1 words" });
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+    });
+
+    const banner = screen.getByRole("alert");
+    expect(banner.textContent).toContain("still on your review list");
+    expect(screen.getByRole("button", { name: "1 words" })).toBeTruthy();
+  });
+
+  it("ignores a save that fails after the reader has moved to a new scan", async () => {
+    // The save outlives the page it was started from. Landing late, it used to
+    // withdraw the ✓ and raise a banner on the scan that came after it.
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({
+      base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun",
+    });
+    let rejectSave;
+    vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
+      if (String(url).startsWith("/api/words") && opts.method === "POST") {
+        return new Promise((_resolve, reject) => { rejectSave = () => reject(new Error("offline")); });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ words: [WORD] }) });
+    }));
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+    fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
+
+    // Back to scan, into the due review, and out again through Scan Another —
+    // the only route to handleScanAnother — then scan and tap the same word.
+    fireEvent.click(screen.getByText("Luku"));
+    fireEvent.click(await screen.findByRole("button", { name: /Review 1 due word/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Easy" })); });
+    fireEvent.click(screen.getByRole("button", { name: /Scan Another Page/ }));
+    await scan(ocrLocal);
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+
+    await act(async () => { rejectSave(); });
+
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the stored translation at once for a word already on the list", async () => {

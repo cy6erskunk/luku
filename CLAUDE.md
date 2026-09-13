@@ -128,6 +128,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
 | `savedWordEntry()` (`utils.js`) | Shapes a saved word into popup fields, so tapping a word already on the list shows its stored translation immediately — while the form lookup runs, or without an API key at all |
+| `reportClientError()` (`report.js`) | Sends a browser-side failure to Sentry, which `onRequestError` cannot see; skipped while actually offline |
 | `Bp` / `Bg` (`styles.js`) | Shared primary and ghost button styles |
 | `authClient` (`authClient.js`) | Neon Auth browser client |
 
@@ -193,12 +194,12 @@ changing it:
   review" is withdrawn when the save is refused, because the word list is the
   only other place the reader would find out
 - Every write that fails leaves a line in `Notice` — what the reader lost,
-  never why. A deployment running against a database that never had
-  `db/schema.sql` re-run fails exactly this way, and nothing the browser can
-  say would help the reader; the cause goes to `console.error` and to Sentry
-  instead. `SELECT *` names no columns, so a half-applied schema serves the
-  word list happily and rejects every insert — which is why the withdrawn "✓"
-  matters
+  never why. The cause goes to Sentry through `reportClientError()`
+  (`app/lib/report.js`), which the browser needs because `onRequestError` only
+  sees requests that reached a route handler. A deployment whose database never
+  had `db/schema.sql` re-run fails exactly this way, and `SELECT *` names no
+  columns — so a half-applied schema serves the word list happily and rejects
+  every insert, which is why the withdrawn "✓" matters
 - `useReview` self-corrects the queue when a word is deleted externally (e.g. another tab)
 - SRS reads and writes go through `lib/reviews.js` so the web app and the bot share one path
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
