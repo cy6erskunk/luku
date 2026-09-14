@@ -6,7 +6,7 @@
  * suites; this one exercises the wiring between them.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, act, within } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({
   session: { data: null, isPending: false },
@@ -46,6 +46,7 @@ vi.mock("react-easy-crop", () => ({ default: () => null }));
 
 const Luku = (await import("../page.jsx")).default;
 const { apiKeyStorageKey } = await import("../hooks/useApiKey.js");
+const { MODELS, DEFAULT_MODELS } = await import("@/lib/shared/models.js");
 
 const WORD = {
   id: 1,
@@ -484,7 +485,7 @@ describe("reading a scanned page", () => {
     await act(async () => { fireEvent.click(screen.getByText("Koira")); });
 
     // The whole sentence goes along as context, dehyphenated.
-    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED);
+    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED, DEFAULT_MODELS.translate);
 
     fireEvent.click(await screen.findByRole("button", { name: /Add to review list/ }));
 
@@ -590,7 +591,7 @@ describe("reading a scanned page", () => {
     expect(screen.getByText(/checking this form/i)).toBeTruthy();
     // The fresh lookup still runs — the stored entry is a head start, not a
     // replacement for translating the form in front of the reader.
-    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED);
+    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED, DEFAULT_MODELS.translate);
   });
 
   it("answers from the list without a key when the word is already saved", async () => {
@@ -725,5 +726,92 @@ describe("switching accounts", () => {
     expect(await screen.findByText("Photograph a Finnish page")).toBeTruthy();
     expect(screen.queryByText("juoksee")).toBeNull();
     expect(screen.queryByRole("button", { name: "1 words" })).toBeNull();
+  });
+});
+
+describe("choosing a model per task", () => {
+  const OTHER = MODELS.find((m) => m.id !== DEFAULT_MODELS.translate);
+  const SCANNED = "Koira juoksee.";
+
+  async function scan(ocr) {
+    ocr.mockResolvedValue(SCANNED);
+    const file = new File(["x"], "page.jpg", { type: "image/jpeg" });
+    await act(async () => {
+      fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Skip crop" }));
+    await screen.findByText("Koira");
+  }
+
+  const openModels = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Models" }));
+    return screen.findByRole("dialog");
+  };
+
+  beforeEach(() => { signedIn(); saveKey(); });
+
+  it("sends the translation model the reader picked", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.translateWord.mockResolvedValue({
+      base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun",
+      example: null, example_translation: null,
+    });
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await openModels();
+    const translations = screen.getByRole("group", { name: /Translations/ });
+    fireEvent.click(within(translations).getByRole("radio", { name: new RegExp(OTHER.label) }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+
+    expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED, OTHER.id);
+  });
+
+  it("leaves the scan model where it was", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await openModels();
+    const translations = screen.getByRole("group", { name: /Translations/ });
+    fireEvent.click(within(translations).getByRole("radio", { name: new RegExp(OTHER.label) }));
+
+    // The two calls are chosen apart; picking for one must not move the other.
+    const ocrGroup = screen.getByRole("group", { name: /AI scan/ });
+    expect(within(ocrGroup).getByRole("radio", { checked: true })).toHaveProperty("value", DEFAULT_MODELS.ocr);
+  });
+
+  it("remembers the choice across a remount", async () => {
+    mockApi();
+    const { unmount } = render(<Luku />);
+
+    await openModels();
+    const translations = screen.getByRole("group", { name: /Translations/ });
+    fireEvent.click(within(translations).getByRole("radio", { name: new RegExp(OTHER.label) }));
+    unmount();
+
+    render(<Luku />);
+    await openModels();
+    expect(within(screen.getByRole("group", { name: /Translations/ })).getByRole("radio", { checked: true }))
+      .toHaveProperty("value", OTHER.id);
+  });
+
+  it("does not offer the panel to a reader with no key", async () => {
+    localStorage.clear();
+    signedIn();
+    saveKey("__skip__");
+    mockApi();
+    render(<Luku />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Menu" }));
+
+    // Nothing is sent to Anthropic at all, so there is no model to choose.
+    expect(screen.queryByRole("menuitem", { name: "Models" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "API key" })).toBeTruthy();
   });
 });

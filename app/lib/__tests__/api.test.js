@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { callClaude, ocrImage, translateWord } from "../api.js";
 import { SERVER_KEY } from "../utils.js";
+import { MODELS } from "@/lib/shared/models.js";
+
+const A_MODEL = MODELS[0].id;
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -77,6 +80,28 @@ describe("callClaude", () => {
     expect(body.maxTokens).toBe(1500);
   });
 
+  it("names the model it was given", async () => {
+    let body;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [] }) });
+    }));
+    await callClaude("sk-test", [], undefined, 1500, A_MODEL);
+    expect(body.model).toBe(A_MODEL);
+  });
+
+  it("names no model when it was given none", async () => {
+    let body;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [] }) });
+    }));
+    await callClaude("sk-test", []);
+    // An absent model is what asks the route for its default, so the client
+    // never has to restate one.
+    expect("model" in body).toBe(false);
+  });
+
   it("forwards a custom maxTokens value", async () => {
     let body;
     vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
@@ -102,9 +127,30 @@ describe("ocrImage", () => {
     expect(imgBlock.source.data).toBe("abc123");
     expect(imgBlock.source.media_type).toBe("image/jpeg");
   });
+
+  it("scans with the model it was given", async () => {
+    let body;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text: "text" }] }) });
+    }));
+    await ocrImage("sk-test", "abc123", "image/jpeg", A_MODEL);
+    expect(body.model).toBe(A_MODEL);
+  });
 });
 
 describe("translateWord", () => {
+  it("translates with the model it was given", async () => {
+    let body;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      body = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text: "{}" }] }) });
+    }));
+    // The two tasks are chosen separately, so each call has to carry its own.
+    await translateWord("sk-test", "koiran", "Koiran nimi on Musti.", A_MODEL);
+    expect(body.model).toBe(A_MODEL);
+  });
+
   it("parses a valid JSON response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

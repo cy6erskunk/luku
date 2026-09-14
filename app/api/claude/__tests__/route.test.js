@@ -7,6 +7,20 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 
 const { GET, POST } = await import("../route.js");
+const { MODELS, DEFAULT_MODEL, THINKING_MIN_TOKENS } = await import("@/lib/shared/models.js");
+
+const THINKING_MODEL = MODELS.find((m) => m.thinks).id;
+const PLAIN_MODEL = MODELS.find((m) => !m.thinks && m.id !== DEFAULT_MODEL).id;
+
+/** Captures the body sent on to Anthropic. */
+const captureBody = () => {
+  const seen = {};
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+    seen.body = JSON.parse(opts.body);
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
+  }));
+  return seen;
+};
 
 const makeRequest = (body) => ({
   json: () => Promise.resolve(body),
@@ -181,6 +195,43 @@ describe("POST /api/claude", () => {
     expect(res.status).toBe(500);
     const data = await res.json();
     expect(data.error).toBe("Network failure");
+  });
+
+  it("calls the model the request names", async () => {
+    const seen = captureBody();
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: PLAIN_MODEL }));
+    expect(seen.body.model).toBe(PLAIN_MODEL);
+  });
+
+  it("uses the default model when the request names none", async () => {
+    const seen = captureBody();
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [] }));
+    expect(seen.body.model).toBe(DEFAULT_MODEL);
+  });
+
+  it("falls back rather than forwarding a model it does not offer", async () => {
+    const seen = captureBody();
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: "claude-retired" }));
+    // The ids that reach here are saved browser preferences, so an unknown one
+    // is a stale choice far more often than an attack — but either way the
+    // route decides what Anthropic is asked for, not the caller.
+    expect(seen.body.model).toBe(DEFAULT_MODEL);
+  });
+
+  it("gives a thinking model low effort and room to think", async () => {
+    const seen = captureBody();
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: THINKING_MODEL, maxTokens: 400 }));
+    expect(seen.body.output_config).toEqual({ effort: "low" });
+    // Thinking tokens come out of max_tokens, so 400 could be spent entirely
+    // on reasoning and leave the caller nothing to parse.
+    expect(seen.body.max_tokens).toBe(THINKING_MIN_TOKENS);
+  });
+
+  it("sends no effort setting for a model that would reject one", async () => {
+    const seen = captureBody();
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: PLAIN_MODEL, maxTokens: 400 }));
+    expect(seen.body.output_config).toBeUndefined();
+    expect(seen.body.max_tokens).toBe(400);
   });
 
   it("uses default maxTokens of 1500 when not specified", async () => {

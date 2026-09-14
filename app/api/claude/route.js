@@ -1,4 +1,5 @@
 import { getAuth } from "@/lib/auth/server";
+import { anthropicRequest } from "@/lib/shared/models.js";
 
 /**
  * Proxy for the Anthropic API.
@@ -38,7 +39,7 @@ export async function POST(request) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { apiKey, messages, system, maxTokens = 1500 } = await request.json();
+    const { apiKey, messages, system, maxTokens = 1500, model } = await request.json();
 
     // The user's own key always wins, so a real key works in development too.
     const key = apiKey || developmentKey();
@@ -46,11 +47,10 @@ export async function POST(request) {
       return Response.json({ error: "API key required" }, { status: 400 });
     }
 
-    const body = {
-      model: "claude-sonnet-4-6",
-      max_tokens: maxTokens,
-      messages,
-    };
+    // The model is the caller's choice out of a fixed list; anything else —
+    // a stale saved id, or a caller poking the route — falls back to the
+    // default rather than reaching Anthropic as typed.
+    const body = { ...anthropicRequest(model, maxTokens), messages };
     if (system) body.system = system;
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {

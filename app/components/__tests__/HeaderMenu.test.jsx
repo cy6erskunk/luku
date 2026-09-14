@@ -13,6 +13,31 @@ const setup = (props = {}) => {
 
 const toggle = () => screen.getByRole("button", { name: "Menu" });
 
+describe("HeaderMenu – optional actions", () => {
+  it("offers an action it was given a handler for", () => {
+    const onModels = vi.fn();
+    setup({ onModels });
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole("menuitem", { name: "Models" }));
+    expect(onModels).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves out one it was not", () => {
+    // Models is meaningless without a key, so the caller withholds the
+    // handler rather than the menu rendering a dead item.
+    setup();
+    fireEvent.click(toggle());
+    expect(screen.queryByRole("menuitem", { name: "Models" })).toBeNull();
+  });
+
+  it("walks only the items it actually rendered", () => {
+    setup({ onModels: vi.fn() });
+    fireEvent.keyDown(toggle(), { key: "ArrowUp" });
+    // ArrowUp opens on the last item, which the filtering must not miscount.
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Sign out" }));
+  });
+});
+
 describe("HeaderMenu", () => {
   it("keeps the actions hidden until the menu is opened", () => {
     setup();

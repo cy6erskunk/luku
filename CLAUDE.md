@@ -9,7 +9,9 @@
 - **Framework**: Next.js 16 (App Router)
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
-- **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
+- **AI**: Anthropic Claude API via server-side proxy. Which model runs each of
+  the two AI calls — the photo scan and the word lookup — is the reader's
+  choice out of a fixed list in `lib/shared/models.js`
 - **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
 - **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
 - **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)
@@ -40,6 +42,7 @@ app/
 ├── layout.jsx                  # Root layout (metadata, lang="fi")
 ├── hooks/
 │   ├── useApiKey.js            # Saved API key, in per-account localStorage
+│   ├── useModels.js            # Which model runs each AI call, in per-account localStorage
 │   ├── useSession.js           # Per-scan translation session, in per-account localStorage
 │   ├── useWords.js             # DB word list: fetch, save, update, remove/restore
 │   ├── useReview.js            # Flashcard queue: grading, self-correction, reset
@@ -51,8 +54,9 @@ app/
 │   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
 │   ├── ApiKeyScreen.jsx        # API key entry screen
+│   ├── ModelSettings.jsx       # Per-task model picker overlay
 │   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
-│   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / key / sign out)
+│   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / models / key / sign out)
 │   ├── Notice.jsx              # One-line banner for a write that did not land
 │   ├── SignIn.jsx              # Auth screen
 │   └── LukuLogo.jsx            # SVG logo
@@ -69,7 +73,8 @@ app/
 lib/                            # Server-only (except shared/); app/lib/ is the client half
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
-│   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   └── models.js               # The models /api/claude may call, and which one each task uses
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
@@ -105,6 +110,7 @@ All domain state lives in custom hooks:
 | Hook | Owns |
 |------|------|
 | `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
+| `useModels` | `{ ocr, translate }` model choice, under `luku_models:<userId>` |
 | `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
 | `useWords` | `dbWords`, `loadingWords`, `loadError`, word CRUD |
 | `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
@@ -116,7 +122,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 
 | Function | Purpose |
 |----------|---------|
-| `callClaude()` (`api.js`) | Generic wrapper for Claude API calls via `/api/claude` |
+| `callClaude()` (`api.js`) | Generic wrapper for Claude API calls via `/api/claude`; takes the model to use, and omits it to accept the route's default |
 | `ocrImage()` (`api.js`) | Extracts text from image using Claude Vision |
 | `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech |
 | `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |
@@ -176,6 +182,32 @@ changing it:
   wanted, it needs a per-user quota, not this variable.
 - **`/api/claude` requires a session** regardless, which stops the route being
   an open relay to Anthropic for anyone who finds the path.
+
+### Model Selection
+
+Luku makes two Claude calls — the AI scan and the word lookup — and each has
+its own model, chosen by the reader and stored in `luku_models:<userId>`. Both
+start on `claude-sonnet-4-6`, the one model the app used before it had a
+picker, so an upgrade changes nobody's bill.
+
+`lib/shared/models.js` is the single list. It sits in the isomorphic tier
+because the browser renders the picker from it and the route validates against
+it; a list that disagreed with itself would let the client offer a model the
+server refuses. Three things in it are load-bearing:
+
+- **An unknown model id falls back to the default, it does not 400.** The ids
+  arriving at the route are saved browser preferences, so retiring a model
+  would otherwise brick every browser still holding its name.
+- **`thinks: true` models get `output_config: { effort: "low" }` and a floor
+  under `max_tokens`.** From Sonnet 5 on, omitting the `thinking` parameter
+  still runs adaptive thinking, and those tokens are charged against the same
+  `max_tokens` as the answer — the 400-token translation call could spend the
+  lot on reasoning and return nothing to parse. Low effort rather than
+  `thinking: { type: "disabled" }`, which is rejected outright at higher effort
+  levels and leaks reasoning into the visible text where it is accepted.
+- **Models without that flag must not be sent `output_config` at all** — Haiku
+  4.5 rejects it. `anthropicRequest()` is where both rules live; adding a model
+  to the list means setting the flag correctly, not editing the route.
 
 ### Styling Conventions
 

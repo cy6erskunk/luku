@@ -18,7 +18,7 @@ const ITEM = {
  * it. Opening moves focus into the menu, so the items carry `tabIndex={-1}`
  * and focus is placed by hand instead of by the browser's tab order.
  */
-export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
+export default function HeaderMenu({ onTelegram, onModels, onChangeKey, onSignOut }) {
   const [open, setOpen] = useState(false);
   // Which item focus sits on. Also the item that opening the menu lands on:
   // the toggle sets it before the menu renders (0 for a click or ArrowDown,
@@ -31,11 +31,15 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
   const menuId = useId();
   const btnId = useId();
 
+  // An action with no handler is not offered at all — Models is meaningless
+  // to someone reading with local OCR and no key. Filtered before the indices
+  // below are taken, which are what arrow-key focus walks.
   const items = [
     { label: "Telegram", icon: "✈", iconColor: "#6a9ebe", fn: onTelegram },
+    { label: "Models", fn: onModels },
     { label: "API key", fn: onChangeKey },
     { label: "Sign out", fn: onSignOut, separated: true },
-  ];
+  ].filter((item) => item.fn);
   const last = items.length - 1;
 
   useEffect(() => {

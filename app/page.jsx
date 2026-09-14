@@ -12,10 +12,12 @@ import TelegramConnect from "./components/TelegramConnect.jsx";
 import LukuLogo from "./components/LukuLogo.jsx";
 import Notice from "./components/Notice.jsx";
 import HeaderMenu from "./components/HeaderMenu.jsx";
+import ModelSettings from "./components/ModelSettings.jsx";
 import ScanStage from "./components/ScanStage.jsx";
 import ReadStage from "./components/ReadStage.jsx";
 import ReviewStage from "./components/ReviewStage.jsx";
 import { useApiKey } from "./hooks/useApiKey.js";
+import { useModels } from "./hooks/useModels.js";
 import { useServerKey } from "./hooks/useServerKey.js";
 import { useSession } from "./hooks/useSession.js";
 import { useWords } from "./hooks/useWords.js";
@@ -64,6 +66,9 @@ function LukuApp({ user }) {
   // to spend their own credit still can.
   const effectiveKey = savedKey || (serverKey ? SERVER_KEY : "");
   const { session, setSession } = useSession(user.id);
+  // Which Claude model each of the two AI calls uses. Kept next to the key
+  // because it is the same bill: a slower model costs the key's owner more.
+  const { models, setModel } = useModels(user.id);
 
   const [stage, setStage] = useState(0);
   const [text, setText] = useState("");
@@ -76,6 +81,7 @@ function LukuApp({ user }) {
   // the message is about, or null for one true anywhere.
   const [notice, setNotice] = useState(null);
   const [showTelegram, setShowTelegram] = useState(false);
+  const [showModels, setShowModels] = useState(false);
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
@@ -102,7 +108,7 @@ function LukuApp({ user }) {
     if (resetSession) { setSession({}); setPopup(null); }
   }, [setSession]);
 
-  const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
+  const image = useImageProcessing({ savedKey: effectiveKey, ocrModel: models.ocr, onTextReady: handleTextReady });
   const review = useReview({
     dbWords: words.dbWords,
     updateWord: words.updateWord,
@@ -138,7 +144,7 @@ function LukuApp({ user }) {
   // A dialog traps focus and declares the rest of the page inert, so this
   // banner would be visible, unreachable and unannounced beneath one. It waits
   // instead; a failure raised inside a dialog is that dialog's to report.
-  const dialogOpen = showWordList || showTelegram;
+  const dialogOpen = showWordList || showTelegram || showModels;
   const noticeMessage = !notice || dialogOpen || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
@@ -267,7 +273,7 @@ function LukuApp({ user }) {
       word: form, k: tok.k, x, y, loading: true, existsInDb: !!savedByForm,
     });
     try {
-      const d = await translateWord(effectiveKey, form, sentenceOf(text, form));
+      const d = await translateWord(effectiveKey, form, sentenceOf(text, form), models.translate);
       const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
@@ -447,6 +453,9 @@ function LukuApp({ user }) {
           )}
           <HeaderMenu
             onTelegram={() => setShowTelegram(true)}
+            // Left out entirely for a reader who skipped the key: with no AI
+            // call to make, there is no model to choose.
+            onModels={hasApiKey(effectiveKey) ? () => setShowModels(true) : undefined}
             onChangeKey={() => setChangingKey(true)}
             onSignOut={() => authClient.signOut()}
           />
@@ -505,6 +514,10 @@ function LukuApp({ user }) {
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}
+
+      {showModels && (
+        <ModelSettings models={models} onPick={setModel} onClose={() => setShowModels(false)} />
+      )}
 
       {/* Fixed above the overlays: a delete refused from inside the word list
           has to be readable from inside it. A failed load outranks the rest

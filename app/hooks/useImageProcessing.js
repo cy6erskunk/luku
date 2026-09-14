@@ -4,7 +4,7 @@ import { ocrLocal } from "../lib/ocr.js";
 import { ocrImage } from "../lib/api.js";
 import { hasApiKey } from "../lib/utils.js";
 
-export function useImageProcessing({ savedKey, onTextReady }) {
+export function useImageProcessing({ savedKey, ocrModel, onTextReady }) {
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState("");
   const [err, setErr] = useState("");
@@ -94,7 +94,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
       const [header, b64] = preview.split(",");
       const mediaType = header?.match(/data:(.*?);/)?.[1];
       if (!b64 || !mediaType) { setErr("The image format is invalid — upload the image again."); return; }
-      const out = await ocrImage(savedKey, b64, mediaType);
+      const out = await ocrImage(savedKey, b64, mediaType, ocrModel);
       if (!out?.trim()) { setErr("AI found no text — try a different photo."); return; }
       setOcrSource("ai");
       onTextReady(out.trim(), { resetSession: true });
