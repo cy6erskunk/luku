@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DEFAULT_MODELS, isModelId, isTaskId, resolveModels } from "@/lib/shared/models.js";
 
 /**
@@ -30,17 +30,22 @@ function readModels(userId) {
 export function useModels(userId) {
   const [models, _setModels] = useState(() => readModels(userId));
 
+  // Persisting follows the rendered state rather than the call that asked for
+  // it, as useSession does — and for the same underlying reason. A state
+  // updater has to be pure: React may run one twice, or run it for a render it
+  // then discards, so a write made inside one can put a choice into storage
+  // that the reader never ended up with on screen.
+  useEffect(() => {
+    if (!userId) return;
+    try { localStorage.setItem(modelsStorageKey(userId), JSON.stringify(models)); } catch {}
+  }, [userId, models]);
+
   const setModel = useCallback((task, model) => {
     if (!isTaskId(task) || !isModelId(model)) return;
-    _setModels((prev) => {
-      if (prev[task] === model) return prev;
-      const next = { ...prev, [task]: model };
-      if (userId) {
-        try { localStorage.setItem(modelsStorageKey(userId), JSON.stringify(next)); } catch {}
-      }
-      return next;
-    });
-  }, [userId]);
+    // Returning `prev` unchanged for a pick that changes nothing keeps the
+    // effect above from firing on it.
+    _setModels((prev) => (prev[task] === model ? prev : { ...prev, [task]: model }));
+  }, []);
 
   return { models, setModel };
 }

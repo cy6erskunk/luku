@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { StrictMode } from "react";
 import { useModels, modelsStorageKey } from "../useModels.js";
 import { MODELS, DEFAULT_MODELS } from "@/lib/shared/models.js";
 
@@ -58,7 +59,29 @@ describe("useModels – setModel", () => {
     act(() => result.current.setModel("ocr", "claude-retired"));
     act(() => result.current.setModel("billing", OTHER));
     expect(result.current.models).toEqual({ ...DEFAULT_MODELS });
-    expect(localStorage.getItem(KEY_U1)).toBe(null);
+    // Nor does a refused pick reach storage: what is there is still the
+    // untouched default.
+    expect(JSON.parse(localStorage.getItem(KEY_U1))).toEqual({ ...DEFAULT_MODELS });
+  });
+});
+
+describe("useModels – persistence follows what is rendered", () => {
+  it("resolves a stale stored model in storage, not just in state", () => {
+    localStorage.setItem(KEY_U1, JSON.stringify({ ocr: "claude-retired", translate: OTHER }));
+    renderHook(() => useModels(U1));
+    expect(JSON.parse(localStorage.getItem(KEY_U1))).toEqual({ ocr: DEFAULT_MODELS.ocr, translate: OTHER });
+  });
+
+  it("stores exactly what the hook renders, under StrictMode too", () => {
+    // The contract this pins: storage is written from the rendered value, so
+    // it cannot disagree with what the reader sees. Writing from inside the
+    // state updater instead put it one remove away — React is free to run an
+    // updater twice, or for a render it discards, and useSession carries the
+    // scar from the same mistake.
+    const { result } = renderHook(() => useModels(U1), { wrapper: StrictMode });
+    act(() => result.current.setModel("ocr", OTHER));
+    act(() => result.current.setModel("translate", OTHER));
+    expect(JSON.parse(localStorage.getItem(KEY_U1))).toEqual(result.current.models);
   });
 });
 
