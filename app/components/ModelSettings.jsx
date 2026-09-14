@@ -76,9 +76,12 @@ export default function ModelSettings({ models, onPick, onClose }) {
             </fieldset>
           ))}
 
+          {/* Says what a pick costs without saying whose key pays: the reader
+              may be on the deployment's development key, where "your own API
+              key" would be plainly untrue. */}
           <p style={{ fontSize: 11, color: "#3a4550", marginTop: 18, lineHeight: 1.6 }}>
-            Both are billed to your own API key. The free local scan doesn&apos;t use a model
-            at all, so this changes nothing about it.
+            A slower model costs more per scan and per word. The free local scan uses no
+            model at all, so this changes nothing about it.
           </p>
 
           {/* Last in the DOM so the dialog's Tab trap wraps from here back to

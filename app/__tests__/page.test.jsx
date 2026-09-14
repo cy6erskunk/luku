@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor, cleanup, act, within } from "@testi
 const mocks = vi.hoisted(() => ({
   session: { data: null, isPending: false },
   translateWord: vi.fn(),
+  ocrImage: vi.fn(),
 }));
 
 // Mocked wherever the module graph reaches it: the real package pulls in a
@@ -32,7 +33,7 @@ vi.mock("../lib/ocr.js", () => ({
 }));
 
 vi.mock("../lib/api.js", () => ({
-  ocrImage: vi.fn(),
+  ocrImage: (...args) => mocks.ocrImage(...args),
   translateWord: (...args) => mocks.translateWord(...args),
 }));
 
@@ -109,6 +110,7 @@ function mockApi({ words = [], wordsOk = true, deleteOk = true, saveOk = true, g
 beforeEach(() => {
   mocks.session = { data: null, isPending: false };
   mocks.translateWord.mockReset();
+  mocks.ocrImage.mockReset();
   localStorage.clear();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -769,6 +771,38 @@ describe("choosing a model per task", () => {
     await act(async () => { fireEvent.click(screen.getByText("Koira")); });
 
     expect(mocks.translateWord).toHaveBeenCalledWith("sk-ant-test", "Koira", SCANNED, OTHER.id);
+  });
+
+  it("sends the scan model the reader picked", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.ocrImage.mockResolvedValue("Kissa nukkuu.");
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await openModels();
+    const scanGroup = screen.getByRole("group", { name: /AI scan/ });
+    fireEvent.click(within(scanGroup).getByRole("radio", { name: new RegExp(OTHER.label) }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Re-scan with AI" })); });
+
+    // The picture and its type come from the local scan's own preview; the
+    // fourth argument is the whole point of the panel.
+    expect(mocks.ocrImage).toHaveBeenCalledWith("sk-ant-test", "AAAA", "image/jpeg", OTHER.id);
+    expect(await screen.findByText("nukkuu")).toBeTruthy();
+  });
+
+  it("re-scans with the default model when the reader picked nothing", async () => {
+    const { ocrLocal } = await import("../lib/ocr.js");
+    mocks.ocrImage.mockResolvedValue("Kissa nukkuu.");
+    mockApi();
+    render(<Luku />);
+
+    await scan(ocrLocal);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Re-scan with AI" })); });
+
+    expect(mocks.ocrImage).toHaveBeenCalledWith("sk-ant-test", "AAAA", "image/jpeg", DEFAULT_MODELS.ocr);
   });
 
   it("leaves the scan model where it was", async () => {
