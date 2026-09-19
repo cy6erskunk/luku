@@ -47,9 +47,23 @@ export async function POST(request) {
     ? [{ word, translation: formTranslation ?? null }]
     : [];
 
+  // next_review_at is set here rather than left to the column's DEFAULT NOW().
+  // A word is added because the reader just met it in a text, which is not a
+  // recall test, so it must not be due the instant it is saved: the web app
+  // hides freshly added words from the due queue for the rest of the scan
+  // (page.jsx's newWordIds), but that is per-mount React state the database
+  // knows nothing about — and the Telegram bot derives its whole queue from
+  // `next_review_at <= NOW()`. A word saved on the web therefore arrived in
+  // chat within the hour, sorted ahead of genuinely overdue cards.
+  //
+  // One day matches what a first review would have scheduled anyway
+  // (calcSRS's review_count === 0 branch), and no SRS counter is touched, so
+  // the first real grade still takes that branch. The DO UPDATE below leaves
+  // the column alone on purpose: re-adding a word to record a new inflection
+  // must not push its existing schedule out.
   const rows = await sql`
-    INSERT INTO words (user_id, base, translations, pos, forms, example, example_translation)
-    VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb, ${example ?? null}, ${example_translation ?? null})
+    INSERT INTO words (user_id, base, translations, pos, forms, example, example_translation, next_review_at)
+    VALUES (${user.id}, ${baseForm}, ${translations}, ${pos ?? "other"}, ${JSON.stringify(forms)}::jsonb, ${example ?? null}, ${example_translation ?? null}, NOW() + INTERVAL '1 day')
     ON CONFLICT (user_id, base) DO UPDATE
       SET translations = EXCLUDED.translations, pos = EXCLUDED.pos,
           forms = CASE

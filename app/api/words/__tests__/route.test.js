@@ -216,6 +216,41 @@ describe("POST /api/words", () => {
     expect(exampleTranslation).toBeNull();
   });
 
+  it("schedules a new word a day out rather than making it due immediately", async () => {
+    // The column's DEFAULT NOW() made every saved word due the moment it was
+    // saved. The web app hid them for the rest of the scan in React state, but
+    // the Telegram bot reads `next_review_at <= NOW()` and nothing else, so it
+    // served them within the hour — ahead of genuinely overdue cards.
+    mocks.sql = fakeSql([[WORD]]);
+    await POST(postRequest(BODY));
+
+    const { text } = mocks.sql.calls[0];
+    expect(text).toContain("next_review_at");
+    expect(text).toContain("NOW() + INTERVAL '1 day'");
+  });
+
+  it("leaves an existing word's schedule alone when it is re-added", async () => {
+    // Tapping a word again records a new inflection. Rescheduling it then would
+    // let a reader postpone a card indefinitely just by reading around it.
+    mocks.sql = fakeSql([[WORD]]);
+    await POST(postRequest(BODY));
+
+    const doUpdate = mocks.sql.calls[0].text.split("DO UPDATE")[1];
+    expect(doUpdate).not.toContain("next_review_at");
+  });
+
+  it("does not touch the SRS counters, so the first real grade is still a first review", async () => {
+    // calcSRS branches on review_count === 0 for the 1-day introduction. An
+    // insert that pre-set any of these would skip it.
+    mocks.sql = fakeSql([[WORD]]);
+    await POST(postRequest(BODY));
+
+    const { text } = mocks.sql.calls[0];
+    for (const column of ["review_count", "interval_days", "ease_factor"]) {
+      expect(text).not.toContain(column);
+    }
+  });
+
   it("upserts on the word rather than duplicating it", async () => {
     mocks.sql = fakeSql([[WORD]]);
     await POST(postRequest(BODY));

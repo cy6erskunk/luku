@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS words (
   ease_factor    FLOAT NOT NULL DEFAULT 2.5,
   interval_days  INT   NOT NULL DEFAULT 0,
   review_count   INT   NOT NULL DEFAULT 0,
+  -- The DEFAULT only covers a row inserted without it. /api/words sets this
+  -- explicitly to NOW() + 1 day, because a word is saved on first meeting it
+  -- in a text, not on recalling it; see the comment there.
   next_review_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
   added_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
