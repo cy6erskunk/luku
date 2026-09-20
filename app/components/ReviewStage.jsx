@@ -81,7 +81,12 @@ export default function ReviewStage({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 400 }}>{heading}</div>
           {isRepeat && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a9ebe", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>no schedule update</div>}
-          {isNewReview && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>keep or remove</div>}
+          {/* Not a gate: the word was written to the database the moment it
+              was added, and this pass is only an offer to undo. The bucket
+              driving it is session state, so a refresh or a new scan drops
+              the offer and the word simply stays — which is why the badge
+              says "saved" rather than asking to keep. */}
+          {isNewReview && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7ab4d4", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>saved · remove?</div>}
         </div>
         <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {queue.length}</div>
       </div>
