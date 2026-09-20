@@ -215,7 +215,9 @@ describe("ReviewStage – new-review mode", () => {
     setup({ isNewReview: true });
     // Both the step label and the mode heading contain "New words".
     expect(screen.getAllByText(/new words/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/keep or remove/i)).toBeTruthy();
+    // The badge says the word is already saved; the pass only offers Remove.
+    expect(screen.getByText(/saved · remove\?/i)).toBeTruthy();
+    expect(screen.queryByText(/keep or remove/i)).toBeNull();
   });
 
   it("shows Keep and Remove buttons after reveal", () => {

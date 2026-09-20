@@ -76,6 +76,12 @@ function LukuApp({ user }) {
   // the message is about, or null for one true anywhere.
   const [notice, setNotice] = useState(null);
   const [showTelegram, setShowTelegram] = useState(false);
+  // Ids added during this reading session, and nothing more: the rows are
+  // already in the database. The bucket only holds them out of the regular
+  // due queue long enough to offer a Remove, so losing it to a refresh or a
+  // new scan costs the offer, not the words. Keep is deliberately a no-op —
+  // an untriaged word and a kept one end up identical, which is the invariant
+  // the "saved · remove?" wording in ReviewStage is there to tell the reader.
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
