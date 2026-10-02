@@ -1,5 +1,6 @@
 import Cropper from "react-easy-crop";
 import { Bp, Bg } from "../lib/styles.js";
+import Spinner from "./Spinner.jsx";
 
 export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat }) {
   const {
@@ -81,7 +82,7 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
       {busy && (
         <div style={{ marginTop: 20, width: "100%", maxWidth: 400 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13, marginBottom: 8 }}>
-            <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>{step}
+            <Spinner size={13} />{step}
           </div>
           {ocrProgress > 0 && ocrProgress < 1 && (
             <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>

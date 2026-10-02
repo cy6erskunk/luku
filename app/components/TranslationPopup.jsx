@@ -1,4 +1,5 @@
 import { Bg } from "../lib/styles.js";
+import Spinner from "./Spinner.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -40,7 +41,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
         : popup.loading && !hasTranslation
         ? (
           <div style={{ textAlign: "center", padding: "18px 0", color: "#4a7c9e" }}>
-            <div style={{ fontSize: 22, animation: "spin 1s linear infinite", marginBottom: 6 }}>⟳</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><Spinner size={22} /></div>
             <div style={{ fontSize: 12 }}>Analysing "{popup.word}"…</div>
             {popup.existsInDb && <div style={{ marginTop: 8, display: "flex", justifyContent: "center" }}>{inListBadge}</div>}
           </div>
@@ -81,7 +82,7 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
             )}
             {popup.loading && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, color: "#4a7c9e", paddingBottom: 4 }}>
-                <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
+                <Spinner size={11} />
                 checking this form…
               </div>
             )}
