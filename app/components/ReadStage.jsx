@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import TranslationPopup from "./TranslationPopup.jsx";
 import { Bp, Bg } from "../lib/styles.js";
+import Spinner from "./Spinner.jsx";
 
 export default function ReadStage({
   tokens, session, savedBases, xlating,
@@ -18,7 +19,7 @@ export default function ReadStage({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {xlating && (
             <span style={{ fontSize: 11, color: "#4a7c9e", display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>translating…
+              <Spinner size={11} />translating…
             </span>
           )}
           <span style={{ fontSize: 11, color: "#555", background: "rgba(74,124,158,0.08)", padding: "2px 9px", borderRadius: 20 }}>tap any word</span>
