@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import ReviewStage from "../ReviewStage.jsx";
+
+afterEach(cleanup);
+
+const WORD = { id: 1, base: "toipua", translations: ["to recover"], pos: "verb", example: "Hän toipuu.", example_translation: "He recovers.", interval_days: 3, ease_factor: "2.5" };
+const NEXT = { id: 2, base: "koira", translations: ["dog"], pos: "noun", interval_days: 0, ease_factor: "2.5" };
+const S1 = { example: "Isä toipuu flunssasta sohvalla.", example_translation: "Dad is recovering from the flu on the sofa." };
+const S2 = { example: "Kissa toipuu leikkauksesta.", example_translation: "The cat is recovering from surgery." };
+
+function setup(props = {}) {
+  const all = {
+    queue: [1, 2], revIdx: 0, showAnswer: true, setShowAnswer: vi.fn(),
+    grading: false, dbWords: [WORD, NEXT], loadingWords: false,
+    onGrade: vi.fn(), onScanAnother: vi.fn(),
+    onSuggestExample: vi.fn().mockResolvedValueOnce(S1).mockResolvedValueOnce(S2),
+    onAcceptExample: vi.fn().mockResolvedValue(undefined),
+    ...props,
+  };
+  const view = render(<ReviewStage {...all} />);
+  return { ...all, rerender: (p) => view.rerender(<ReviewStage {...all} {...p} />) };
+}
+
+const openPicker = () => fireEvent.click(screen.getByRole("button", { name: /suggest a different example/i }));
+
+describe("ReviewStage – example suggestions", () => {
+  it("offers no button on the question side", () => {
+    setup({ showAnswer: false });
+    expect(screen.queryByRole("button", { name: /suggest/i })).toBeNull();
+  });
+
+  it("offers no button without a way to ask (no API key)", () => {
+    setup({ onSuggestExample: undefined });
+    expect(screen.queryByRole("button", { name: /suggest/i })).toBeNull();
+  });
+
+  it("offers one for a word without an example", () => {
+    setup({ queue: [2] });
+    expect(screen.getByRole("button", { name: /suggest an example/i })).toBeTruthy();
+  });
+
+  it("shows the suggestion and its translation", async () => {
+    const { onSuggestExample } = setup();
+    openPicker();
+
+    expect(await screen.findByText(S1.example)).toBeTruthy();
+    expect(screen.getByText(S1.example_translation)).toBeTruthy();
+    expect(onSuggestExample).toHaveBeenCalledWith(WORD, ["Hän toipuu."]);
+  });
+
+  it("asks for another, avoiding everything already shown", async () => {
+    const { onSuggestExample } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /another/i }));
+    expect(await screen.findByText(S2.example)).toBeTruthy();
+    expect(onSuggestExample).toHaveBeenLastCalledWith(WORD, ["Hän toipuu.", S1.example]);
+  });
+
+  it("stores the accepted example and closes", async () => {
+    const { onAcceptExample } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull());
+    expect(onAcceptExample).toHaveBeenCalledWith(1, S1);
+  });
+
+  it("closes on reject without storing anything", async () => {
+    const { onAcceptExample } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /reject/i }));
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+    expect(onAcceptExample).not.toHaveBeenCalled();
+  });
+
+  it("says so inside the popup when the save is refused, and stays open", async () => {
+    setup({ onAcceptExample: vi.fn().mockRejectedValue(new Error("500")) });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/couldn't save/i);
+    expect(screen.getByText(S1.example)).toBeTruthy();
+  });
+
+  it("says so when no example came back", async () => {
+    setup({ onSuggestExample: vi.fn().mockRejectedValue(new Error("boom")) });
+    openPicker();
+    expect((await screen.findByRole("alert")).textContent).toMatch(/couldn't get/i);
+    expect(screen.getByRole("button", { name: /accept/i }).disabled).toBe(true);
+  });
+
+  it("closes when the card moves on", async () => {
+    const { rerender } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    rerender({ revIdx: 1 });
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+  });
+});
+
+describe("ReviewStage – example suggestions on a card that comes round again", () => {
+  it("does not reopen the popup by itself", async () => {
+    const { rerender } = setup({ queue: [1, 1] });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    rerender({ queue: [1, 1], revIdx: 1 });
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+  });
+});

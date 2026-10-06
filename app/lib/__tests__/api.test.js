@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { callClaude, ocrImage, translateWord } from "../api.js";
+import { callClaude, ocrImage, translateWord, suggestExample } from "../api.js";
 import { SERVER_KEY } from "../utils.js";
 
 beforeEach(() => {
@@ -139,5 +139,51 @@ describe("translateWord", () => {
     }));
     const result = await translateWord("sk-test", "talo", "Talo on iso.");
     expect(result).toEqual({ base: "talo", translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null });
+  });
+});
+
+describe("suggestExample", () => {
+  const WORD = { base: "toipua", pos: "verb", translations: ["to recover"] };
+  const reply = (text) => vi.fn().mockImplementation((_url, opts) =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text }] }), opts }));
+
+  it("returns the example and its translation", async () => {
+    vi.stubGlobal("fetch", reply('{"example":"Isä toipuu flunssasta sohvalla.","example_translation":"Dad is recovering from the flu on the sofa."}'));
+    expect(await suggestExample("sk-test", WORD)).toEqual({
+      example: "Isä toipuu flunssasta sohvalla.",
+      example_translation: "Dad is recovering from the flu on the sofa.",
+    });
+  });
+
+  it("names the examples already seen so the next one differs", async () => {
+    const fetchMock = reply('{"example":"Uusi.","example_translation":"New."}');
+    vi.stubGlobal("fetch", fetchMock);
+    await suggestExample("sk-test", WORD, ["Hän toipuu.", null, "Koira toipuu."]);
+
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(prompt).toContain("toipua");
+    expect(prompt).toContain("to recover");
+    expect(prompt).toContain("- Hän toipuu.");
+    expect(prompt).toContain("- Koira toipuu.");
+  });
+
+  it("strips markdown fences", async () => {
+    vi.stubGlobal("fetch", reply('```json\n{"example":"Kissa nukkuu.","example_translation":"The cat sleeps."}\n```'));
+    expect((await suggestExample("sk-test", WORD)).example).toBe("Kissa nukkuu.");
+  });
+
+  it("keeps an example whose translation is missing", async () => {
+    vi.stubGlobal("fetch", reply('{"example":"Kissa nukkuu."}'));
+    expect((await suggestExample("sk-test", WORD)).example_translation).toBeNull();
+  });
+
+  it("throws rather than offering an unreadable reply", async () => {
+    vi.stubGlobal("fetch", reply("not json"));
+    await expect(suggestExample("sk-test", WORD)).rejects.toThrow();
+  });
+
+  it("throws when the reply has no example", async () => {
+    vi.stubGlobal("fetch", reply('{"example":"  ","example_translation":"x"}'));
+    await expect(suggestExample("sk-test", WORD)).rejects.toThrow();
   });
 });

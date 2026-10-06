@@ -14,7 +14,7 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
 
-const { GET, POST, DELETE } = await import("../route.js");
+const { GET, POST, DELETE, PATCH } = await import("../route.js");
 
 const WORD = {
   id: 7,
@@ -250,5 +250,62 @@ describe("POST /api/words", () => {
     await POST(postRequest(BODY));
 
     expect(mocks.sql.calls).toHaveLength(1);
+  });
+});
+
+describe("PATCH /api/words", () => {
+  const BODY = { id: 7, example: "Isä toipuu flunssasta.", example_translation: "Dad is recovering from the flu." };
+  const ROW = { id: 7, example: BODY.example, example_translation: BODY.example_translation };
+
+  it("returns 401 when signed out", async () => {
+    mocks.session = null;
+    const res = await PATCH(postRequest(BODY));
+
+    expect(res.status).toBe(401);
+    expect(mocks.sql.calls).toHaveLength(0);
+  });
+
+  it("stores the example against the session's user and returns it", async () => {
+    mocks.sql = fakeSql([[ROW]]);
+    const res = await PATCH(postRequest({ ...BODY, user_id: "someone-else" }));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).word).toEqual(ROW);
+    expect(mocks.sql.calls[0].values).toEqual([BODY.example, BODY.example_translation, 7, "u1"]);
+  });
+
+  it("writes only the example columns, leaving the schedule alone", async () => {
+    mocks.sql = fakeSql([[ROW]]);
+    await PATCH(postRequest(BODY));
+
+    const { text } = mocks.sql.calls[0];
+    expect(text).toMatch(/^UPDATE words SET example = \$1, example_translation = \$2\s+WHERE/);
+    expect(text).not.toContain("next_review_at");
+  });
+
+  it("stores a missing translation as null", async () => {
+    mocks.sql = fakeSql([[ROW]]);
+    await PATCH(postRequest({ ...BODY, example_translation: undefined }));
+
+    expect(mocks.sql.calls[0].values[1]).toBeNull();
+  });
+
+  it("returns 404 when the word is not the user's", async () => {
+    mocks.sql = fakeSql([[]]);
+    expect((await PATCH(postRequest(BODY))).status).toBe(404);
+  });
+
+  it.each([
+    ["a missing id", { ...BODY, id: undefined }],
+    ["a string id", { ...BODY, id: "7" }],
+    ["an empty example", { ...BODY, example: "  " }],
+    ["a non-string example", { ...BODY, example: 5 }],
+    ["an overlong example", { ...BODY, example: "a".repeat(501) }],
+    ["a non-string translation", { ...BODY, example_translation: ["x"] }],
+  ])("rejects %s without touching the database", async (_label, body) => {
+    const res = await PATCH(postRequest(body));
+
+    expect(res.status).toBe(400);
+    expect(mocks.sql.calls).toHaveLength(0);
   });
 });

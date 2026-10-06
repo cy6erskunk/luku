@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
-import { translateWord } from "./lib/api.js";
+import { translateWord, suggestExample } from "./lib/api.js";
 import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -208,6 +208,18 @@ function LukuApp({ user }) {
     if (!await handleDeleteWord(id)) {
       setNotice({ stage: 2, message: "Couldn't confirm that deletion — the word may still be on your list." });
     }
+  };
+
+  // Failures are told inside the example popup itself; these only add the
+  // cause for Sentry and hand the rejection back to it.
+  const handleSuggestExample = async (word, avoid) => {
+    try { return await suggestExample(effectiveKey, word, avoid); }
+    catch (e) { reportClientError("suggest example", e); throw e; }
+  };
+
+  const handleAcceptExample = async (id, { example, example_translation }) => {
+    try { await words.saveExample(id, example, example_translation); }
+    catch (e) { reportClientError("save example", e); throw e; }
   };
 
   const handleStartRepeat = () => {
@@ -503,6 +515,8 @@ function LukuApp({ user }) {
           onStartReview={handleStartReview}
           repeatWords={repeatWords}
           onStartRepeat={handleStartRepeat}
+          onSuggestExample={hasApiKey(effectiveKey) ? handleSuggestExample : undefined}
+          onAcceptExample={handleAcceptExample}
         />
       )}
 

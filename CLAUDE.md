@@ -48,6 +48,7 @@ app/
 │   ├── ScanStage.jsx           # Stage 0 — image upload / crop UI
 │   ├── ReadStage.jsx           # Stage 1 — tappable text + TranslationPopup
 │   ├── ReviewStage.jsx         # Stage 2 — flashcard review
+│   ├── ExamplePicker.jsx       # Answer-side popup: request / accept / reject a new example
 │   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
 │   ├── ApiKeyScreen.jsx        # API key entry screen
@@ -58,7 +59,7 @@ app/
 │   └── LukuLogo.jsx            # SVG logo
 └── api/
     ├── claude/route.js         # Server proxy for Anthropic API
-    ├── words/route.js          # CRUD for saved vocabulary
+    ├── words/route.js          # CRUD for saved vocabulary (PATCH replaces a word's example)
     ├── reviews/route.js        # SRS grading endpoint
     ├── auth/[...path]/route.js # Neon Auth catch-all
     └── telegram/
@@ -119,6 +120,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `callClaude()` (`api.js`) | Generic wrapper for Claude API calls via `/api/claude` |
 | `ocrImage()` (`api.js`) | Extracts text from image using Claude Vision |
 | `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech |
+| `suggestExample()` (`api.js`) | A fresh example for a saved word, avoiding the ones already seen; shares its memorability guide with `translateWord()` |
 | `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |
 | `fileToBase64()` (`image.js`) | Client-side image resize/compress (max 1024px, ≤400KB) |
 | `getCroppedImg()` (`image.js`) | Crops a canvas region to base64 |

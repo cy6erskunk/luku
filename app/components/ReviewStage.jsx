@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Bp, Bg } from "../lib/styles.js";
 import { wordForms } from "../lib/utils.js";
+import ExamplePicker from "./ExamplePicker.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -12,7 +14,12 @@ export default function ReviewStage({
   dueWords, onStartReview,
   preexistingNewIds,
   deletingIds,
+  onSuggestExample, onAcceptExample,
 }) {
+  // Which card's example popup is open, as queue position plus word id rather
+  // than a flag: moving on closes it without an effect, and a failed card
+  // coming round again later in the session does not reopen it.
+  const [pickingFor, setPickingFor] = useState(null);
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   if (loadingWords) {
     return (
@@ -70,6 +77,11 @@ export default function ReviewStage({
   const w = dbWords.find((dw) => dw.id === queue[revIdx]);
   if (!w) return null;
   const forms = wordForms(w);
+  // Offered on the answer side only: on the question side a new example would
+  // give the answer away before the reader has tried.
+  const canSuggest = showAnswer && !!onSuggestExample && !!onAcceptExample;
+  const cardKey = `${revIdx}:${w.id}`;
+  const picking = canSuggest && pickingFor === cardKey;
 
   const heading = isNewReview ? "New words" : isRepeat ? "Extra practice" : "Review";
   const isPreexisting = isNewReview && !!preexistingNewIds && preexistingNewIds.has(w.id);
@@ -104,8 +116,30 @@ export default function ReviewStage({
             <span aria-hidden="true">✓</span> in your list
           </div>
         )}
-        {w.example && (
-          <div style={{ marginTop: 10, fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>
+        {(w.example || canSuggest) && (
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            {w.example && <div style={{ fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>}
+            {canSuggest && (
+              <button
+                onClick={() => setPickingFor(picking ? null : cardKey)}
+                aria-label={w.example ? "Suggest a different example" : "Suggest an example"}
+                aria-expanded={picking}
+                title={w.example ? "Suggest a different example" : "Suggest an example"}
+                style={{ background: "none", border: "1px solid rgba(74,124,158,0.3)", borderRadius: 8, color: picking ? "#7ab4d4" : "#4a7c9e", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "3px 6px", flexShrink: 0 }}
+              >
+                {w.example ? "↻" : "+ example"}
+              </button>
+            )}
+          </div>
+        )}
+        {picking && (
+          <ExamplePicker
+            key={cardKey}
+            current={w.example}
+            onFetch={(avoid) => onSuggestExample(w, avoid)}
+            onAccept={(s) => onAcceptExample(w.id, s)}
+            onClose={() => setPickingFor(null)}
+          />
         )}
         {showAnswer && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>

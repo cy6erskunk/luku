@@ -173,6 +173,35 @@ describe("useWords – updateWord", () => {
   });
 });
 
+describe("useWords – saveExample", () => {
+  it("sends a PATCH and merges only the example fields", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, example: "Hän juoksee.", interval_days: 3 }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    mockFetchJson({ word: { id: 1, example: "Koira juoksee puistossa.", example_translation: "The dog runs in the park." } });
+    await act(() => result.current.saveExample(1, "Koira juoksee puistossa.", "The dog runs in the park."));
+
+    const [url, opts] = fetch.mock.calls[0];
+    expect(url).toBe("/api/words");
+    expect(opts.method).toBe("PATCH");
+    expect(JSON.parse(opts.body)).toEqual({ id: 1, example: "Koira juoksee puistossa.", example_translation: "The dog runs in the park." });
+    expect(result.current.dbWords[0]).toEqual({
+      ...WORD_A, interval_days: 3, example: "Koira juoksee puistossa.", example_translation: "The dog runs in the park.",
+    });
+  });
+
+  it("throws and leaves the word unchanged on a refused save", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, example: "Hän juoksee." }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    mockFetch({ ok: false, status: 500 });
+    await expect(result.current.saveExample(1, "Uusi.", null)).rejects.toThrow("500");
+    expect(result.current.dbWords[0].example).toBe("Hän juoksee.");
+  });
+});
+
 describe("useWords – removeWord / restoreWord", () => {
   it("removes the word with the given id", async () => {
     mockFetchJson({ words: [WORD_A, WORD_B] });
