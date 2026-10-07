@@ -266,3 +266,23 @@ describe("ReviewStage – the trigger during a grade", () => {
     expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(true);
   });
 });
+
+describe("ReviewStage – the opening request under Strict Mode", () => {
+  it("is sent once, not once per probe mount", async () => {
+    const { StrictMode } = await import("react");
+    const onSuggestExample = vi.fn().mockResolvedValue(S1);
+    render(
+      <StrictMode>
+        <ReviewStage
+          queue={[1]} revIdx={0} showAnswer setShowAnswer={vi.fn()} grading={false}
+          dbWords={[WORD]} loadingWords={false} onGrade={vi.fn()} onScanAnother={vi.fn()}
+          onSuggestExample={onSuggestExample} onAcceptExample={vi.fn()}
+        />
+      </StrictMode>,
+    );
+    openPicker();
+
+    expect(await screen.findByText(S1.example)).toBeTruthy();
+    expect(onSuggestExample).toHaveBeenCalledTimes(1);
+  });
+});

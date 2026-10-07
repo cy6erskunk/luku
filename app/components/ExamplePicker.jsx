@@ -50,11 +50,14 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose, onS
 
   // Asked for once on open: the button that opened it was the request. The
   // cleanup retires whatever is still in flight, so a reply arriving after
-  // the card moved on is dropped.
+  // the card moved on is dropped. Started on a timer rather than directly:
+  // development's Strict Mode mounts, unmounts and remounts at once, and only
+  // a request not yet sent can be called off — a started one is already
+  // billed.
   useEffect(() => {
     const requests = requestRef;
-    fetchOne();
-    return () => { requests.current++; };
+    const timer = setTimeout(fetchOne, 0);
+    return () => { clearTimeout(timer); requests.current++; };
   }, [fetchOne]);
 
   // Not while saving, for the same reason Reject is disabled then: closed
