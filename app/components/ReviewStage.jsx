@@ -14,7 +14,7 @@ export default function ReviewStage({
   dueWords, onStartReview,
   preexistingNewIds,
   deletingIds,
-  onSuggestExample, onAcceptExample,
+  onSuggestExample, onAcceptExample, onExampleSaveLost,
 }) {
   // Which card's example popup is open, as queue position plus word id rather
   // than a flag: moving on closes it without an effect, and a failed card
@@ -160,6 +160,7 @@ export default function ReviewStage({
               finally { setSavingExample(false); }
             }}
             onClose={() => setPickingFor(null)}
+            onSaveLost={onExampleSaveLost}
           />
         )}
         {showAnswer && (

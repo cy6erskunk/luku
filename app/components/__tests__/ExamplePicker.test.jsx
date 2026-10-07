@@ -209,3 +209,53 @@ describe("ReviewStage – a pass restarted from outside the card", () => {
     expect(onSuggestExample).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ReviewStage – a save that fails after the popup is gone", () => {
+  const pendingSave = () => {
+    let fail;
+    const onAcceptExample = vi.fn(() => new Promise((_resolve, reject) => { fail = reject; }));
+    return { onAcceptExample, fail: () => fail(new Error("500")) };
+  };
+
+  it("hands the failure on when the pass was restarted mid-save", async () => {
+    const save = pendingSave();
+    const onExampleSaveLost = vi.fn();
+    const { rerender } = setup({ onAcceptExample: save.onAcceptExample, onExampleSaveLost });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    rerender({ onAcceptExample: save.onAcceptExample, onExampleSaveLost, showAnswer: false });
+    save.fail();
+
+    await waitFor(() => expect(onExampleSaveLost).toHaveBeenCalledTimes(1));
+  });
+
+  it("hands the failure on when the whole review stage unmounted mid-save", async () => {
+    const save = pendingSave();
+    const onExampleSaveLost = vi.fn();
+    setup({ onAcceptExample: save.onAcceptExample, onExampleSaveLost });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    cleanup();
+    save.fail();
+
+    await waitFor(() => expect(onExampleSaveLost).toHaveBeenCalledTimes(1));
+  });
+
+  it("tells it in the popup instead while the popup is still open", async () => {
+    const save = pendingSave();
+    const onExampleSaveLost = vi.fn();
+    setup({ onAcceptExample: save.onAcceptExample, onExampleSaveLost });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    save.fail();
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/couldn't save/i);
+    expect(onExampleSaveLost).not.toHaveBeenCalled();
+  });
+});

@@ -10,9 +10,11 @@ import { Bp, Bg } from "../lib/styles.js";
  * `onFetch(avoid)` resolves to { example, example_translation }; `onAccept`
  * stores one. Both reject on failure, and the failure is told here rather
  * than in the page banner, which sits beneath the card the reader is looking
- * at.
+ * at — unless the popup is gone by the time a save fails. The reader can
+ * still leave mid-save (the header switches stage or restarts the pass), and
+ * then `onSaveLost` hands the failure to something that outlived the card.
  */
-export default function ExamplePicker({ current, onFetch, onAccept, onClose }) {
+export default function ExamplePicker({ current, onFetch, onAccept, onClose, onSaveLost }) {
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -21,6 +23,12 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose }) {
   // asks for something new rather than the one just turned down.
   const seenRef = useRef(current ? [current] : []);
   const requestRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    const mounted = mountedRef;
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   // Read through a ref so a parent passing a fresh function each render does
   // not re-run the opening request.
   const onFetchRef = useRef(onFetch);
@@ -66,6 +74,7 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose }) {
       await onAccept(suggestion);
       onClose();
     } catch {
+      if (!mountedRef.current) { onSaveLost?.(); return; }
       setError("Couldn't save that example.");
       setSaving(false);
     }

@@ -222,6 +222,13 @@ function LukuApp({ user }) {
     catch (e) { reportClientError("save example", e); throw e; }
   };
 
+  // Only when the popup was closed before the save failed — the reader left
+  // the card or the stage. Not tied to a stage, since leaving one is exactly
+  // how the popup went away. "Confirm", because a refusal and a lost response
+  // look the same from here.
+  const handleExampleSaveLost = () =>
+    setNotice({ stage: null, message: "Couldn't confirm the new example was saved." });
+
   const handleStartRepeat = () => {
     if (words.loadingWords || review.grading || words.dbWords.length === 0) return;
     const pool = [...words.dbWords]
@@ -517,6 +524,7 @@ function LukuApp({ user }) {
           onStartRepeat={handleStartRepeat}
           onSuggestExample={hasApiKey(effectiveKey) ? handleSuggestExample : undefined}
           onAcceptExample={handleAcceptExample}
+          onExampleSaveLost={handleExampleSaveLost}
         />
       )}
 
