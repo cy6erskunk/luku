@@ -29,6 +29,15 @@ export default function ReviewStage({
   // to the ↻ that opened it instead — after the close has rendered, since an
   // accepted save leaves the trigger disabled until that same render.
   const triggerRef = useRef(null);
+  // Suggestions already shown, per word, for as long as this screen is up —
+  // so closing the popup and opening it again does not offer back a sentence
+  // the reader just rejected. A Map held in state is a stable container; the
+  // popup appends to the array it is handed.
+  const [seenByWord] = useState(() => new Map());
+  const seenFor = (id) => {
+    if (!seenByWord.has(id)) seenByWord.set(id, []);
+    return seenByWord.get(id);
+  };
   const restoreFocusRef = useRef(false);
   useEffect(() => {
     if (!restoreFocusRef.current) return;
@@ -148,6 +157,9 @@ export default function ReviewStage({
               <button
                 ref={triggerRef}
                 onClick={() => setPickingFor(picking ? null : cardKey)}
+                // Focus stays here after opening, so Escape has to close the
+                // popup from here too, now that it no longer listens on the window.
+                onKeyDown={(e) => { if (e.key === "Escape" && picking && !savingExample) setPickingFor(null); }}
                 // Closing mid-save would unmount the only place a failed save
                 // is told, and reopening would allow a second, overlapping one.
                 // Mid-grade the card is still up, but a save started now could
@@ -167,8 +179,9 @@ export default function ReviewStage({
         {picking && (
           <ExamplePicker
             key={cardKey}
-            current={w.example}
-            onFetch={(avoid) => onSuggestExample(w, avoid)}
+            seen={seenFor(w.id)}
+            // The stored example first: it is the one the reader wants replaced.
+            onFetch={(shown) => onSuggestExample(w, [...new Set([w.example, ...shown].filter(Boolean))])}
             onAccept={async (s) => {
               setSavingExample(true);
               try { await onAcceptExample(w.id, s); }

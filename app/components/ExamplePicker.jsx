@@ -7,21 +7,22 @@ import { Bp, Bg } from "../lib/styles.js";
  * its card — ReviewStage keys it on the word id, so grading or moving on
  * unmounts it and any reply still in flight writes to nothing.
  *
- * `onFetch(avoid)` resolves to { example, example_translation }; `onAccept`
+ * `onFetch(shown)` is handed the suggestions already shown and resolves to { example, example_translation }; `onAccept`
  * stores one. Both reject on failure, and the failure is told here rather
  * than in the page banner, which sits beneath the card the reader is looking
  * at — unless the popup is gone by the time a save fails. The reader can
  * still leave mid-save (the header switches stage or restarts the pass), and
  * then `onSaveLost` hands the failure to something that outlived the card.
  */
-export default function ExamplePicker({ current, onFetch, onAccept, onClose, onSaveLost }) {
+export default function ExamplePicker({ seen, onFetch, onAccept, onClose, onSaveLost }) {
   const [suggestion, setSuggestion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  // Every example the reader has already seen for this word, so "another"
-  // asks for something new rather than the one just turned down.
-  const seenRef = useRef(current ? [current] : []);
+  // Every suggestion the reader has already been shown for this word, so
+  // "another" asks for something new rather than one just turned down. Owned
+  // by the parent and appended to here, so it outlives a close and reopen.
+  const seenRef = useRef(seen ?? []);
   const requestRef = useRef(0);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -60,14 +61,12 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose, onS
     return () => { clearTimeout(timer); requests.current++; };
   }, [fetchOne]);
 
-  // Not while saving, for the same reason Reject is disabled then: closed
-  // mid-save, a refused save would have nowhere left to be told.
-  useEffect(() => {
-    if (saving) return;
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  // Escape is handled on the popup itself rather than the window, so it only
+  // closes this when focus is here: one press otherwise also reached the
+  // header menu, or a dialog, and closed both. Not while saving, for the same
+  // reason Reject is disabled then: closed mid-save, a refused save would
+  // have nowhere left to be told.
+  const onKeyDown = (e) => { if (e.key === "Escape" && !saving) onClose(); };
 
   const accept = async () => {
     if (!suggestion || saving) return;
@@ -88,6 +87,7 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose, onS
   return (
     <div
       role="group"
+      onKeyDown={onKeyDown}
       aria-label="Suggested example"
       style={{ marginTop: 10, width: "100%", textAlign: "left", background: "#161a22", border: "1px solid rgba(74,124,158,0.35)", borderRadius: 12, padding: "12px 14px", animation: "fadeUp 0.15s ease-out" }}
     >

@@ -163,8 +163,9 @@ describe("ReviewStage – the popup during a save", () => {
     openPicker();
     await screen.findByText(S1.example);
 
-    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
-    fireEvent.keyDown(window, { key: "Escape" });
+    const accept = screen.getByRole("button", { name: /accept/i });
+    fireEvent.click(accept);
+    fireEvent.keyDown(accept, { key: "Escape" });
     expect(screen.getByRole("group", { name: /suggested example/i })).toBeTruthy();
 
     save.fail();
@@ -176,7 +177,7 @@ describe("ReviewStage – the popup during a save", () => {
     openPicker();
     await screen.findByText(S1.example);
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("button", { name: /reject/i }), { key: "Escape" });
     expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
   });
 
@@ -307,8 +308,9 @@ describe("ReviewStage – focus after the popup closes", () => {
     openPicker();
     await screen.findByText(S1.example);
 
-    screen.getByRole("button", { name: /another/i }).focus();
-    fireEvent.keyDown(window, { key: "Escape" });
+    const another = screen.getByRole("button", { name: /another/i });
+    another.focus();
+    fireEvent.keyDown(another, { key: "Escape" });
 
     await waitFor(() => expect(document.activeElement).toBe(trigger()));
   });
@@ -324,6 +326,55 @@ describe("ReviewStage – focus after the popup closes", () => {
 
     await waitFor(() => expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull());
     expect(trigger().disabled).toBe(false);
-    expect(document.activeElement).toBe(trigger());
+    // Moved in an effect after the closing render, which may flush a tick later.
+    await waitFor(() => expect(document.activeElement).toBe(trigger()));
+  });
+});
+
+describe("ReviewStage – Escape is scoped to the popup", () => {
+  it("closes it from the trigger that opened it", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /suggest a different example/i }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+  });
+
+  it("leaves it open for an Escape meant for something else", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    // The header menu listens on the document; its Escape must not close this too.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.getByRole("group", { name: /suggested example/i })).toBeTruthy();
+  });
+});
+
+describe("ReviewStage – suggestions already shown survive a reopen", () => {
+  it("still avoids a rejected suggestion after closing and reopening", async () => {
+    const { onSuggestExample } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /reject/i }));
+    openPicker();
+    await screen.findByText(S2.example);
+
+    expect(onSuggestExample).toHaveBeenLastCalledWith(WORD, ["Hän toipuu.", S1.example]);
+  });
+
+  it("keeps each word's list to itself", async () => {
+    const onSuggestExample = vi.fn().mockResolvedValueOnce(S1).mockResolvedValueOnce(S2);
+    const { rerender } = setup({ onSuggestExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    rerender({ onSuggestExample, revIdx: 1 });
+    fireEvent.click(screen.getByRole("button", { name: /suggest an example/i }));
+    await screen.findByText(S2.example);
+
+    expect(onSuggestExample).toHaveBeenLastCalledWith(NEXT, []);
   });
 });
