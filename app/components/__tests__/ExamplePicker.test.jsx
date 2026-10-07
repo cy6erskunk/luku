@@ -117,3 +117,35 @@ describe("ReviewStage – example suggestions on a card that comes round again",
     expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
   });
 });
+
+describe("ReviewStage – leaving a card with the popup open", () => {
+  it("does not reopen it when the word lands on the same position in the next pass", async () => {
+    // A preexisting word skipped in the new-words pass is still due, so the
+    // review that follows can put it back at index 0.
+    const onRemoveNew = vi.fn();
+    const { rerender } = setup({ isNewReview: true, preexistingNewIds: new Set([1]), onRemoveNew });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /skip/i }));
+    expect(onRemoveNew).toHaveBeenCalledWith(1);
+    rerender({ isNewReview: true, preexistingNewIds: new Set([1]), showAnswer: false });
+    rerender({ isNewReview: false, revIdx: 0, showAnswer: true });
+
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+  });
+
+  it("holds grading until an accepted example is saved", async () => {
+    let finish;
+    const onAcceptExample = vi.fn(() => new Promise((r) => { finish = r; }));
+    setup({ onAcceptExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(true));
+
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false));
+  });
+});
