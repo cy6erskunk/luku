@@ -254,8 +254,12 @@ describe("POST /api/words", () => {
 });
 
 describe("PATCH /api/words", () => {
-  const BODY = { id: 7, example: "Isä toipuu flunssasta.", example_translation: "Dad is recovering from the flu." };
-  const ROW = { id: 7, example: BODY.example, example_translation: BODY.example_translation };
+  // The body arrives padded, as text pasted from elsewhere would; the row is
+  // what the database hands back after the route has trimmed it. Kept
+  // different on purpose, so a route echoing its input cannot pass for one
+  // returning the stored row.
+  const BODY = { id: 7, example: "  Isä toipuu flunssasta.  ", example_translation: " Dad is recovering from the flu. " };
+  const ROW = { id: 7, example: "Isä toipuu flunssasta.", example_translation: "Dad is recovering from the flu." };
 
   it("returns 401 when signed out", async () => {
     mocks.session = null;
@@ -265,13 +269,19 @@ describe("PATCH /api/words", () => {
     expect(mocks.sql.calls).toHaveLength(0);
   });
 
-  it("stores the example against the session's user and returns it", async () => {
+  it("stores the trimmed example against the session's user", async () => {
     mocks.sql = fakeSql([[ROW]]);
-    const res = await PATCH(postRequest({ ...BODY, user_id: "someone-else" }));
+    await PATCH(postRequest({ ...BODY, user_id: "someone-else" }));
+
+    expect(mocks.sql.calls[0].values).toEqual([ROW.example, ROW.example_translation, 7, "u1"]);
+  });
+
+  it("returns the stored row, not the body it was sent", async () => {
+    mocks.sql = fakeSql([[ROW]]);
+    const res = await PATCH(postRequest(BODY));
 
     expect(res.status).toBe(200);
     expect((await res.json()).word).toEqual(ROW);
-    expect(mocks.sql.calls[0].values).toEqual([BODY.example, BODY.example_translation, 7, "u1"]);
   });
 
   it("writes only the example columns, leaving the schedule alone", async () => {
