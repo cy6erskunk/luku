@@ -49,11 +49,14 @@ export default function ExamplePicker({ current, onFetch, onAccept, onClose }) {
     return () => { requests.current++; };
   }, [fetchOne]);
 
+  // Not while saving, for the same reason Reject is disabled then: closed
+  // mid-save, a refused save would have nowhere left to be told.
   useEffect(() => {
+    if (saving) return;
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, saving]);
 
   const accept = async () => {
     if (!suggestion || saving) return;

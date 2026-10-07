@@ -149,3 +149,63 @@ describe("ReviewStage – leaving a card with the popup open", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false));
   });
 });
+
+describe("ReviewStage – the popup during a save", () => {
+  const pendingSave = () => {
+    let fail;
+    const onAcceptExample = vi.fn(() => new Promise((_resolve, reject) => { fail = reject; }));
+    return { onAcceptExample, fail: () => fail(new Error("500")) };
+  };
+
+  it("ignores Escape, so a refused save is still told", async () => {
+    const save = pendingSave();
+    setup({ onAcceptExample: save.onAcceptExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("group", { name: /suggested example/i })).toBeTruthy();
+
+    save.fail();
+    expect((await screen.findByRole("alert")).textContent).toMatch(/couldn't save/i);
+  });
+
+  it("still closes on Escape when nothing is saving", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+  });
+
+  it("disables the trigger until the save settles", async () => {
+    const save = pendingSave();
+    setup({ onAcceptExample: save.onAcceptExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(true);
+
+    save.fail();
+    await waitFor(() => expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(false));
+  });
+});
+
+describe("ReviewStage – a pass restarted from outside the card", () => {
+  it("does not reopen the popup on the same card", async () => {
+    // The header's "N new" chip restarts the pass without touching the card's
+    // buttons: same position, same word, answer hidden then shown again.
+    const { rerender, onSuggestExample } = setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    rerender({ showAnswer: false });
+    rerender({ showAnswer: true });
+
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+    expect(onSuggestExample).toHaveBeenCalledTimes(1);
+  });
+});

@@ -24,10 +24,16 @@ export default function ReviewStage({
   // settles: a grade sent alongside could answer last with the row as it was
   // before the PATCH, and its reply replaces the whole local word.
   const [savingExample, setSavingExample] = useState(false);
-  // Every way off a card closes the popup. Without this a word skipped in the
-  // new-words pass, still due, could land on the same queue position in the
-  // review that follows and reopen it — and send a request — unasked.
+  // Every way off a card closes the popup, at the click rather than when the
+  // grade comes back.
   const leaving = (fn) => (...args) => { setPickingFor(null); return fn?.(...args); };
+  // And so does anything that hides the answer — a grade, a skip, a session
+  // started from the header — since the popup only exists on the answer side.
+  // Otherwise a pass restarted, or a skipped word that is still due turning
+  // up at the same position in the next pass, would match the stale key and
+  // reopen it, sending a request nobody asked for. Adjusted during render
+  // rather than in an effect so the stale popup never paints.
+  if (!showAnswer && pickingFor !== null) setPickingFor(null);
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   if (loadingWords) {
     return (
@@ -130,6 +136,9 @@ export default function ReviewStage({
             {canSuggest && (
               <button
                 onClick={() => setPickingFor(picking ? null : cardKey)}
+                // Closing mid-save would unmount the only place a failed save
+                // is told, and reopening would allow a second, overlapping one.
+                disabled={savingExample}
                 aria-label={w.example ? "Suggest a different example" : "Suggest an example"}
                 aria-expanded={picking}
                 title={w.example ? "Suggest a different example" : "Suggest an example"}
