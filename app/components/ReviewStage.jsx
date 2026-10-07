@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Bp, Bg } from "../lib/styles.js";
 import { wordForms } from "../lib/utils.js";
 import ExamplePicker from "./ExamplePicker.jsx";
@@ -24,6 +24,17 @@ export default function ReviewStage({
   // settles: a grade sent alongside could answer last with the row as it was
   // before the PATCH, and its reply replaces the whole local word.
   const [savingExample, setSavingExample] = useState(false);
+  // Closing the popup from inside removes the button that had focus, which
+  // would drop a keyboard reader back to the top of the page. Focus goes back
+  // to the ↻ that opened it instead — after the close has rendered, since an
+  // accepted save leaves the trigger disabled until that same render.
+  const triggerRef = useRef(null);
+  const restoreFocusRef = useRef(false);
+  useEffect(() => {
+    if (!restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    triggerRef.current?.focus();
+  });
   // Every way off a card closes the popup, at the click rather than when the
   // grade comes back.
   const leaving = (fn) => (...args) => { setPickingFor(null); return fn?.(...args); };
@@ -135,6 +146,7 @@ export default function ReviewStage({
             {w.example && <div style={{ fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>}
             {canSuggest && (
               <button
+                ref={triggerRef}
                 onClick={() => setPickingFor(picking ? null : cardKey)}
                 // Closing mid-save would unmount the only place a failed save
                 // is told, and reopening would allow a second, overlapping one.
@@ -162,7 +174,7 @@ export default function ReviewStage({
               try { await onAcceptExample(w.id, s); }
               finally { setSavingExample(false); }
             }}
-            onClose={() => setPickingFor(null)}
+            onClose={() => { restoreFocusRef.current = true; setPickingFor(null); }}
             onSaveLost={onExampleSaveLost}
           />
         )}

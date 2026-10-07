@@ -286,3 +286,44 @@ describe("ReviewStage – the opening request under Strict Mode", () => {
     expect(onSuggestExample).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ReviewStage – focus after the popup closes", () => {
+  const trigger = () => screen.getByRole("button", { name: /suggest a different example/i });
+
+  it("returns to the trigger after Reject", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    const reject = screen.getByRole("button", { name: /reject/i });
+    reject.focus();
+    fireEvent.click(reject);
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger()));
+  });
+
+  it("returns to the trigger after Escape", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    screen.getByRole("button", { name: /another/i }).focus();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger()));
+  });
+
+  it("returns to the trigger after an accepted save, once it is enabled again", async () => {
+    setup();
+    openPicker();
+    await screen.findByText(S1.example);
+
+    const accept = screen.getByRole("button", { name: /accept/i });
+    accept.focus();
+    fireEvent.click(accept);
+
+    await waitFor(() => expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull());
+    expect(trigger().disabled).toBe(false);
+    expect(document.activeElement).toBe(trigger());
+  });
+});
