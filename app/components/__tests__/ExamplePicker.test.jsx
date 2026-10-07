@@ -259,3 +259,10 @@ describe("ReviewStage – a save that fails after the popup is gone", () => {
     expect(onExampleSaveLost).not.toHaveBeenCalled();
   });
 });
+
+describe("ReviewStage – the trigger during a grade", () => {
+  it("is disabled until the grade settles", () => {
+    setup({ grading: true });
+    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(true);
+  });
+});

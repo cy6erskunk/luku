@@ -138,7 +138,10 @@ export default function ReviewStage({
                 onClick={() => setPickingFor(picking ? null : cardKey)}
                 // Closing mid-save would unmount the only place a failed save
                 // is told, and reopening would allow a second, overlapping one.
-                disabled={savingExample}
+                // Mid-grade the card is still up, but a save started now could
+                // land before the grade's reply, which replaces the whole local
+                // word with the row as it was before the save.
+                disabled={savingExample || grading}
                 aria-label={w.example ? "Suggest a different example" : "Suggest an example"}
                 aria-expanded={picking}
                 title={w.example ? "Suggest a different example" : "Suggest an example"}
