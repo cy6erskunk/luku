@@ -15,7 +15,7 @@ const WORDS = [
 ];
 
 function makeProps(overrides = {}) {
-  return { dbWords: WORDS, updateWord: vi.fn(), stage: 2, ...overrides };
+  return { dbWords: WORDS, applySchedule: vi.fn(), stage: 2, ...overrides };
 }
 
 describe("useReview – startReview", () => {
@@ -105,16 +105,16 @@ describe("useReview – gradeWord", () => {
     expect(onGradeError).not.toHaveBeenCalled();
   });
 
-  it("calls updateWord with the server response", async () => {
+  it("calls applySchedule with the server response", async () => {
     const updated = { ...WORDS[0], interval_days: 3 };
     vi.stubGlobal("fetch", vi.fn(() =>
       Promise.resolve({ ok: true, json: () => Promise.resolve({ word: updated }) })
     ));
-    const updateWord = vi.fn();
-    const { result } = renderHook(() => useReview(makeProps({ updateWord })));
+    const applySchedule = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ applySchedule })));
     act(() => result.current.startReview(WORDS));
     await act(() => result.current.gradeWord(5));
-    expect(updateWord).toHaveBeenCalledWith(updated);
+    expect(applySchedule).toHaveBeenCalledWith(updated);
   });
 
   it("drops a missing word from queue and does not advance revIdx", async () => {

@@ -135,18 +135,30 @@ describe("ReviewStage – leaving a card with the popup open", () => {
     expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
   });
 
-  it("holds grading until an accepted example is saved", async () => {
-    let finish;
-    const onAcceptExample = vi.fn(() => new Promise((r) => { finish = r; }));
-    setup({ onAcceptExample });
+  it("lets the reader grade while an accepted example is saving", async () => {
+    // A grade's reply only touches the schedule, so it cannot undo the save
+    // whichever answers first; there is nothing to hold the reader for.
+    const onAcceptExample = vi.fn(() => new Promise(() => {}));
+    const onGrade = vi.fn();
+    setup({ onAcceptExample, onGrade });
     openPicker();
     await screen.findByText(S1.example);
 
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(true));
+    const easy = screen.getByRole("button", { name: /easy/i });
+    expect(easy.disabled).toBe(false);
+    fireEvent.click(easy);
+    expect(onGrade).toHaveBeenCalledWith(5);
+  });
 
-    finish();
-    await waitFor(() => expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false));
+  it("still holds Remove while an accepted example is saving", async () => {
+    const onAcceptExample = vi.fn(() => new Promise(() => {}));
+    setup({ onAcceptExample, isNewReview: true, onRemoveNew: vi.fn(), onKeepNew: vi.fn() });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(true));
   });
 });
 
@@ -262,9 +274,9 @@ describe("ReviewStage – a save that fails after the popup is gone", () => {
 });
 
 describe("ReviewStage – the trigger during a grade", () => {
-  it("is disabled until the grade settles", () => {
+  it("stays available: a grade's reply cannot overwrite an example", () => {
     setup({ grading: true });
-    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(false);
   });
 });
 

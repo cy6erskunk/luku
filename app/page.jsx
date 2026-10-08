@@ -111,7 +111,7 @@ function LukuApp({ user }) {
   const image = useImageProcessing({ savedKey: effectiveKey, onTextReady: handleTextReady });
   const review = useReview({
     dbWords: words.dbWords,
-    updateWord: words.updateWord,
+    applySchedule: words.applySchedule,
     stage,
     onGradeError: () => setNotice({ stage: 2, message: "Couldn't confirm that answer was saved." }),
   });
