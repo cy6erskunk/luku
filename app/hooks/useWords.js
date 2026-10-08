@@ -58,6 +58,25 @@ export function useWords(userId) {
     setDbWords((prev) => prev.map((w) => w.id === updated.id ? updated : w));
   };
 
+  /**
+   * Stores a new example for a saved word. Only the example fields are merged
+   * into the local copy: the row may have been graded while the request was
+   * out, and the reply carries nothing else.
+   */
+  const saveExample = async (id, example, example_translation) => {
+    const r = await fetch("/api/words", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, example, example_translation }),
+    });
+    if (!r.ok) throw new Error(`Failed to save example (${r.status})`);
+    const { word: saved } = await r.json();
+    setDbWords((prev) => prev.map((w) => w.id === id
+      ? { ...w, example: saved.example, example_translation: saved.example_translation }
+      : w));
+    return saved;
+  };
+
   const removeWord = (id) => {
     setDbWords((prev) => prev.filter((w) => w.id !== id));
   };
@@ -66,5 +85,5 @@ export function useWords(userId) {
     setDbWords((prev) => prev.some((w) => w.id === word.id) ? prev : [...prev, word]);
   };
 
-  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, updateWord, removeWord, restoreWord };
+  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, saveExample, updateWord, removeWord, restoreWord };
 }

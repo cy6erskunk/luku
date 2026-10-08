@@ -66,3 +66,33 @@ export async function POST(request) {
   `;
   return Response.json({ word: rows[0] ?? null });
 }
+
+/** Longer than any example worth keeping; a cap so a body cannot store an essay. */
+const MAX_EXAMPLE = 500;
+const isExampleText = (v) => typeof v === "string" && v.trim() !== "" && v.length <= MAX_EXAMPLE;
+
+/**
+ * Replaces a saved word's example. Only the two example columns are written,
+ * so a grade landing at the same moment keeps its schedule.
+ */
+export async function PATCH(request) {
+  const { data: session } = await getAuth().getSession();
+  const user = session?.user;
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id, example, example_translation } = await request.json();
+  if (!isValidWordId(id)) return Response.json({ error: "Invalid id" }, { status: 400 });
+  if (!isExampleText(example)) return Response.json({ error: "Invalid example" }, { status: 400 });
+  if (example_translation != null && (typeof example_translation !== "string" || example_translation.length > MAX_EXAMPLE)) {
+    return Response.json({ error: "Invalid example_translation" }, { status: 400 });
+  }
+
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE words SET example = ${example.trim()}, example_translation = ${example_translation?.trim() || null}
+    WHERE id = ${id} AND user_id = ${user.id}
+    RETURNING id, example, example_translation
+  `;
+  if (!rows[0]) return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json({ word: rows[0] });
+}

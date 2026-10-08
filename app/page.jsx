@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
 import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
-import { translateWord } from "./lib/api.js";
+import { translateWord, suggestExample } from "./lib/api.js";
 import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
 import SignIn from "./components/SignIn.jsx";
@@ -209,6 +209,25 @@ function LukuApp({ user }) {
       setNotice({ stage: 2, message: "Couldn't confirm that deletion — the word may still be on your list." });
     }
   };
+
+  // Failures are told inside the example popup itself; these only add the
+  // cause for Sentry and hand the rejection back to it.
+  const handleSuggestExample = async (word, avoid) => {
+    try { return await suggestExample(effectiveKey, word, avoid); }
+    catch (e) { reportClientError("suggest example", e); throw e; }
+  };
+
+  const handleAcceptExample = async (id, { example, example_translation }) => {
+    try { await words.saveExample(id, example, example_translation); }
+    catch (e) { reportClientError("save example", e); throw e; }
+  };
+
+  // Only when the popup was closed before the save failed — the reader left
+  // the card or the stage. Not tied to a stage, since leaving one is exactly
+  // how the popup went away. "Confirm", because a refusal and a lost response
+  // look the same from here.
+  const handleExampleSaveLost = () =>
+    setNotice({ stage: null, message: "Couldn't confirm the new example was saved." });
 
   const handleStartRepeat = () => {
     if (words.loadingWords || review.grading || words.dbWords.length === 0) return;
@@ -503,6 +522,9 @@ function LukuApp({ user }) {
           onStartReview={handleStartReview}
           repeatWords={repeatWords}
           onStartRepeat={handleStartRepeat}
+          onSuggestExample={hasApiKey(effectiveKey) ? handleSuggestExample : undefined}
+          onAcceptExample={handleAcceptExample}
+          onExampleSaveLost={handleExampleSaveLost}
         />
       )}
 

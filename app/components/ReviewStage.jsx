@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from "react";
 import { Bp, Bg } from "../lib/styles.js";
 import { wordForms } from "../lib/utils.js";
+import ExamplePicker from "./ExamplePicker.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
@@ -12,7 +14,46 @@ export default function ReviewStage({
   dueWords, onStartReview,
   preexistingNewIds,
   deletingIds,
+  onSuggestExample, onAcceptExample, onExampleSaveLost,
 }) {
+  // Which card's example popup is open, as queue position plus word id rather
+  // than a flag: moving on closes it without an effect, and a failed card
+  // coming round again later in the session does not reopen it.
+  const [pickingFor, setPickingFor] = useState(null);
+  // True while an accepted example is being saved. Moving on is held until it
+  // settles: a grade sent alongside could answer last with the row as it was
+  // before the PATCH, and its reply replaces the whole local word.
+  const [savingExample, setSavingExample] = useState(false);
+  // Closing the popup from inside removes the button that had focus, which
+  // would drop a keyboard reader back to the top of the page. Focus goes back
+  // to the ↻ that opened it instead — after the close has rendered, since an
+  // accepted save leaves the trigger disabled until that same render.
+  const triggerRef = useRef(null);
+  // Suggestions already shown, per word, for as long as this screen is up —
+  // so closing the popup and opening it again does not offer back a sentence
+  // the reader just rejected. A Map held in state is a stable container; the
+  // popup appends to the array it is handed.
+  const [seenByWord] = useState(() => new Map());
+  const seenFor = (id) => {
+    if (!seenByWord.has(id)) seenByWord.set(id, []);
+    return seenByWord.get(id);
+  };
+  const restoreFocusRef = useRef(false);
+  useEffect(() => {
+    if (!restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    triggerRef.current?.focus();
+  });
+  // Every way off a card closes the popup, at the click rather than when the
+  // grade comes back.
+  const leaving = (fn) => (...args) => { setPickingFor(null); return fn?.(...args); };
+  // And so does anything that hides the answer — a grade, a skip, a session
+  // started from the header — since the popup only exists on the answer side.
+  // Otherwise a pass restarted, or a skipped word that is still due turning
+  // up at the same position in the next pass, would match the stale key and
+  // reopen it, sending a request nobody asked for. Adjusted during render
+  // rather than in an effect so the stale popup never paints.
+  if (!showAnswer && pickingFor !== null) setPickingFor(null);
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   if (loadingWords) {
     return (
@@ -70,6 +111,11 @@ export default function ReviewStage({
   const w = dbWords.find((dw) => dw.id === queue[revIdx]);
   if (!w) return null;
   const forms = wordForms(w);
+  // Offered on the answer side only: on the question side a new example would
+  // give the answer away before the reader has tried.
+  const canSuggest = showAnswer && !!onSuggestExample && !!onAcceptExample;
+  const cardKey = `${revIdx}:${w.id}`;
+  const picking = canSuggest && pickingFor === cardKey;
 
   const heading = isNewReview ? "New words" : isRepeat ? "Extra practice" : "Review";
   const isPreexisting = isNewReview && !!preexistingNewIds && preexistingNewIds.has(w.id);
@@ -104,8 +150,46 @@ export default function ReviewStage({
             <span aria-hidden="true">✓</span> in your list
           </div>
         )}
-        {w.example && (
-          <div style={{ marginTop: 10, fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>
+        {(w.example || canSuggest) && (
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            {w.example && <div style={{ fontSize: 13, color: "#6b645e", fontStyle: "italic" }}>{w.example}</div>}
+            {canSuggest && (
+              <button
+                ref={triggerRef}
+                onClick={() => setPickingFor(picking ? null : cardKey)}
+                // Focus stays here after opening, so Escape has to close the
+                // popup from here too, now that it no longer listens on the window.
+                onKeyDown={(e) => { if (e.key === "Escape" && picking && !savingExample) setPickingFor(null); }}
+                // Closing mid-save would unmount the only place a failed save
+                // is told, and reopening would allow a second, overlapping one.
+                // Mid-grade the card is still up, but a save started now could
+                // land before the grade's reply, which replaces the whole local
+                // word with the row as it was before the save.
+                disabled={savingExample || grading}
+                aria-label={w.example ? "Suggest a different example" : "Suggest an example"}
+                aria-expanded={picking}
+                title={w.example ? "Suggest a different example" : "Suggest an example"}
+                style={{ background: "none", border: "1px solid rgba(74,124,158,0.3)", borderRadius: 8, color: picking ? "#7ab4d4" : "#4a7c9e", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "3px 6px", flexShrink: 0 }}
+              >
+                {w.example ? "↻" : "+ example"}
+              </button>
+            )}
+          </div>
+        )}
+        {picking && (
+          <ExamplePicker
+            key={cardKey}
+            seen={seenFor(w.id)}
+            // The stored example first: it is the one the reader wants replaced.
+            onFetch={(shown) => onSuggestExample(w, [...new Set([w.example, ...shown].filter(Boolean))])}
+            onAccept={async (s) => {
+              setSavingExample(true);
+              try { await onAcceptExample(w.id, s); }
+              finally { setSavingExample(false); }
+            }}
+            onClose={() => { restoreFocusRef.current = true; setPickingFor(null); }}
+            onSaveLost={onExampleSaveLost}
+          />
         )}
         {showAnswer && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
@@ -135,11 +219,11 @@ export default function ReviewStage({
         : isNewReview
         ? (() => {
           const isDeleting = !!deletingIds && deletingIds.has(w.id);
-          const busy = grading || isDeleting;
+          const busy = grading || isDeleting || savingExample;
           return (
             <div style={{ display: "flex", gap: 8, opacity: busy ? 0.5 : 1 }}>
               <button
-                onClick={() => onRemoveNew?.(w.id)}
+                onClick={leaving(() => onRemoveNew?.(w.id))}
                 disabled={busy}
                 title={isPreexisting ? "Skip: keep study history and drop from the new-words bucket" : "Delete this word from your list"}
                 style={isPreexisting
@@ -148,15 +232,15 @@ export default function ReviewStage({
               >
                 {isPreexisting ? "Skip" : "Remove"}
               </button>
-              <button onClick={() => onKeepNew?.(w.id)} disabled={busy} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
+              <button onClick={leaving(() => onKeepNew?.(w.id))} disabled={busy} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
             </div>
           );
         })()
         : (
-          <div style={{ display: "flex", gap: 8, opacity: grading ? 0.5 : 1 }}>
-            <button onClick={() => onGrade(1)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
-            <button onClick={() => onGrade(3)} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(158,138,80,0.4)", color: "#c4b870", fontSize: 13 }}>Hard</button>
-            <button onClick={() => onGrade(5)} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Easy</button>
+          <div style={{ display: "flex", gap: 8, opacity: grading || savingExample ? 0.5 : 1 }}>
+            <button onClick={leaving(() => onGrade(1))} disabled={grading || savingExample} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
+            <button onClick={leaving(() => onGrade(3))} disabled={grading || savingExample} style={{ ...Bg, flex: 1, borderColor: "rgba(158,138,80,0.4)", color: "#c4b870", fontSize: 13 }}>Hard</button>
+            <button onClick={leaving(() => onGrade(5))} disabled={grading || savingExample} style={{ ...Bp, flex: 1, fontSize: 13 }}>Easy</button>
           </div>
         )
       }
