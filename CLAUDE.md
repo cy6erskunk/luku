@@ -211,6 +211,50 @@ changing it:
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
   `lib/__tests__/helpers/fakeSql.js` for the tagged-template query function
 
+## Before pushing UI that waits on a request
+
+Every one of these came up in review on #137, one per round, when they could
+all have been answered before the first push. Answer each one for the change
+in hand, then run `/code-review` on the diff before pushing.
+
+- **What else writes this row while my request is out?** A reply must update
+  only the fields its own write owns. Grading answers with `RETURNING *`, and
+  a reply swapped in whole put back an example saved in the meantime. Merge
+  the columns the write touched; never replace the local row.
+- **What if the component unmounts mid-request?** A reply arriving after it
+  is gone must write to nothing, and a *failure* arriving after it is gone
+  must still be told. If the popup was the only place an error is shown, hand
+  it to `Notice` when the popup is gone (see `onSaveLost` in `ExamplePicker`).
+  Don't let the reader close the one place a pending failure would appear.
+- **What decides whether this UI is open, and does every way out reset it?**
+  State tied to "the current card" must clear on every path off that card:
+  grade, skip, delete, a pass restarted from the header, a stage switch. Keying
+  on queue position alone collides when the same word comes back at the
+  same index. Prefer one rule ("closes whenever the answer hides") to wrapping
+  each exit.
+- **Does it survive Strict Mode?** The App Router runs every effect
+  setup → cleanup → setup in development. An effect that *starts* a paid
+  request must be cancellable before it is sent (a cleared zero-delay timer),
+  not merely have its reply ignored.
+- **Keyboard: where does focus go, and who else hears this key?** Closing
+  something that holds focus must return focus to what opened it, after
+  the closing render, since a still-disabled button cannot take focus. Handle
+  keys on the element, not `window`: `HeaderMenu` already listens for Escape
+  on `document`, so a second global listener closes two things with one
+  press. (`useDialog` catches Escape on `document` in the capture phase and
+  stops it, which is the one global handler that is meant to win.)
+- **Does the state live as long as the UI's promise?** "Never offers the same
+  example twice" needs a list that outlives the popup it was shown in.
+- **Can each test fail for the reason its name gives?** Values that are meant
+  to differ (request body vs stored row) must differ in the fixture, and a new
+  test should be seen failing without the change it covers.
+
+Not every finding a reviewer raises is worth code. Before building a fix for
+a race, trace a realistic path to it: a sub-second request that has to outlast
+deliberate human navigation, with a worst case of a stale screen until the
+next load, is not worth a lifted lock or a versioned write. Say so on the
+thread instead.
+
 ## Environment Variables
 
 | Variable | Required | Description |
