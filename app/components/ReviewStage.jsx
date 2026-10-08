@@ -20,9 +20,9 @@ export default function ReviewStage({
   // than a flag: moving on closes it without an effect, and a failed card
   // coming round again later in the session does not reopen it.
   const [pickingFor, setPickingFor] = useState(null);
-  // True while an accepted example is being saved. Moving on is held until it
-  // settles: a grade sent alongside could answer last with the row as it was
-  // before the PATCH, and its reply replaces the whole local word.
+  // True while an accepted example is being saved. Grading needs no hold for
+  // it — a grade's reply only touches the schedule (useWords.applySchedule) —
+  // but the trigger and Remove do: see where each is disabled.
   const [savingExample, setSavingExample] = useState(false);
   // Closing the popup from inside removes the button that had focus, which
   // would drop a keyboard reader back to the top of the page. Focus goes back
@@ -162,10 +162,7 @@ export default function ReviewStage({
                 onKeyDown={(e) => { if (e.key === "Escape" && picking && !savingExample) setPickingFor(null); }}
                 // Closing mid-save would unmount the only place a failed save
                 // is told, and reopening would allow a second, overlapping one.
-                // Mid-grade the card is still up, but a save started now could
-                // land before the grade's reply, which replaces the whole local
-                // word with the row as it was before the save.
-                disabled={savingExample || grading}
+                disabled={savingExample}
                 aria-label={w.example ? "Suggest a different example" : "Suggest an example"}
                 aria-expanded={picking}
                 title={w.example ? "Suggest a different example" : "Suggest an example"}
@@ -219,6 +216,7 @@ export default function ReviewStage({
         : isNewReview
         ? (() => {
           const isDeleting = !!deletingIds && deletingIds.has(w.id);
+          // Held during a save so Remove cannot delete the word under it.
           const busy = grading || isDeleting || savingExample;
           return (
             <div style={{ display: "flex", gap: 8, opacity: busy ? 0.5 : 1 }}>
@@ -237,10 +235,10 @@ export default function ReviewStage({
           );
         })()
         : (
-          <div style={{ display: "flex", gap: 8, opacity: grading || savingExample ? 0.5 : 1 }}>
-            <button onClick={leaving(() => onGrade(1))} disabled={grading || savingExample} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
-            <button onClick={leaving(() => onGrade(3))} disabled={grading || savingExample} style={{ ...Bg, flex: 1, borderColor: "rgba(158,138,80,0.4)", color: "#c4b870", fontSize: 13 }}>Hard</button>
-            <button onClick={leaving(() => onGrade(5))} disabled={grading || savingExample} style={{ ...Bp, flex: 1, fontSize: 13 }}>Easy</button>
+          <div style={{ display: "flex", gap: 8, opacity: grading ? 0.5 : 1 }}>
+            <button onClick={leaving(() => onGrade(1))} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
+            <button onClick={leaving(() => onGrade(3))} disabled={grading} style={{ ...Bg, flex: 1, borderColor: "rgba(158,138,80,0.4)", color: "#c4b870", fontSize: 13 }}>Hard</button>
+            <button onClick={leaving(() => onGrade(5))} disabled={grading} style={{ ...Bp, flex: 1, fontSize: 13 }}>Easy</button>
           </div>
         )
       }

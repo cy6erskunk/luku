@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { reportClientError } from "../lib/report.js";
 
-export function useReview({ dbWords, updateWord, stage, onGradeError }) {
+export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
   const [queue, setQueue] = useState([]);
   const [revIdx, setRevIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -81,7 +81,7 @@ export function useReview({ dbWords, updateWord, stage, onGradeError }) {
       });
       if (!r.ok) throw new Error(`grade failed: ${r.status}`);
       const { word: updated } = await r.json();
-      if (updated) updateWord(updated);
+      if (updated) applySchedule(updated);
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);

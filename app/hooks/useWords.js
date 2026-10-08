@@ -54,8 +54,17 @@ export function useWords(userId) {
     return saved;
   };
 
-  const updateWord = (updated) => {
-    setDbWords((prev) => prev.map((w) => w.id === updated.id ? updated : w));
+  /**
+   * Applies a grade's result. Only the columns a grade writes are taken from
+   * the reply: it is the whole row as the database held it then, and swapping
+   * it in wholesale let a grade that answered late put back an example the
+   * reader had replaced in the meantime. Fields a grade does not own can now
+   * never be overwritten by one, whatever order the replies arrive in.
+   */
+  const applySchedule = ({ id, ease_factor, interval_days, next_review_at, review_count }) => {
+    setDbWords((prev) => prev.map((w) => w.id === id
+      ? { ...w, ease_factor, interval_days, next_review_at, review_count }
+      : w));
   };
 
   /**
@@ -85,5 +94,5 @@ export function useWords(userId) {
     setDbWords((prev) => prev.some((w) => w.id === word.id) ? prev : [...prev, word]);
   };
 
-  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, saveExample, updateWord, removeWord, restoreWord };
+  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, saveExample, applySchedule, removeWord, restoreWord };
 }

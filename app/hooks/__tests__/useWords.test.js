@@ -160,16 +160,33 @@ describe("useWords – saveWord", () => {
   });
 });
 
-describe("useWords – updateWord", () => {
-  it("replaces the matching word in dbWords", async () => {
+describe("useWords – applySchedule", () => {
+  const GRADED = { id: 1, ease_factor: "2.6", interval_days: 6, next_review_at: "2026-10-14T06:00:00.000Z", review_count: 3 };
+
+  it("applies the schedule columns to the matching word", async () => {
     mockFetchJson({ words: [WORD_A, WORD_B] });
     const { result } = renderHook(() => useWords("user-1"));
     await waitFor(() => expect(result.current.dbWords).toHaveLength(2));
 
-    const updated = { ...WORD_A, translations: ["to sprint"] };
-    act(() => result.current.updateWord(updated));
-    expect(result.current.dbWords.find((w) => w.id === 1).translations).toEqual(["to sprint"]);
-    expect(result.current.dbWords).toHaveLength(2);
+    act(() => result.current.applySchedule(GRADED));
+    expect(result.current.dbWords.find((w) => w.id === 1)).toEqual({ ...WORD_A, ...GRADED });
+    expect(result.current.dbWords.find((w) => w.id === 2)).toEqual(WORD_B);
+  });
+
+  it("ignores everything else in a grade's reply, so a late one cannot undo a newer example", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, example: "Hän juoksee." }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    mockFetchJson({ word: { id: 1, example: "Koira juoksee puistossa.", example_translation: "The dog runs in the park." } });
+    await act(() => result.current.saveExample(1, "Koira juoksee puistossa.", "The dog runs in the park."));
+    // The grade was answered before the save landed, so its row still has the old example.
+    act(() => result.current.applySchedule({ ...WORD_A, ...GRADED, example: "Hän juoksee.", translations: ["stale"] }));
+
+    const word = result.current.dbWords[0];
+    expect(word.example).toBe("Koira juoksee puistossa.");
+    expect(word.translations).toEqual(WORD_A.translations);
+    expect(word.interval_days).toBe(6);
   });
 });
 
