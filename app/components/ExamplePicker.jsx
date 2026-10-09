@@ -4,15 +4,16 @@ import { Bp, Bg } from "../lib/styles.js";
 /**
  * Small popup under a review card's example: asks for a new example, then
  * lets the reader keep it, ask for another, or close. Lives only as long as
- * its card — ReviewStage keys it on the word id, so grading or moving on
+ * its card — ReviewStage keys it on queue position and word id, so moving on
  * unmounts it and any reply still in flight writes to nothing.
  *
  * `onFetch(shown)` is handed the suggestions already shown and resolves to { example, example_translation }; `onAccept`
  * stores one. Both reject on failure, and the failure is told here rather
  * than in the page banner, which sits beneath the card the reader is looking
- * at — unless the popup is gone by the time a save fails. The reader can
- * still leave mid-save (the header switches stage or restarts the pass), and
- * then `onSaveLost` hands the failure to something that outlived the card.
+ * at — unless the popup is gone by the time a save fails. ReviewStage holds
+ * every way off the card during a save, but the header can still leave
+ * mid-save (it switches stage or restarts the pass), and then `onSaveLost`
+ * hands the failure to something that outlived the card.
  */
 export default function ExamplePicker({ seen, onFetch, onAccept, onClose, onSaveLost }) {
   const [suggestion, setSuggestion] = useState(null);
@@ -74,6 +75,9 @@ export default function ExamplePicker({ seen, onFetch, onAccept, onClose, onSave
     setError(null);
     try {
       await onAccept(suggestion);
+      // Gone already: closing would only queue a focus move onto whatever
+      // card the reader is on by the next render.
+      if (!mountedRef.current) return;
       onClose();
     } catch {
       if (!mountedRef.current) { onSaveLost?.(); return; }
@@ -108,7 +112,7 @@ export default function ExamplePicker({ seen, onFetch, onAccept, onClose, onSave
       <div style={{ display: "flex", gap: 6, marginTop: 10, opacity: busy ? 0.5 : 1 }}>
         <button onClick={onClose} disabled={saving} title="Keep the current example" style={{ ...Bg, flex: 1, fontSize: 12, padding: "6px 8px" }}>Reject</button>
         <button onClick={fetchOne} disabled={busy} style={{ ...Bg, flex: 1, fontSize: 12, padding: "6px 8px" }}>↻ Another</button>
-        <button onClick={accept} disabled={busy || !suggestion} style={{ ...Bp, flex: 1, fontSize: 12, padding: "6px 8px" }}>Accept</button>
+        <button onClick={accept} disabled={busy || !suggestion} style={{ ...Bp, flex: 1, fontSize: 12, padding: "6px 8px" }}>{saving ? "Saving…" : "Accept"}</button>
       </div>
     </div>
   );
