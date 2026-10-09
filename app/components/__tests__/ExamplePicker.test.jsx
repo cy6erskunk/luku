@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-library/react";
 import ReviewStage from "../ReviewStage.jsx";
 
 afterEach(cleanup);
@@ -135,30 +135,39 @@ describe("ReviewStage – leaving a card with the popup open", () => {
     expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
   });
 
-  it("lets the reader grade while an accepted example is saving", async () => {
-    // A grade's reply only touches the schedule, so it cannot undo the save
-    // whichever answers first; there is nothing to hold the reader for.
-    const onAcceptExample = vi.fn(() => new Promise(() => {}));
-    const onGrade = vi.fn();
-    setup({ onAcceptExample, onGrade });
+  // Grading would unmount the popup, the one place a refused save is told
+  // beside its card.
+  it("holds the grades while an accepted example is saving, and says why", async () => {
+    let fail;
+    const onAcceptExample = vi.fn(() => new Promise((_resolve, reject) => { fail = reject; }));
+    setup({ onAcceptExample });
     openPicker();
     await screen.findByText(S1.example);
+    expect(screen.getByRole("status").textContent).toBe("");
 
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
-    const easy = screen.getByRole("button", { name: /easy/i });
-    expect(easy.disabled).toBe(false);
-    fireEvent.click(easy);
-    expect(onGrade).toHaveBeenCalledWith(5);
+    for (const name of [/again/i, /hard/i, /easy/i]) {
+      expect(screen.getByRole("button", { name }).disabled).toBe(true);
+    }
+    expect(screen.getByRole("status").textContent).toMatch(/saving the new example/i);
+    expect(screen.getByRole("button", { name: /saving/i }).disabled).toBe(true);
+
+    fail(new Error("500"));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/couldn't save/i);
+    expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false);
+    expect(screen.getByRole("status").textContent).toBe("");
   });
 
-  it("still holds Remove while an accepted example is saving", async () => {
+  it("holds Keep and Remove while an accepted example is saving", async () => {
     const onAcceptExample = vi.fn(() => new Promise(() => {}));
     setup({ onAcceptExample, isNewReview: true, onRemoveNew: vi.fn(), onKeepNew: vi.fn() });
     openPicker();
     await screen.findByText(S1.example);
+    expect(screen.getByRole("button", { name: /keep/i }).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(true));
+    expect(screen.getByRole("button", { name: /remove/i }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /keep/i }).disabled).toBe(true);
   });
 });
 
@@ -258,6 +267,28 @@ describe("ReviewStage – a save that fails after the popup is gone", () => {
     await waitFor(() => expect(onExampleSaveLost).toHaveBeenCalledTimes(1));
   });
 
+  it("moves no focus when it succeeds after the pass was restarted", async () => {
+    // Restarted from the header and the answer shown again before the save
+    // lands: the reader is somewhere else on the page by then.
+    let succeed;
+    const onAcceptExample = vi.fn(() => new Promise((resolve) => { succeed = resolve; }));
+    const { rerender } = setup({ onAcceptExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    rerender({ onAcceptExample, showAnswer: false });
+    rerender({ onAcceptExample, showAnswer: true });
+    const elsewhere = document.createElement("button");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    await act(async () => { succeed(); });
+
+    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(false);
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+  });
+
   it("tells it in the popup instead while the popup is still open", async () => {
     const save = pendingSave();
     const onExampleSaveLost = vi.fn();
@@ -273,9 +304,46 @@ describe("ReviewStage – a save that fails after the popup is gone", () => {
   });
 });
 
+describe("ReviewStage – the save hold belongs to the word being saved", () => {
+  it("does not follow the reader onto another word after a restart from the header", async () => {
+    const onAcceptExample = vi.fn(() => new Promise(() => {}));
+    const { rerender } = setup({ onAcceptExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    rerender({ onAcceptExample, showAnswer: false });
+    rerender({ onAcceptExample, revIdx: 1, showAnswer: true });
+
+    expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false);
+    expect(screen.getByRole("button", { name: /suggest an example/i }).disabled).toBe(false);
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+});
+
+describe("ReviewStage – losing the means to suggest", () => {
+  it("closes the popup, so it does not reopen and ask again when they return", async () => {
+    const onSuggestExample = vi.fn().mockResolvedValue(S1);
+    const { rerender } = setup({ onSuggestExample });
+    openPicker();
+    await screen.findByText(S1.example);
+
+    rerender({ onSuggestExample: undefined });
+    rerender({ onSuggestExample });
+
+    expect(screen.queryByRole("group", { name: /suggested example/i })).toBeNull();
+    expect(onSuggestExample).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("ReviewStage – the trigger during a grade", () => {
-  it("stays available: a grade's reply cannot overwrite an example", () => {
-    setup({ grading: true });
+  // The grade's reply hides the answer and closes the popup, so a request
+  // sent now would be paid for and never seen.
+  it("is held, so no suggestion is sent for a card about to move on", () => {
+    const { rerender } = setup({ grading: true });
+    expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(true);
+
+    rerender({ grading: false });
     expect(screen.getByRole("button", { name: /suggest a different example/i }).disabled).toBe(false);
   });
 });
