@@ -20,18 +20,21 @@ export default function ReviewStage({
   // than a flag: moving on closes it without an effect, and a failed card
   // coming round again later in the session does not reopen it.
   const [pickingFor, setPickingFor] = useState(null);
-  // The id of the word whose accepted example is being saved. The reader stays
-  // on that card until it settles: every way off it — Again/Hard/Easy, Keep,
+  // The ids of the words whose accepted examples are being saved — a set, since
+  // a header restart can leave one save running while another word's starts,
+  // and each must release only its own hold. The reader stays on such a card
+  // until its save settles: every way off it — Again/Hard/Easy, Keep,
   // Remove — unmounts the popup, the only place a refused save is told beside
   // the card it was about. A grade's reply could not undo the save
   // (useWords.applySchedule), so this is about telling, not ordering. The
   // header can still leave mid-save (`onExampleSaveLost` covers that), and the
   // hold stays with the word rather than following the reader.
-  const [savingFor, setSavingFor] = useState(null);
+  const [savingIds, setSavingIds] = useState(() => new Set());
   // Closing the popup from inside removes the button that had focus, which
   // would drop a keyboard reader back to the top of the page. Focus goes back
-  // to the ↻ that opened it instead — after the close has rendered, since an
-  // accepted save leaves the trigger disabled until that same render.
+  // to the ↻ that opened it instead — after the close has rendered, since the
+  // trigger stays disabled while its card is held (here, until the accepted
+  // save's own render) and a disabled button cannot take focus.
   const triggerRef = useRef(null);
   // Suggestions already shown, per word, for as long as this screen is up —
   // so closing the popup and opening it again does not offer back a sentence
@@ -48,6 +51,9 @@ export default function ReviewStage({
     restoreFocusRef.current = false;
     triggerRef.current?.focus();
   });
+  // Offered on the answer side only: on the question side a new example would
+  // give the answer away before the reader has tried.
+  const canSuggest = showAnswer && !!onSuggestExample && !!onAcceptExample;
   // Every way off a card closes the popup, at the click rather than when the
   // grade comes back.
   const leaving = (fn) => (...args) => { setPickingFor(null); return fn?.(...args); };
@@ -58,7 +64,7 @@ export default function ReviewStage({
   // up at the same position in the next pass, would match the stale key and
   // reopen it, sending a request nobody asked for. Adjusted during render
   // rather than in an effect so the stale popup never paints.
-  if (!(showAnswer && onSuggestExample && onAcceptExample) && pickingFor !== null) setPickingFor(null);
+  if (!canSuggest && pickingFor !== null) setPickingFor(null);
   const stepLabel = isNewReview ? "Step 3 — New words" : "Step 3 — Review";
   if (loadingWords) {
     return (
@@ -116,12 +122,9 @@ export default function ReviewStage({
   const w = dbWords.find((dw) => dw.id === queue[revIdx]);
   if (!w) return null;
   const forms = wordForms(w);
-  // Offered on the answer side only: on the question side a new example would
-  // give the answer away before the reader has tried.
-  const canSuggest = showAnswer && !!onSuggestExample && !!onAcceptExample;
   const cardKey = `${revIdx}:${w.id}`;
   const picking = canSuggest && pickingFor === cardKey;
-  const savingExample = savingFor === w.id;
+  const savingExample = savingIds.has(w.id);
   // Every way off the card waits for its grade to land and its example to save.
   const held = grading || savingExample;
 
@@ -190,9 +193,12 @@ export default function ReviewStage({
             // The stored example first: it is the one the reader wants replaced.
             onFetch={(shown) => onSuggestExample(w, [...new Set([w.example, ...shown].filter(Boolean))])}
             onAccept={async (s) => {
-              setSavingFor(w.id);
-              try { await onAcceptExample(w.id, s); }
-              finally { setSavingFor(null); }
+              const id = w.id;
+              setSavingIds((prev) => new Set(prev).add(id));
+              try { await onAcceptExample(id, s); }
+              finally {
+                setSavingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+              }
             }}
             onClose={() => { restoreFocusRef.current = true; setPickingFor(null); }}
             onSaveLost={onExampleSaveLost}

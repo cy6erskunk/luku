@@ -319,6 +319,32 @@ describe("ReviewStage – the save hold belongs to the word being saved", () => 
     expect(screen.getByRole("button", { name: /suggest an example/i }).disabled).toBe(false);
     expect(screen.getByRole("status").textContent).toBe("");
   });
+
+  it("is released only by its own save when two overlap", async () => {
+    // A restarted from the header mid-save, then B accepted while A's save is
+    // still out: A settling must not release B.
+    const saves = {};
+    const onAcceptExample = vi.fn((id) => new Promise((resolve) => { saves[id] = resolve; }));
+    const onSuggestExample = vi.fn().mockResolvedValueOnce(S1).mockResolvedValueOnce(S2);
+    const { rerender } = setup({ onAcceptExample, onSuggestExample });
+    openPicker();
+    await screen.findByText(S1.example);
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+
+    rerender({ onAcceptExample, onSuggestExample, showAnswer: false });
+    rerender({ onAcceptExample, onSuggestExample, revIdx: 1, showAnswer: true });
+    fireEvent.click(screen.getByRole("button", { name: /suggest an example/i }));
+    await screen.findByText(S2.example);
+    fireEvent.click(screen.getByRole("button", { name: /accept/i }));
+    expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(true);
+
+    await act(async () => { saves[1](); });
+    expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(true);
+    expect(screen.getByRole("status").textContent).toMatch(/saving the new example/i);
+
+    await act(async () => { saves[2](); });
+    expect(screen.getByRole("button", { name: /easy/i }).disabled).toBe(false);
+  });
 });
 
 describe("ReviewStage – losing the means to suggest", () => {
