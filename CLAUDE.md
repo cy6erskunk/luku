@@ -70,7 +70,8 @@ app/
 lib/                            # Server-only (except shared/); app/lib/ is the client half
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
-│   └── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
+│   └── schedule.js             # The columns a grade writes: /api/reviews' reply and applySchedule's merge
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
@@ -218,9 +219,10 @@ all have been answered before the first push. Answer each one for the change
 in hand, then run `/code-review` on the diff before pushing.
 
 - **What else writes this row while my request is out?** A reply must update
-  only the fields its own write owns. Grading answers with `RETURNING *`, and
-  a reply swapped in whole put back an example saved in the meantime. Merge
-  the columns the write touched; never replace the local row.
+  only the fields its own write owns. Grading once answered with the whole
+  row, and a reply swapped in whole put back an example saved in the meantime.
+  Return only the columns the write touched (`/api/reviews` projects through
+  `lib/shared/schedule.js`), merge only those, and never replace the local row.
 - **What if the component unmounts mid-request?** A reply arriving after it
   is gone must write to nothing, and a *failure* arriving after it is gone
   must still be told. If the popup was the only place an error is shown, hand

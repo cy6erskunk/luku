@@ -188,6 +188,18 @@ describe("useWords – applySchedule", () => {
     expect(word.translations).toEqual(WORD_A.translations);
     expect(word.interval_days).toBe(6);
   });
+
+  it("keeps a column the reply lacks instead of blanking it", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, review_count: 2, ease_factor: "2.5" }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    act(() => result.current.applySchedule({ id: 1, interval_days: 6, next_review_at: GRADED.next_review_at }));
+    const word = result.current.dbWords[0];
+    expect(word.review_count).toBe(2);
+    expect(word.ease_factor).toBe("2.5");
+    expect(word.interval_days).toBe(6);
+  });
 });
 
 describe("useWords – saveExample", () => {

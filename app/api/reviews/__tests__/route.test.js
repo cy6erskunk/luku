@@ -66,14 +66,21 @@ describe("POST /api/reviews", () => {
     expect((await res.json()).error).toBe("Not found");
   });
 
-  it("grades the card and returns the updated row", async () => {
-    const updated = { ...CARD, interval_days: 15, review_count: 3 };
+  it("grades the card and returns only its new schedule", async () => {
+    // RETURNING * hands back the whole row, example included; none of it but
+    // the schedule may reach the browser, where it could overwrite a newer edit.
+    // Every schedule column differs from CARD, so a reply built from the
+    // pre-grade read would not match.
+    const NEXT = new Date("2026-08-28T06:00:00.123Z");
+    const updated = { ...CARD, ease_factor: 2.6, interval_days: 15, next_review_at: NEXT, review_count: 3, example: "Hän juoksee.", translations: ["to run"] };
     mocks.sql = fakeSql([[CARD], [updated]]);
 
     const res = await POST(makeRequest({ wordId: 7, grade: 5 }));
     expect(res.status).toBe(200);
     // Compared after a JSON round-trip: timestamps reach the client as strings.
-    expect((await res.json()).word).toEqual(JSON.parse(JSON.stringify(updated)));
+    expect((await res.json()).word).toEqual(JSON.parse(JSON.stringify({
+      id: 7, ease_factor: 2.6, interval_days: 15, next_review_at: NEXT, review_count: 3,
+    })));
   });
 
   it("scopes both queries to the signed-in user", async () => {

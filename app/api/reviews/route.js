@@ -1,6 +1,7 @@
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 import { gradeWord, isValidGrade, isValidWordId } from "@/lib/reviews";
+import { pickSchedule } from "@/lib/shared/schedule";
 
 export async function POST(request) {
   const { data: session } = await getAuth().getSession();
@@ -14,5 +15,7 @@ export async function POST(request) {
   const updated = await gradeWord(getDb(), user.id, wordId, grade);
   if (!updated) return Response.json({ error: "Not found" }, { status: 404 });
 
-  return Response.json({ word: updated });
+  // gradeWord answers with the whole row, which the bot uses; the browser gets
+  // only what this write owns, so no client can swap a stale example back in.
+  return Response.json({ word: pickSchedule(updated) });
 }
