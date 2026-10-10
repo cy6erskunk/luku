@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { reportClientError } from "../lib/report.js";
+import { pickSchedule } from "../../lib/shared/schedule.js";
 
 export function useWords(userId) {
   const [dbWords, setDbWords] = useState([]);
@@ -56,15 +57,14 @@ export function useWords(userId) {
 
   /**
    * Applies a grade's result. Only the columns a grade writes are taken from
-   * the reply: it is the whole row as the database held it then, and swapping
-   * it in wholesale let a grade that answered late put back an example the
-   * reader had replaced in the meantime. Fields a grade does not own can now
-   * never be overwritten by one, whatever order the replies arrive in.
+   * the reply — the route already sends no others, and this holds the line
+   * for any reply that does: swapping a whole row in once let a grade that
+   * answered late put back an example the reader had replaced in the
+   * meantime. A column the reply lacks keeps its local value.
    */
-  const applySchedule = ({ id, ease_factor, interval_days, next_review_at, review_count }) => {
-    setDbWords((prev) => prev.map((w) => w.id === id
-      ? { ...w, ease_factor, interval_days, next_review_at, review_count }
-      : w));
+  const applySchedule = (reply) => {
+    const { id, ...schedule } = pickSchedule(reply);
+    setDbWords((prev) => prev.map((w) => w.id === id ? { ...w, ...schedule } : w));
   };
 
   /**
