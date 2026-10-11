@@ -12,7 +12,9 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
 
   if (cropImage) {
     return (
-      <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      // Dragging the crop box or the shape slider on a phone otherwise starts a
+      // text selection, and the drag goes to the selection, not the control.
+      <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
         <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 10, fontFamily: "monospace" }}>Crop image</div>
         <p style={{ color: "#6b645e", textAlign: "center", marginBottom: 14, maxWidth: 300, fontSize: 13, lineHeight: 1.6 }}>
           Drag to reposition. Pinch or scroll to zoom. Select the text area to scan.
@@ -29,7 +31,29 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
             style={{ containerStyle: { borderRadius: 14 } }}
           />
         </div>
-        <input type="range" min="0.1" max="2" step="0.1" value={cropAspect} onChange={(e) => setCropAspect(parseFloat(e.target.value))} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 400, marginBottom: 12 }}>
+          <span aria-hidden="true" style={{ color: "#4a7c9e", fontSize: 18 }}>▮</span>
+          {/* pan-y: a sideways drag belongs to the slider, a vertical one
+              still scrolls the page. */}
+          <input
+            type="range" min="0.1" max="2" step="0.05" value={cropAspect}
+            onChange={(e) => setCropAspect(parseFloat(e.target.value))}
+            aria-label="Crop shape, tall to wide"
+            className="luku-ratio"
+            style={{ flex: 1, minWidth: 0, height: 44, padding: "8px 0", touchAction: "pan-y" }}
+          />
+          <span aria-hidden="true" style={{ color: "#4a7c9e", fontSize: 18 }}>▬</span>
+        </div>
+        {/* The thumb can only be sized through pseudo-elements. The track is as
+            tall as the thumb, drawing its line with a gradient, so the thumb
+            never overflows the input and gets clipped. */}
+        <style>{`
+          .luku-ratio { -webkit-appearance: none; appearance: none; background: transparent; margin: 0; cursor: pointer; }
+          .luku-ratio::-webkit-slider-runnable-track { height: 28px; background: linear-gradient(transparent 11px, rgba(74,124,158,0.35) 11px, rgba(74,124,158,0.35) 17px, transparent 17px); }
+          .luku-ratio::-moz-range-track { height: 28px; background: linear-gradient(transparent 11px, rgba(74,124,158,0.35) 11px, rgba(74,124,158,0.35) 17px, transparent 17px); }
+          .luku-ratio::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
+          .luku-ratio::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
+        `}</style>
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400, marginBottom: 10 }}>
           <button onClick={() => setCropAspect(4 / 3)} style={{ ...Bg, flex: 1, opacity: cropAspect === 4 / 3 ? 1 : 0.5 }}>▬ Horizontal</button>
           <button onClick={() => setCropAspect(3 / 4)} style={{ ...Bg, flex: 1, opacity: cropAspect === 3 / 4 ? 1 : 0.5 }}>▮ Vertical</button>
