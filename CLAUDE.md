@@ -53,7 +53,8 @@ app/
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
 │   ├── ApiKeyScreen.jsx        # API key entry screen
 │   ├── TelegramConnect.jsx     # Telegram link/unlink overlay
-│   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / key / sign out)
+│   ├── McpConnect.jsx          # MCP token mint/revoke overlay
+│   ├── HeaderMenu.jsx          # Header overflow menu (Telegram / MCP / key / sign out)
 │   ├── Notice.jsx              # One-line banner for a write that did not land
 │   ├── SignIn.jsx              # Auth screen
 │   └── LukuLogo.jsx            # SVG logo
@@ -61,6 +62,8 @@ app/
     ├── claude/route.js         # Server proxy for Anthropic API
     ├── words/route.js          # CRUD for saved vocabulary (PATCH replaces a word's example)
     ├── reviews/route.js        # SRS grading endpoint
+    ├── mcp/route.js            # MCP server (bearer-token authenticated, NOT a session)
+    ├── mcp/tokens/route.js     # Mint / list / revoke MCP tokens (session authenticated)
     ├── auth/[...path]/route.js # Neon Auth catch-all
     └── telegram/
         ├── webhook/route.js    # Telegram updates (secret-token authenticated)
@@ -71,11 +74,17 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
 │   ├── sampleRate.js           # Sentry sample-rate parsing, used by server, edge and browser configs
-│   └── schedule.js             # The columns a grade writes: /api/reviews' reply and applySchedule's merge
+│   ├── schedule.js             # The columns a grade writes: /api/reviews' reply and applySchedule's merge
+│   └── exampleGuide.js         # What makes an example memorable; shared by api.js prompts and MCP tool descriptions
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
 ├── srs.js                      # calcSRS() — simplified SM-2
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
+├── words.js                    # Word *content*: list/get/update the four meaning columns, shared by PATCH and MCP
 ├── auth/server.js              # getAuth()
+├── mcp/
+│   ├── protocol.js             # JSON-RPC envelope and method dispatch (hand-rolled, no SDK)
+│   ├── tools.js                # list_words / get_word / update_word
+│   └── tokens.js               # Bearer tokens: mint, resolve, revoke (hashed)
 └── telegram/
     ├── api.js                  # tgCall() and message helpers
     ├── handlers.js             # Update routing: commands and callbacks
@@ -156,6 +165,51 @@ changing it:
 - A review session keeps **no** stored state — the next card is derived from
   SQL each turn. Consequently the web app's same-session requeue of failed
   cards (`useReview.js`) is not reproduced in chat.
+
+### MCP server
+
+Optional, and the second non-session entry point after the Telegram webhook.
+`/api/mcp` exposes the signed-in user's vocabulary to an MCP client (Claude
+Desktop, Claude Code) so cards can be refined in a chat — translations, part of
+speech and example sentences. Setup is in the README; the security model is
+what matters when changing it:
+
+- **The bearer token is the only authentication step.** An MCP client is not a
+  browser and carries no Neon Auth cookie, so `getAuth().getSession()` cannot
+  authenticate it and this route deliberately does not call it. That check is
+  what makes the `user_id` it resolves trustworthy downstream, exactly as the
+  webhook secret is what makes Telegram's `from.id` trustworthy. Never add an
+  endpoint here that takes a user id from a caller.
+- **The identity is still the web app's.** A token is minted by
+  `/api/mcp/tokens`, which *is* session-authenticated, and the `user_id` frozen
+  into the row is whatever `getSession()` reported at that moment. Signing in
+  with Google is what decides whose vocabulary a token reaches.
+- **Keep the auth seam one function wide.** The route's only auth step is
+  "header → `user_id`". Neither `lib/mcp/protocol.js` nor `lib/mcp/tools.js`
+  knows how the caller was identified; they take a `userId`. An OAuth issuer, if
+  one is ever wanted, resolves through the same call and changes nothing else.
+- Tokens are stored **hashed**, never expire, and are revoked. Only
+  `left(token_hash, 8)` ever reaches the browser, so the panel can list and
+  revoke without being handed a credential.
+- **The writable surface is four columns**: `translations`, `pos`, `example`,
+  `example_translation`. `updateWordContent` names those and no more, so
+  refining a card cannot reschedule it, rename its base form or touch its
+  recorded inflections. That is the promise the tool descriptions make to the
+  reader, and `lib/__tests__/words.test.js` is what holds it.
+- The protocol is **hand-rolled** (`lib/mcp/protocol.js`) rather than taken from
+  `@modelcontextprotocol/sdk` — a tools-only server is five JSON-RPC methods,
+  and sessions, SSE and sampling would all go unused. The cost is ours:
+  `PROTOCOL_VERSION` is what we claim to speak, and a spec revision is a
+  deliberate change.
+- A tool that refuses or finds nothing answers with `isError: true` inside a
+  successful result, because the model is meant to read it and try again. Only a
+  broken envelope is a JSON-RPC error.
+- `claude.ai`'s custom connectors are built around OAuth, so a static token
+  likely will not work there. Claude Desktop and Claude Code both accept a
+  header and do.
+- An MCP write does **not** invalidate an open browser tab: a refined card shows
+  stale until the next load. `useReview` self-corrects for a word deleted
+  elsewhere; an edited one is not worth a subscription.
 
 ### API Key Handling
 

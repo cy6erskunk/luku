@@ -9,7 +9,11 @@ conventions take precedence over general advice.
 
 - Anything that lets one account read or write another's rows. Every protected
   route must scope its queries by the session's `user.id`, never by an id the
-  request supplies.
+  request supplies. The two exceptions authenticate something other than a
+  browser and resolve a `user_id` of their own: the Telegram webhook, via its
+  secret token, and `/api/mcp`, via a hashed bearer token. Both still scope
+  every query by what they resolved, and neither takes a user id from a
+  caller — that is the property to check, not the presence of `getSession()`.
 - A write whose failure leaves nothing on screen. The convention is a line in
   `Notice` (or inside the dialog that raised it), worded as what was lost, not
   why.

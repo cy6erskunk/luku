@@ -6,7 +6,7 @@ import HeaderMenu from "../HeaderMenu.jsx";
 afterEach(cleanup);
 
 const setup = (props = {}) => {
-  const handlers = { onTelegram: vi.fn(), onChangeKey: vi.fn(), onSignOut: vi.fn(), ...props };
+  const handlers = { onTelegram: vi.fn(), onMcp: vi.fn(), onChangeKey: vi.fn(), onSignOut: vi.fn(), ...props };
   render(<HeaderMenu {...handlers} />);
   return handlers;
 };
@@ -23,13 +23,14 @@ describe("HeaderMenu", () => {
 
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    for (const name of ["Telegram", "API key", "Sign out"]) {
+    for (const name of ["Telegram", "Refine with Claude", "API key", "Sign out"]) {
       expect(screen.getByRole("menuitem", { name })).toBeTruthy();
     }
   });
 
   it.each([
     ["Telegram", "onTelegram"],
+    ["Refine with Claude", "onMcp"],
     ["API key", "onChangeKey"],
     ["Sign out", "onSignOut"],
   ])("runs %s and closes", (name, prop) => {
@@ -146,6 +147,8 @@ describe("HeaderMenu", () => {
     const at = (name) => document.activeElement === screen.getByRole("menuitem", { name });
 
     fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(at("Refine with Claude")).toBe(true);
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect(at("API key")).toBe(true);
     fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect(at("Sign out")).toBe(true);
@@ -191,7 +194,7 @@ describe("HeaderMenu", () => {
   it("stops clicks from reaching the page behind it", () => {
     const onBackdrop = vi.fn();
     const { container } = render(
-      <div onClick={onBackdrop}><HeaderMenu onTelegram={vi.fn()} onChangeKey={vi.fn()} onSignOut={vi.fn()} /></div>
+      <div onClick={onBackdrop}><HeaderMenu onTelegram={vi.fn()} onMcp={vi.fn()} onChangeKey={vi.fn()} onSignOut={vi.fn()} /></div>
     );
     const btn = container.querySelector('button[aria-label="Menu"]');
     fireEvent.click(btn);

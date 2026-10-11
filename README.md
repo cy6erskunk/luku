@@ -257,6 +257,74 @@ confirms with the email of the account it linked.
 | `/settz Europe/Helsinki` | Set your timezone |
 | `/disconnect` | Unlink the chat; your words are untouched |
 
+## Refining word cards with Claude (optional)
+
+A card is created from one tap on one word, so some come out thin: a translation
+the model guessed from the wrong sense, a part of speech that never parsed, an
+example sentence that pins the word to nothing. Luku runs an MCP server so you
+can point Claude at your own vocabulary and have it fix those in bulk — *"go
+through my cards, correct any translation that looks wrong, and give the ones
+with no example a good one."*
+
+Nothing to deploy: the server is `/api/mcp`, and it needs no environment
+variables. Run `db/schema.sql` if you have not since this landed — the
+`mcp_tokens` table is where the credential lives.
+
+### Connect a client
+
+Sign into Luku, tap **☰** in the header and pick **Refine with Claude**. Name
+what is connecting, hit *Create a token*, and copy it — the server stores only a
+hash, so the panel cannot show it to you twice. Then:
+
+```bash
+claude mcp add --transport http luku https://your-app.vercel.app/api/mcp   --header "Authorization: Bearer luku_mcp_..."
+```
+
+`/mcp` in Claude Code should then list three tools: `list_words`, `get_word` and
+`update_word`. Claude Desktop takes the same URL and header in its config file.
+
+### What it can and cannot change
+
+It writes four columns: `translations`, `pos`, `example` and
+`example_translation`. It **cannot** move a card's review schedule, rename its
+base form, touch its recorded inflections, or delete anything — so a refining
+pass never costs you progress on a word you have been drilling. `update_word`
+names those four columns and no others, and there is a test that fails if that
+stops being true.
+
+Two filters are there for the cards most likely to need work:
+`filter: "suspect"` finds the ones whose translation or part of speech failed to
+save (`(unavailable)`, or a `pos` of `?`), and `filter: "missing_example"` the
+ones with no example sentence.
+
+### When it does not work
+
+- **The server vanishes from `/mcp`, with no error.** That is a `401`: the token
+  is wrong, or it has been revoked. A client treats an unauthorised server as
+  one that is simply not there, so check the panel rather than looking for a
+  message. `curl` tells you plainly:
+
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://your-app.vercel.app/api/mcp \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  # 401 with no Authorization header; 200 with a good one
+  ```
+
+- **Every call fails once the tools are listed.** Usually `db/schema.sql` has
+  not been re-run, so `mcp_tokens` exists but the words queries hit a column
+  that does not. A half-applied schema authenticates fine and then refuses
+  everything.
+
+- **A card you refined still looks wrong in the browser.** An MCP write does not
+  reach an open tab; reload it.
+
+- **claude.ai on the web will not take the token.** Its custom connectors are
+  built around OAuth, and this is a static bearer token. Claude Desktop and
+  Claude Code both accept a header; claude.ai web is not supported.
+
+Revoking a token in the panel takes effect on the client's next call.
+
 ## Skipping the key screen while developing
 
 Put your key in `.env.local` and the app stops asking for it locally:

@@ -298,7 +298,38 @@ Documented in `CLAUDE.md` and repeated here because they are easy to break:
 
 ---
 
-## 9. Testing
+## 9. MCP server invariants
+
+`/api/mcp` is the second entry point not authenticated by a session. The full
+reasoning is in `CLAUDE.md`; these are the lines not to cross.
+
+**Do**
+
+- Resolve the `user_id` from the bearer token and scope every query by it. The
+  token authenticates a *user*, which is what the Telegram webhook's secret
+  does for Telegram — and the same rule follows: no endpoint here accepts a
+  user id from a caller.
+- Keep the auth seam one function wide (`bearerFrom` → `resolveToken`). Tools
+  take a `userId` and know nothing about tokens, so a second issuer could be
+  added without touching them.
+- Store only the hash, and hand the browser only `left(token_hash, 8)`.
+- Answer a tool's refusal with `isError: true` in a successful result, so the
+  model can read it. Reserve JSON-RPC errors for a broken envelope.
+- Return only the columns a write owned, as `pickSchedule` does for a grade.
+
+**Don't**
+
+- Don't let the MCP write surface grow past `translations`, `pos`, `example`
+  and `example_translation` without saying so in the tool description. The
+  promise that refining a card cannot cost the reader their SRS progress is the
+  reason the tools are safe to point a model at.
+- Don't call `getAuth().getSession()` in `/api/mcp`. It cannot succeed there,
+  and a fallback to it would be a way in.
+- Don't add a tool that deletes or merges cards without its own guardrails.
+
+---
+
+## 10. Testing
 
 Vitest, run with `npm test`. Coverage is collected for `app/**` excluding
 `layout.jsx` — the metadata shell — and test directories. `page.jsx` is
@@ -334,7 +365,7 @@ hook's suite can reach.
 
 ---
 
-## 10. Accessibility
+## 11. Accessibility
 
 Recent work has been mostly accessibility repair, so the bar is now explicit.
 
@@ -355,7 +386,7 @@ something that doesn't work.
 
 ---
 
-## 11. Git and commits
+## 12. Git and commits
 
 Not Conventional Commits. Subjects read as sentences describing the change's
 effect.
@@ -379,7 +410,7 @@ dependency change, and don't mix a refactor into a fix.
 
 ---
 
-## 12. Pull requests and review
+## 13. Pull requests and review
 
 - Everything lands on `main` through a PR; `main` is not pushed to directly.
   Feature branches are merged rather than squashed, so the individual commits
@@ -402,7 +433,7 @@ dependency change, and don't mix a refactor into a fix.
 
 ---
 
-## 13. Dependencies
+## 14. Dependencies
 
 Seven runtime dependencies and six dev dependencies. That is the point.
 
@@ -426,7 +457,7 @@ do.
 
 ---
 
-## 14. Infrastructure
+## 15. Infrastructure
 
 | Concern | How it works | Watch out for |
 |---|---|---|
@@ -459,7 +490,7 @@ adding a second trigger is safe; replacing this one with Actions is not.
 
 ---
 
-## 15. Documentation
+## 16. Documentation
 
 - `CLAUDE.md` is the architectural map and is expected to stay accurate; update
   it in the same PR that changes structure, adds an environment variable, or
@@ -477,7 +508,7 @@ adding a second trigger is safe; replacing this one with Actions is not.
 
 ---
 
-## 16. Known gaps
+## 17. Known gaps
 
 Honest list, so nobody mistakes these for intent. Accurate as of the current
 `main`, with nothing outstanding in review.
@@ -494,5 +525,8 @@ deploy — which is what `db/schema.sql` says at each one.
 - **`/api/claude` is unthrottled.** A signed-in user can drive it as hard as
   they like. The key is theirs, so the cost is theirs, but the deployment is
   the relay and nothing bounds the traffic.
+- **`/api/mcp` is unthrottled**, in the same way `/api/claude` is, but it
+  reaches the database rather than Anthropic. A token holder can page the word
+  list as fast as they like.
 - **`app/layout.jsx` is excluded from coverage.** Deliberate — it is the
   metadata shell — but it does mean the app's outermost frame is untested.
