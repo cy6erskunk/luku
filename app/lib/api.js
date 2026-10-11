@@ -1,4 +1,7 @@
 import { SERVER_KEY } from "./utils.js";
+// Shared with the MCP server's tool description, so a card refined in a chat
+// client and one regenerated in ExamplePicker are held to the same standard.
+import { EXAMPLE_GUIDE } from "../../lib/shared/exampleGuide.js";
 
 export async function callClaude(apiKey, messages, system, maxTokens = 1500) {
   const res = await fetch("/api/claude", {
@@ -26,17 +29,6 @@ export async function ocrImage(apiKey, base64, mediaType) {
     1500
   );
 }
-
-/**
- * What makes an example worth remembering. A bare "Hän toipuu." pins the word
- * to nothing; "Isä toipuu flunssasta sohvalla." gives it a who, a from-what and
- * a where, and the scene is what a reader recalls the word by. Shared by the
- * first translation and by every example asked for later, so both aim at the
- * same thing.
- */
-const EXAMPLE_GUIDE = "The example is a short (4-8 words), natural Finnish sentence that uses the base form or a common inflection of it, " +
-  "set in a concrete, vivid everyday scene: a specific person, object, place or reason that makes the meaning obvious and easy to picture. " +
-  "Avoid bare subject+verb sentences like \"Hän toipuu.\" and avoid generic filler. Keep the grammar at A2-B1 level.";
 
 export async function translateWord(apiKey, word, context) {
   const raw = await callClaude(

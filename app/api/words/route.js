@@ -1,6 +1,9 @@
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 import { isValidWordId } from "@/lib/reviews";
+// The same caps the MCP server writes examples through, so neither path can
+// store what the other refuses.
+import { MAX_EXAMPLE, isExampleText } from "@/lib/words";
 
 export async function GET() {
   const { data: session } = await getAuth().getSession();
@@ -66,10 +69,6 @@ export async function POST(request) {
   `;
   return Response.json({ word: rows[0] ?? null });
 }
-
-/** Longer than any example worth keeping; a cap so a body cannot store an essay. */
-const MAX_EXAMPLE = 500;
-const isExampleText = (v) => typeof v === "string" && v.trim() !== "" && v.length <= MAX_EXAMPLE;
 
 /**
  * Replaces a saved word's example. Only the two example columns are written,
