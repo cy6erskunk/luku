@@ -61,7 +61,7 @@ describe("POST /api/mcp/tokens", () => {
   });
 
   it("returns a plaintext token and stores only its hash", async () => {
-    mocks.sql = fakeSql([[{ token_hash: "h" }]]);
+    mocks.sql = fakeSql([[{ id: "abcdef12" }]]);
     const res = await POST(postRequest({ label: "Laptop" }));
 
     const { token } = await res.json();
@@ -72,7 +72,7 @@ describe("POST /api/mcp/tokens", () => {
   });
 
   it("writes the session's user, so a body naming someone else changes nothing", async () => {
-    mocks.sql = fakeSql([[{ token_hash: "h" }]]);
+    mocks.sql = fakeSql([[{ id: "abcdef12" }]]);
     await POST(postRequest({ label: "Laptop", user_id: "someone-else" }));
 
     expect(mocks.sql.calls[0].values).toContain("u1");
@@ -80,11 +80,27 @@ describe("POST /api/mcp/tokens", () => {
   });
 
   it("mints without a body, since a mint needs no arguments", async () => {
-    mocks.sql = fakeSql([[{ token_hash: "h" }]]);
+    mocks.sql = fakeSql([[{ id: "abcdef12" }]]);
     const res = await POST(postRequest(undefined));
 
     expect(res.status).toBe(200);
     expect((await res.json()).token).toMatch(/^luku_mcp_/);
+  });
+
+  it("returns the token's short id so the panel can match it to a row", async () => {
+    mocks.sql = fakeSql([[{ id: "abcdef12" }]]);
+    const res = await POST(postRequest({}));
+
+    expect((await res.json()).id).toBe("abcdef12");
+  });
+
+  it("answers 409 when the account is already at the cap", async () => {
+    // The capped INSERT matched nothing, so there is no token to report.
+    mocks.sql = fakeSql([[]]);
+    const res = await POST(postRequest({}));
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).token).toBeUndefined();
   });
 
   it("refuses an over-long label before writing", async () => {

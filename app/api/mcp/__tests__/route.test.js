@@ -156,6 +156,25 @@ describe("tools over the wire", () => {
     expect(result.structuredContent.base).toBe("toipua");
   });
 
+  it("answers a thrown token lookup with JSON too, not a 500 page", async () => {
+    // Without mcp_tokens — db/schema.sql not re-run — resolveToken throws
+    // before any tool is reached, so this is the failure a fresh deployment is
+    // most likely to hit, on every request including initialize.
+    mocks.sql = fakeSql([new Error('relation "mcp_tokens" does not exist')]);
+    const res = await POST(rpc(req("initialize")));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).error.code).toBe(-32603);
+  });
+
+  it("reports a thrown token lookup to Sentry", async () => {
+    const boom = new Error('relation "mcp_tokens" does not exist');
+    mocks.sql = fakeSql([boom]);
+    await POST(rpc(req("initialize")));
+
+    expect(Sentry.captureException).toHaveBeenCalledWith(boom);
+  });
+
   it("answers a thrown query with a JSON-RPC error a client can parse, not a 500 page", async () => {
     // The half-applied-schema case the README documents: mcp_tokens exists so
     // the caller authenticates, then the words query rejects. Next's 500 HTML

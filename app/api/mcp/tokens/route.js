@@ -9,7 +9,7 @@
  */
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
-import { MAX_LABEL, createToken, listTokens, revokeToken } from "@/lib/mcp/tokens";
+import { MAX_LABEL, MAX_LIVE_TOKENS, createToken, listTokens, revokeToken } from "@/lib/mcp/tokens";
 
 async function requireUser() {
   const { data: session } = await getAuth().getSession();
@@ -27,6 +27,10 @@ export async function GET() {
 /**
  * Mints a token. The plaintext is in this response and nowhere else — only its
  * hash is stored — so the panel has to show it once and say so.
+ *
+ * The short id goes back with it so the panel can tell which row in its own
+ * list is the token it is displaying, and stop displaying it if that one is
+ * revoked.
  */
 export async function POST(request) {
   const user = await requireUser();
@@ -41,8 +45,14 @@ export async function POST(request) {
     return Response.json({ error: "Invalid label" }, { status: 400 });
   }
 
-  const { token } = await createToken(getDb(), user.id, label?.trim());
-  return Response.json({ token });
+  const { token, row } = await createToken(getDb(), user.id, label?.trim());
+  if (!row) {
+    return Response.json(
+      { error: `At most ${MAX_LIVE_TOKENS} connections. Revoke one first.` },
+      { status: 409 },
+    );
+  }
+  return Response.json({ token, id: row.id });
 }
 
 export async function DELETE(request) {

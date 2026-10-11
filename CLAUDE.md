@@ -205,8 +205,10 @@ what matters when changing it:
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
 - `claude.ai`'s custom connectors are built around OAuth, so a static token
-  likely will not work there. Claude Desktop and Claude Code both accept a
-  header and do.
+  does not work there. Claude Code takes an `Authorization` header directly;
+  Claude Desktop launches local stdio servers only, so it reaches this through
+  the `mcp-remote` bridge (README has the config). Anything that widens the
+  supported clients is the OAuth issuer's job, not a change here.
 - An MCP write does **not** invalidate an open browser tab: a refined card shows
   stale until the next load. `useReview` self-corrects for a word deleted
   elsewhere; an edited one is not worth a subscription.

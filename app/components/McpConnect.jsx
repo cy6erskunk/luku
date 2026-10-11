@@ -20,11 +20,14 @@ import { useDialog } from "../hooks/useDialog.js";
  */
 export default function McpConnect({ endpoint, onClose, onLost }) {
   const [tokens, setTokens] = useState(null);
+  // The token on display, with the short id of its own row, so revoking that
+  // row from the list below can stop showing a credential that is already dead.
   const [minted, setMinted] = useState(null);
   const [label, setLabel] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Which thing was copied last: "token", "command", or nothing.
+  const [copied, setCopied] = useState(null);
   const mountedRef = useRef(true);
   const panelRef = useDialog(onClose);
 
@@ -57,7 +60,7 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
 
   const handleMint = async () => {
     setErr("");
-    setCopied(false);
+    setCopied(null);
     setBusy(true);
     try {
       const res = await fetch("/api/mcp/tokens", {
@@ -70,7 +73,7 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
       // A token minted but never displayed is a row the reader cannot use and
       // cannot find, so the loss is worth telling even though the panel is gone.
       if (!mountedRef.current) { onLost?.(); return; }
-      setMinted(json.token);
+      setMinted({ token: json.token, id: json.id });
       setLabel("");
       setTokens(await load().catch(() => tokens ?? []));
     } catch (e) {
@@ -92,6 +95,10 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
       if (!res.ok) throw new Error(`Failed to revoke that token (${res.status})`);
       if (!mountedRef.current) return;
       setTokens((prev) => (prev ?? []).filter((t) => t.id !== id));
+      // Revoking the row that was just minted retires the "copy it now" box:
+      // the token in it no longer opens anything, and leaving it on screen
+      // invites copying a dead credential into a config file.
+      setMinted((prev) => (prev && prev.id === id ? null : prev));
     } catch (e) {
       if (mountedRef.current) setErr(e.message);
     } finally {
@@ -99,14 +106,19 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
     }
   };
 
-  const handleCopy = async () => {
+  const command = minted
+    ? `claude mcp add --transport http luku ${endpoint} --header "Authorization: Bearer ${minted.token}"`
+    : "";
+
+  const copy = (what, text) => async () => {
     try {
-      await navigator.clipboard.writeText(minted);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopied(what);
     } catch {
-      // Clipboard access can be refused outright. The token is on screen and
-      // selectable, so this is not worth an error line.
-      setCopied(false);
+      // Clipboard access can be refused outright. Both the token and the
+      // command are on screen and selectable, so this is not worth an error
+      // line.
+      setCopied(null);
     }
   };
 
@@ -138,8 +150,8 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
           )}
 
           <div style={{ fontSize: 13, color: "#c8c0b5", lineHeight: 1.6 }}>
-            Connect Claude Desktop or Claude Code to this account and it can read your
-            vocabulary and fix translations, parts of speech and example sentences.
+            Connect Claude to this account and it can read your vocabulary and fix
+            translations, parts of speech and example sentences.
           </div>
           <div style={{ fontSize: 12, color: "#6b645e", marginTop: 8, lineHeight: 1.6 }}>
             It cannot change your review schedule, so nothing you do here costs you progress.
@@ -155,17 +167,26 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
                 Your token — <strong>copy it now</strong>. It is not shown again.
               </div>
               <code style={{ display: "block", fontSize: 11, color: "#e8e0d5", wordBreak: "break-all", lineHeight: 1.5 }}>
-                {minted}
+                {minted.token}
               </code>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={handleCopy} style={{ ...Bp, flex: 1 }}>{copied ? "✓ Copied" : "Copy"}</button>
+                <button onClick={copy("token", minted.token)} style={{ ...Bp, flex: 1 }}>
+                  {copied === "token" ? "✓ Copied" : "Copy token"}
+                </button>
                 <button onClick={() => setMinted(null)} style={{ ...Bg, flex: 1 }}>Done</button>
               </div>
-              <div style={{ fontSize: 11, color: "#6b645e", marginTop: 12, lineHeight: 1.6 }}>
-                Then run:
+              <div style={{ fontSize: 11, color: "#6b645e", marginTop: 14, lineHeight: 1.6 }}>
+                For Claude Code, run:
                 <code style={{ display: "block", marginTop: 6, color: "#9a9288", wordBreak: "break-all" }}>
-                  claude mcp add --transport http luku {endpoint} --header &quot;Authorization: Bearer &lt;token&gt;&quot;
+                  {command}
                 </code>
+                <button onClick={copy("command", command)} style={{ ...Bg, width: "100%", marginTop: 8, fontSize: 12, padding: "6px 10px" }}>
+                  {copied === "command" ? "✓ Copied" : "Copy command"}
+                </button>
+                <div style={{ marginTop: 10 }}>
+                  Claude Desktop runs local servers only, so it needs the{" "}
+                  <code style={{ color: "#9a9288" }}>mcp-remote</code> bridge — see the README.
+                </div>
               </div>
             </div>
           ) : (

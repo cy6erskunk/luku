@@ -39,12 +39,25 @@ export function GET() {
 }
 
 export async function POST(request) {
-  const sql = getDb();
+  let sql;
+  let authenticated;
+  try {
+    sql = getDb();
+    const token = bearerFrom(request.headers.get("authorization"));
+    // One auth call. A missing header and an unknown token answer identically:
+    // the difference is not something an unauthenticated caller should learn.
+    authenticated = token ? await resolveToken(sql, token) : null;
+  } catch (e) {
+    // The auth step needs the same guard as the tool call below, and for a
+    // likelier reason: a deployment whose database has not had db/schema.sql
+    // re-run has no mcp_tokens table, so this throws on *every* request —
+    // `initialize` included — and the client would get Next's HTML 500 page
+    // before it ever reached a tool. That is the one failure a new deployment
+    // is most likely to hit, so it has to arrive as readable JSON.
+    Sentry.captureException(e);
+    return Response.json(rpcError(null, INTERNAL_ERROR, "Internal error"));
+  }
 
-  const token = bearerFrom(request.headers.get("authorization"));
-  // One auth call. A missing header and an unknown token answer identically:
-  // the difference is not something an unauthenticated caller should learn.
-  const authenticated = token ? await resolveToken(sql, token) : null;
   if (!authenticated) {
     return Response.json({ error: "Unauthorized" }, UNAUTHORIZED);
   }

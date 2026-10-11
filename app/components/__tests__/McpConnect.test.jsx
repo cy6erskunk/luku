@@ -21,7 +21,7 @@ function stubApi({ tokens = [], post, del } = {}) {
   vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
     const method = opts.method ?? "GET";
     calls.push({ url, method, body: opts.body });
-    if (method === "POST") return Promise.resolve(post ?? jsonOk({ token: TOKEN }));
+    if (method === "POST") return Promise.resolve(post ?? jsonOk({ token: TOKEN, id: "abcdef12" }));
     if (method === "DELETE") return Promise.resolve(del ?? jsonOk({ ok: true }));
     return Promise.resolve(jsonOk({ tokens: typeof tokens === "function" ? tokens(calls.length) : tokens }));
   }));
@@ -75,17 +75,81 @@ describe("minting", () => {
     await waitFor(() => expect(screen.queryByText(TOKEN)).toBeNull());
   });
 
-  it("shows the command to run, carrying the endpoint", async () => {
+  it("puts the real token in the command, so setup is one copy not two", async () => {
     stubApi();
     setup();
 
     fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
 
-    expect(await screen.findByText(new RegExp(`claude mcp add .*${ENDPOINT}`))).toBeTruthy();
+    const command = await screen.findByText(new RegExp(`claude mcp add .*${ENDPOINT}`));
+    expect(command.textContent).toContain(TOKEN);
+    expect(command.textContent).not.toContain("<token>");
+  });
+
+  it("copies the token and the whole command separately", async () => {
+    stubApi();
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy token" }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(TOKEN));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy command" }));
+
+    await waitFor(() => {
+      const copied = navigator.clipboard.writeText.mock.calls.at(-1)[0];
+      expect(copied).toContain("claude mcp add");
+      expect(copied).toContain(TOKEN);
+    });
+  });
+
+  it("says Claude Desktop needs the bridge rather than implying a header works", async () => {
+    stubApi();
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+
+    expect(await screen.findByText(/mcp-remote/)).toBeTruthy();
+  });
+
+  it("stops showing the token once that very token is revoked", async () => {
+    // Otherwise the "copy it now" box keeps offering a dead credential.
+    stubApi({ tokens: [{ id: "abcdef12", label: "Laptop", last_used_at: null }] });
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+    expect(await screen.findByText(TOKEN)).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Revoke Laptop/ }));
+
+    await waitFor(() => expect(screen.queryByText(TOKEN)).toBeNull());
+  });
+
+  it("keeps showing the token when a different client is revoked", async () => {
+    stubApi({ tokens: [{ id: "99999999", label: "Old laptop", last_used_at: null }] });
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+    expect(await screen.findByText(TOKEN)).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Revoke Old laptop/ }));
+
+    await waitFor(() => expect(screen.queryByText("Old laptop")).toBeNull());
+    expect(screen.getByText(TOKEN)).toBeTruthy();
   });
 });
 
 describe("failures", () => {
+  it("reports hitting the connection cap inside the dialog", async () => {
+    stubApi({ post: { ok: false, status: 409, json: () => Promise.resolve({ error: "At most 20 connections. Revoke one first." }) } });
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("At most 20");
+  });
+
   it("reports a refused mint inside the dialog, where the reader can reach it", async () => {
     // The page banner is a sibling of this overlay, so it would sit outside
     // the focus trap and inside the subtree aria-modal declares inert.

@@ -277,11 +277,36 @@ what is connecting, hit *Create a token*, and copy it — the server stores only
 hash, so the panel cannot show it to you twice. Then:
 
 ```bash
-claude mcp add --transport http luku https://your-app.vercel.app/api/mcp   --header "Authorization: Bearer luku_mcp_..."
+claude mcp add --transport http luku https://your-app.vercel.app/api/mcp \
+  --header "Authorization: Bearer luku_mcp_..."
 ```
 
 `/mcp` in Claude Code should then list three tools: `list_words`, `get_word` and
-`update_word`. Claude Desktop takes the same URL and header in its config file.
+`update_word`. The panel will show you that command with the token already in
+it, so it is one copy rather than two.
+
+**Claude Desktop needs a bridge.** Its config file launches local (stdio)
+servers, so it cannot take a URL and a header directly, and its Connectors UI
+expects OAuth, which this does not speak. Run the endpoint through
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) instead, in
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "luku": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://your-app.vercel.app/api/mcp",
+        "--header", "Authorization: Bearer luku_mcp_..."
+      ]
+    }
+  }
+}
+```
+
+Check the flags against `mcp-remote`'s own README — they have moved before.
 
 ### What it can and cannot change
 
@@ -311,17 +336,18 @@ ones with no example sentence.
   # 401 with no Authorization header; 200 with a good one
   ```
 
-- **Every call fails once the tools are listed.** Usually `db/schema.sql` has
-  not been re-run, so `mcp_tokens` exists but the words queries hit a column
-  that does not. A half-applied schema authenticates fine and then refuses
-  everything.
+- **Every request fails, `initialize` included,** with a JSON-RPC error whose
+  code is `-32603`. That is `db/schema.sql` not having been re-run: without
+  `mcp_tokens` the token lookup throws before any tool is reached, so nothing
+  works rather than some things working. The cause is in Sentry.
 
 - **A card you refined still looks wrong in the browser.** An MCP write does not
   reach an open tab; reload it.
 
 - **claude.ai on the web will not take the token.** Its custom connectors are
-  built around OAuth, and this is a static bearer token. Claude Desktop and
-  Claude Code both accept a header; claude.ai web is not supported.
+  built around OAuth, and this is a static bearer token. Claude Code takes a
+  header directly and Claude Desktop takes one through `mcp-remote`; claude.ai
+  web is not supported.
 
 Revoking a token in the panel takes effect on the client's next call.
 
