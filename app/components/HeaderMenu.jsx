@@ -18,7 +18,7 @@ const ITEM = {
  * it. Opening moves focus into the menu, so the items carry `tabIndex={-1}`
  * and focus is placed by hand instead of by the browser's tab order.
  */
-export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
+export default function HeaderMenu({ onTelegram, onMcp, onChangeKey, onSignOut }) {
   const [open, setOpen] = useState(false);
   // Which item focus sits on. Also the item that opening the menu lands on:
   // the toggle sets it before the menu renders (0 for a click or ArrowDown,
@@ -33,6 +33,7 @@ export default function HeaderMenu({ onTelegram, onChangeKey, onSignOut }) {
 
   const items = [
     { label: "Telegram", icon: "✈", iconColor: "#6a9ebe", fn: onTelegram },
+    { label: "Refine with Claude", icon: "✦", iconColor: "#8a7ab0", fn: onMcp },
     { label: "API key", fn: onChangeKey },
     { label: "Sign out", fn: onSignOut, separated: true },
   ];

@@ -44,11 +44,16 @@ npm run telegram:status   # what webhook Telegram currently has registered
   under one condition — **no imports at all**. That is what makes them safe to
   bundle, and it is the line to watch: adding an import to a file in
   `lib/shared/` is what would breach the boundary, not putting a file there.
-  `lib/shared/sampleRate.js` is the current occupant, read by the server, edge
-  and browser Sentry configs alike.
+  Its occupants are `sampleRate.js`, read by the server, edge and browser
+  Sentry configs alike; `schedule.js`, the columns a grade writes, so
+  `/api/reviews` and `useWords` cannot disagree about them; and
+  `exampleGuide.js`, what makes an example memorable, so the browser's prompts
+  and the MCP server's tool descriptions ask for the same thing.
 - `app/api/` holds the route handlers.
 - Code both the web app and the Telegram bot need lives in `lib/reviews.js`,
-  so a card graded in either place moves through the same path.
+  so a card graded in either place moves through the same path. Word *content*
+  — the four columns that say what a word means — lives in `lib/words.js`,
+  shared by `/api/words`' PATCH and the MCP tools for the same reason.
 
 ## Making changes
 

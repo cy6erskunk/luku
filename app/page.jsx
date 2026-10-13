@@ -9,6 +9,7 @@ import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
 import TelegramConnect from "./components/TelegramConnect.jsx";
+import McpConnect from "./components/McpConnect.jsx";
 import LukuLogo from "./components/LukuLogo.jsx";
 import Notice from "./components/Notice.jsx";
 import HeaderMenu from "./components/HeaderMenu.jsx";
@@ -76,6 +77,7 @@ function LukuApp({ user }) {
   // the message is about, or null for one true anywhere.
   const [notice, setNotice] = useState(null);
   const [showTelegram, setShowTelegram] = useState(false);
+  const [showMcp, setShowMcp] = useState(false);
   // Ids added during this reading session, and nothing more: the rows are
   // already in the database. The bucket only holds them out of the regular
   // due queue long enough to offer a Remove, so losing it to a refresh or a
@@ -144,7 +146,7 @@ function LukuApp({ user }) {
   // A dialog traps focus and declares the rest of the page inert, so this
   // banner would be visible, unreachable and unannounced beneath one. It waits
   // instead; a failure raised inside a dialog is that dialog's to report.
-  const dialogOpen = showWordList || showTelegram;
+  const dialogOpen = showWordList || showTelegram || showMcp;
   const noticeMessage = !notice || dialogOpen || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
   const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
@@ -472,6 +474,7 @@ function LukuApp({ user }) {
           )}
           <HeaderMenu
             onTelegram={() => setShowTelegram(true)}
+            onMcp={() => setShowMcp(true)}
             onChangeKey={() => setChangingKey(true)}
             onSignOut={() => authClient.signOut()}
           />
@@ -533,6 +536,16 @@ function LukuApp({ user }) {
       )}
 
       {showTelegram && <TelegramConnect onClose={() => setShowTelegram(false)} />}
+      {showMcp && (
+        <McpConnect
+          endpoint={`${typeof window === "undefined" ? "" : window.location.origin}/api/mcp`}
+          onClose={() => setShowMcp(false)}
+          // A token minted after the panel closed is one the reader never saw
+          // and cannot use. Not stage-scoped: the panel opens from the header,
+          // which is on every stage.
+          onLost={() => setNotice({ stage: null, message: "A token was created but not shown — revoke it and make another." })}
+        />
+      )}
 
       {/* Fixed above the overlays: a delete refused from inside the word list
           has to be readable from inside it. A failed load outranks the rest

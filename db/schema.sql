@@ -110,3 +110,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS telegram_link_codes_active
 -- claimCodeAndLink omits it, and while the old NOT NULL column is still there
 -- every attempt to link an account fails.
 ALTER TABLE telegram_links DROP COLUMN IF EXISTS secret_hash;
+
+-- ── MCP server ───────────────────────────────────────────────────────────────
+-- Bearer tokens an MCP client (Claude Desktop, Claude Code) sends to /api/mcp.
+-- An MCP client is not a browser and carries no Neon Auth cookie, so a session
+-- lookup cannot authenticate it; this table is what the Authorization header is
+-- matched against. The user_id is frozen in at mint time, by a
+-- session-authenticated request, so the identity is still the web app's own.
+--
+-- Only the hash is stored. The nightly pg_dump keeps seven days of backups, so
+-- a plaintext token here would be a live credential for that whole window —
+-- the same reasoning that hashes telegram_link_codes. These do not expire;
+-- they are revoked, which is what the panel offers.
+
+CREATE TABLE IF NOT EXISTS mcp_tokens (
+  token_hash   TEXT PRIMARY KEY,          -- sha256 of the token, hex
+  user_id      TEXT NOT NULL,             -- from Neon Auth (Stack Auth user ID)
+  label        TEXT,                      -- what the user called this client
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  revoked_at   TIMESTAMPTZ
+);
+
+-- The panel lists a user's live tokens on every open.
+CREATE INDEX IF NOT EXISTS mcp_tokens_user ON mcp_tokens (user_id) WHERE revoked_at IS NULL;

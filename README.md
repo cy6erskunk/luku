@@ -257,6 +257,131 @@ confirms with the email of the account it linked.
 | `/settz Europe/Helsinki` | Set your timezone |
 | `/disconnect` | Unlink the chat; your words are untouched |
 
+## Refining word cards with Claude (optional)
+
+A card is created from one tap on one word, so some come out thin: a translation
+the model guessed from the wrong sense, a part of speech that never parsed, an
+example sentence that pins the word to nothing. Luku runs an MCP server so you
+can point Claude at your own vocabulary and have it fix those in bulk — *"go
+through my cards, correct any translation that looks wrong, and give the ones
+with no example a good one."*
+
+Nothing to deploy: the server is `/api/mcp`, and it needs no environment
+variables. Run `db/schema.sql` if you have not since this landed — the
+`mcp_tokens` table is where the credential lives.
+
+### Connect a client
+
+Sign into Luku, tap **☰** in the header and pick **Refine with Claude**. Name
+what is connecting, hit *Create a token*, and copy it — the server stores only a
+hash, so the panel cannot show it to you twice. Then:
+
+```bash
+claude mcp add --transport http luku https://your-app.vercel.app/api/mcp \
+  --header "Authorization: Bearer luku_mcp_..."
+```
+
+`/mcp` in Claude Code should then list three tools: `list_words`, `get_word` and
+`update_word`. The panel will show you that command with the token already in
+it, so it is one copy rather than two.
+
+**Claude Desktop, claude.ai and mobile** take the endpoint directly, through a
+custom connector rather than a config file — `claude_desktop_config.json` only
+launches local stdio servers. Go to **Customize → Connectors → Add custom
+connector** and give it:
+
+| Field | Value |
+|---|---|
+| MCP server URL | `https://your-app.vercel.app/api/mcp` |
+| Authentication | **No sign-in** |
+| Request headers | name `authorization`, value `Bearer luku_mcp_...` |
+
+"No sign-in" is the right answer even though the server does require a token:
+it means *no OAuth*, and the token travels in the header instead. Enter the
+value with `Bearer ` and the trailing space included — Claude sends the header
+verbatim and adds no scheme of its own, so a bare token arrives as
+`Authorization: luku_mcp_...` and is refused.
+
+Three things that will bite otherwise:
+
+- **Request headers is in beta**, for a limited set of organizations. If the
+  section is not in the dialog, your account cannot use it yet — see the
+  `mcp-remote` fallback below.
+- **Authentication settings cannot be edited afterwards.** Rotating a token
+  means removing the connector and adding it again.
+- **The connection comes from Anthropic's servers**, not your machine
+  (egress `160.79.104.0/21`), so the URL has to be publicly reachable. A
+  `localhost` URL works in Claude Code, which runs on your machine, and cannot
+  work as a connector.
+
+If the **Request headers** section is missing, bridge the endpoint locally with
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) in
+`claude_desktop_config.json` instead:
+
+```json
+{
+  "mcpServers": {
+    "luku": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://your-app.vercel.app/api/mcp",
+        "--header", "Authorization: Bearer luku_mcp_..."
+      ]
+    }
+  }
+}
+```
+
+Check the flags against `mcp-remote`'s own README — they have moved before.
+
+### What it can and cannot change
+
+It writes four columns: `translations`, `pos`, `example` and
+`example_translation`. It **cannot** move a card's review schedule, rename its
+base form, touch its recorded inflections, or delete anything — so a refining
+pass never costs you progress on a word you have been drilling. `update_word`
+names those four columns and no others, and there is a test that fails if that
+stops being true.
+
+Two filters are there for the cards most likely to need work:
+`filter: "suspect"` finds the ones whose translation or part of speech failed to
+save (`(unavailable)`, or a `pos` of `?`), and `filter: "missing_example"` the
+ones with no example sentence.
+
+### When it does not work
+
+- **The server vanishes from `/mcp`, with no error.** That is a `401`: the token
+  is wrong, or it has been revoked. A client treats an unauthorised server as
+  one that is simply not there, so check the panel rather than looking for a
+  message. `curl` tells you plainly:
+
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://your-app.vercel.app/api/mcp \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  # 401 with no Authorization header; 200 with a good one
+  ```
+
+- **Every request fails, `initialize` included,** with a JSON-RPC error whose
+  code is `-32603`. That is `db/schema.sql` not having been re-run: without
+  `mcp_tokens` the token lookup throws before any tool is reached, so nothing
+  works rather than some things working. The cause is in Sentry.
+
+- **A card you refined still looks wrong in the browser.** An MCP write does not
+  reach an open tab; reload it.
+
+- **The connector dialog has no Request headers section.** That part is in beta
+  and not on every account yet. Use the `mcp-remote` bridge above, or Claude
+  Code, which takes the header directly.
+
+- **"Couldn't reach the MCP server" from a connector, while `curl` works.** The
+  request comes from Anthropic's egress range rather than your machine, so a
+  URL only you can reach — `localhost`, a VPN, a preview deployment with
+  protection on — fails there and succeeds locally.
+
+Revoking a token in the panel takes effect on the client's next call.
+
 ## Skipping the key screen while developing
 
 Put your key in `.env.local` and the app stops asking for it locally:
