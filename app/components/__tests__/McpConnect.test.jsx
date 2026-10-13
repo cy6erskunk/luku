@@ -104,13 +104,27 @@ describe("minting", () => {
     });
   });
 
-  it("says Claude Desktop needs the bridge rather than implying a header works", async () => {
+  it("gives the connector route for Desktop, claude.ai and mobile", async () => {
     stubApi();
     setup();
 
     fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
 
-    expect(await screen.findByText(/mcp-remote/)).toBeTruthy();
+    expect(await screen.findByText(/Customize → Connectors/)).toBeTruthy();
+    expect(screen.getByText(/No sign-in/)).toBeTruthy();
+  });
+
+  it("offers the header value with the Bearer scheme already in it", async () => {
+    // Claude sends a request header verbatim and prepends no scheme, so a bare
+    // token arrives as `Authorization: luku_mcp_…` and the server refuses it.
+    stubApi();
+    setup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create a token" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy header value" }));
+
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`Bearer ${TOKEN}`));
   });
 
   it("stops showing the token once that very token is revoked", async () => {

@@ -204,11 +204,19 @@ what matters when changing it:
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
-- `claude.ai`'s custom connectors are built around OAuth, so a static token
-  does not work there. Claude Code takes an `Authorization` header directly;
-  Claude Desktop launches local stdio servers only, so it reaches this through
-  the `mcp-remote` bridge (README has the config). Anything that widens the
-  supported clients is the OAuth issuer's job, not a change here.
+- **Every Claude surface can reach it**, by two different routes, which is why
+  the panel names both. Claude Code takes the `Authorization` header on the
+  command line. Claude Desktop, claude.ai and mobile take it as a *custom
+  connector* with authentication "No sign-in" and the token under **Request
+  headers** — "no sign-in" there means no OAuth, not no credential. Their
+  config files only launch local stdio servers, so the connector dialog is the
+  route, and where its **Request headers** section is missing (it is in beta)
+  the `mcp-remote` bridge stands in. The README has both and the failure
+  symptoms.
+- A connector's requests come from **Anthropic's egress range**
+  (`160.79.104.0/21`), not the reader's machine, so the deployment has to be
+  publicly reachable. `localhost` works in Claude Code and cannot work as a
+  connector — worth knowing before debugging a connector against `npm run dev`.
 - An MCP write does **not** invalidate an open browser tab: a refined card shows
   stale until the next load. `useReview` self-corrects for a word deleted
   elsewhere; an edited one is not worth a subscription.

@@ -110,6 +110,11 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
     ? `claude mcp add --transport http luku ${endpoint} --header "Authorization: Bearer ${minted.token}"`
     : "";
 
+  // What a custom connector's `authorization` header wants. The scheme is part
+  // of the value: Claude sends the header verbatim and prepends nothing, so a
+  // bare token arrives as `Authorization: luku_mcp_…` and is refused.
+  const headerValue = minted ? `Bearer ${minted.token}` : "";
+
   const copy = (what, text) => async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -184,9 +189,17 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
                   {copied === "command" ? "✓ Copied" : "Copy command"}
                 </button>
                 <div style={{ marginTop: 10 }}>
-                  Claude Desktop runs local servers only, so it needs the{" "}
-                  <code style={{ color: "#9a9288" }}>mcp-remote</code> bridge — see the README.
+                  For Claude Desktop, claude.ai or mobile, add a custom connector under
+                  Customize → Connectors: authentication <em>No sign-in</em>, then the
+                  header <code style={{ color: "#9a9288" }}>authorization</code> with this
+                  value:
                 </div>
+                <code style={{ display: "block", marginTop: 6, color: "#9a9288", wordBreak: "break-all" }}>
+                  {headerValue}
+                </code>
+                <button onClick={copy("header", headerValue)} style={{ ...Bg, width: "100%", marginTop: 8, fontSize: 12, padding: "6px 10px" }}>
+                  {copied === "header" ? "✓ Copied" : "Copy header value"}
+                </button>
               </div>
             </div>
           ) : (

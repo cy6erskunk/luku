@@ -285,11 +285,38 @@ claude mcp add --transport http luku https://your-app.vercel.app/api/mcp \
 `update_word`. The panel will show you that command with the token already in
 it, so it is one copy rather than two.
 
-**Claude Desktop needs a bridge.** Its config file launches local (stdio)
-servers, so it cannot take a URL and a header directly, and its Connectors UI
-expects OAuth, which this does not speak. Run the endpoint through
-[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) instead, in
-`claude_desktop_config.json`:
+**Claude Desktop, claude.ai and mobile** take the endpoint directly, through a
+custom connector rather than a config file — `claude_desktop_config.json` only
+launches local stdio servers. Go to **Customize → Connectors → Add custom
+connector** and give it:
+
+| Field | Value |
+|---|---|
+| MCP server URL | `https://your-app.vercel.app/api/mcp` |
+| Authentication | **No sign-in** |
+| Request headers | name `authorization`, value `Bearer luku_mcp_...` |
+
+"No sign-in" is the right answer even though the server does require a token:
+it means *no OAuth*, and the token travels in the header instead. Enter the
+value with `Bearer ` and the trailing space included — Claude sends the header
+verbatim and adds no scheme of its own, so a bare token arrives as
+`Authorization: luku_mcp_...` and is refused.
+
+Three things that will bite otherwise:
+
+- **Request headers is in beta**, for a limited set of organizations. If the
+  section is not in the dialog, your account cannot use it yet — see the
+  `mcp-remote` fallback below.
+- **Authentication settings cannot be edited afterwards.** Rotating a token
+  means removing the connector and adding it again.
+- **The connection comes from Anthropic's servers**, not your machine
+  (egress `160.79.104.0/21`), so the URL has to be publicly reachable. A
+  `localhost` URL works in Claude Code, which runs on your machine, and cannot
+  work as a connector.
+
+If the **Request headers** section is missing, bridge the endpoint locally with
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) in
+`claude_desktop_config.json` instead:
 
 ```json
 {
@@ -344,10 +371,14 @@ ones with no example sentence.
 - **A card you refined still looks wrong in the browser.** An MCP write does not
   reach an open tab; reload it.
 
-- **claude.ai on the web will not take the token.** Its custom connectors are
-  built around OAuth, and this is a static bearer token. Claude Code takes a
-  header directly and Claude Desktop takes one through `mcp-remote`; claude.ai
-  web is not supported.
+- **The connector dialog has no Request headers section.** That part is in beta
+  and not on every account yet. Use the `mcp-remote` bridge above, or Claude
+  Code, which takes the header directly.
+
+- **"Couldn't reach the MCP server" from a connector, while `curl` works.** The
+  request comes from Anthropic's egress range rather than your machine, so a
+  URL only you can reach — `localhost`, a VPN, a preview deployment with
+  protection on — fails there and succeeds locally.
 
 Revoking a token in the panel takes effect on the client's next call.
 
