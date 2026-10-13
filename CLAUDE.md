@@ -83,6 +83,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 ├── auth/server.js              # getAuth()
 ├── mcp/
 │   ├── protocol.js             # JSON-RPC envelope and method dispatch (hand-rolled, no SDK)
+│   ├── instructions.js         # What the server tells a client about its SRS, at handshake time
 │   ├── tools.js                # list_words / get_word / update_word
 │   └── tokens.js               # Bearer tokens: mint, resolve, revoke (hashed)
 └── telegram/
@@ -201,6 +202,32 @@ what matters when changing it:
   and sessions, SSE and sampling would all go unused. The cost is ours:
   `PROTOCOL_VERSION` is what we claim to speak, and a spec revision is a
   deliberate change.
+- **The server describes its own scheduling, twice over.**
+  `lib/mcp/instructions.js` is returned as `InitializeResult.instructions`, the
+  spec's slot for "how to use this server", and `SCHEDULE_FIELD_GUIDE` in
+  `lib/mcp/tools.js` restates the field semantics in the `list_words` and
+  `get_word` descriptions. The duplication is deliberate: `instructions` support
+  is uneven across clients, while a tool description always arrives. What both
+  exist to prevent is a specific wrong guess — Luku is **simplified SM-2, not
+  FSRS**, and `review_count` is a streak of consecutive passes that *Again*
+  resets to 0, not a lifetime total, so a client left to assume reads a
+  just-failed card as a brand new one.
+- **Every number in that text is interpolated from `lib/srs.js`**, never typed:
+  `easeDelta`, `DEFAULT_EASE_FACTOR` and `MIN_EASE_FACTOR` exist to be quoted.
+  Tuning the algorithm then updates its own documentation, and
+  `lib/mcp/__tests__/instructions.test.js` fails if a number is pasted in as a
+  literal. `calcSRS` keeps the ease arithmetic inline rather than calling
+  `easeDelta` — regrouping it shifts the result by one float bit for about a
+  third of inputs, and values already in the column are not worth moving for a
+  tidier line; a test in `lib/__tests__/srs.test.js` holds the two in step.
+- **`ease_factor` is returned although nothing can write it**, which reverses the
+  first cut's judgement that it was noise. Nothing counts lapses and every
+  failure resets `review_count`, so it is the only durable record of difficulty
+  there is — `filter: "difficult"` orders by it and returns only cards below the
+  starting value, i.e. ones that have lost ground. Don't invert that into "the
+  default means never graded": easy answers push the factor above it and a
+  mixed history accumulates back onto it, floats and all. It is not a new
+  disclosure: `SCHEDULE_FIELDS` already sends it to the browser on every grade.
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.

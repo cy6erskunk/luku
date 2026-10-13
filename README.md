@@ -344,12 +344,44 @@ pass never costs you progress on a word you have been drilling. `update_word`
 names those four columns and no others, and there is a test that fails if that
 stops being true.
 
-Two filters are there for the cards most likely to need work:
+Three filters are there for the cards most likely to need work:
 `filter: "suspect"` finds the ones whose translation or part of speech failed to
-save (`(unavailable)`, or a `pos` of `?`), and `filter: "missing_example"` the
-ones with no example sentence.
+save (`(unavailable)`, or a `pos` of `?`), `filter: "missing_example"` the
+ones with no example sentence, and `filter: "difficult"` the ones you keep
+failing — hardest first.
+
+### What it knows about your reviews
+
+Cards come back with `review_count`, `ease_factor` and `next_review_at`, and the
+server explains all three at connect time so you do not have to. Two of them are
+easy to misread, which is the reason the explanation exists:
+
+- **`review_count` is a streak, not a tally.** It counts *consecutive* passes.
+  Answering *Again* resets it to 0 along with the interval, so a word you have
+  drilled for months reads `0` the moment you fail it — identical to a word you
+  have never seen.
+- **`ease_factor` is the only lasting record of difficulty.** Nothing counts
+  lapses, so this is it: 2.5 to begin with, `+0.1` for Easy, `-0.14` for Hard,
+  `-0.54` for Again, floored at 1.3 and uncapped upwards. Under 2.5 means the
+  card has lost ground overall, which is what `filter: "difficult"` returns,
+  sorted. The reverse does not hold — a card you have answered easily sits
+  *above* 2.5, and one answered easily and badly in equal measure drifts back
+  onto it — so 2.5 is not a reliable sign of a card you have never reviewed.
+  What is reliable: `review_count` of 0 together with an ease factor under 2.5
+  means you failed that card last time.
+
+So *"which words do I keep forgetting?"* is answerable. *"How many times have I
+pressed Again on this one?"* is not — no column counts lapses, and each failure
+resets the only counter there is.
 
 ### When it does not work
+
+- **`404 Not Found` on every call.** That is the URL, not the token. The usual
+  cause is a connector still pointed at a preview deployment — the
+  `…-git-<branch>-….vercel.app` alias dies with the branch it was named after,
+  so merging and deleting a branch takes its alias with it. Point the connector
+  at production. Authentication settings cannot be edited after the fact, so
+  this means removing the connector and adding it again.
 
 - **The server vanishes from `/mcp`, with no error.** That is a `401`: the token
   is wrong, or it has been revoked. A client treats an unauthorised server as
