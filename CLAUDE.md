@@ -225,8 +225,8 @@ what matters when changing it:
   failure resets `review_count`, so it is the only durable record of difficulty
   there is — `filter: "difficult"` orders by it and returns only cards below the
   starting value, i.e. ones that have lost ground. Don't invert that into "the
-  default means never graded": easy answers push the factor above it and a
-  mixed history accumulates back onto it, floats and all. It is not a new
+  default means never graded": easy answers push the factor above it, and a
+  long mix accumulates back onto it exactly — seven Easy cancel five Hard. It is not a new
   disclosure: `SCHEDULE_FIELDS` already sends it to the browser on every grade.
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a

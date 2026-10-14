@@ -365,8 +365,9 @@ easy to misread, which is the reason the explanation exists:
   `-0.54` for Again, floored at 1.3 and uncapped upwards. Under 2.5 means the
   card has lost ground overall, which is what `filter: "difficult"` returns,
   sorted. The reverse does not hold — a card you have answered easily sits
-  *above* 2.5, and one answered easily and badly in equal measure drifts back
-  onto it — so 2.5 is not a reliable sign of a card you have never reviewed.
+  *above* 2.5, and a long enough mix lands back on it exactly, since seven
+  Easy cancel five Hard — so 2.5 is not a reliable sign of a card you have
+  never reviewed.
   What is reliable: `review_count` of 0 together with an ease factor under 2.5
   means you failed that card last time.
 
