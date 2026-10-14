@@ -77,7 +77,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 │   ├── schedule.js             # The columns a grade writes: /api/reviews' reply and applySchedule's merge
 │   └── exampleGuide.js         # What makes an example memorable; shared by api.js prompts and MCP tool descriptions
 ├── db.js                       # getDb() -> neon(DATABASE_URL)
-├── srs.js                      # calcSRS() — simplified SM-2
+├── srs.js                      # calcSRS() — simplified SM-2; also easeDelta/DEFAULT_EASE_FACTOR, quoted by the MCP instructions
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
 ├── words.js                    # Word *content*: list/get/update the four meaning columns, shared by PATCH and MCP
 ├── auth/server.js              # getAuth()
@@ -223,11 +223,28 @@ what matters when changing it:
 - **`ease_factor` is returned although nothing can write it**, which reverses the
   first cut's judgement that it was noise. Nothing counts lapses and every
   failure resets `review_count`, so it is the only durable record of difficulty
-  there is — `filter: "difficult"` orders by it and returns only cards below the
+  there was — `filter: "difficult"` orders by it and returns only cards below the
   starting value, i.e. ones that have lost ground. Don't invert that into "the
   default means never graded": easy answers push the factor above it, and a
   long mix accumulates back onto it exactly — seven Easy cancel five Hard. It is not a new
   disclosure: `SCHEDULE_FIELDS` already sends it to the browser on every grade.
+- **`lapses` exists because `ease_factor` saturates.** An *Again* costs 0.54, so
+  three failures put a card on the 1.3 floor and every later failure moves
+  nothing; on a real 333-card collection that left ~170 cards pinned there and
+  mutually indistinguishable, which is what made `difficult` rank poorly. So
+  `lapses` is the **tiebreak within an ease level**
+  (`ORDER BY ease_factor ASC, lapses DESC, …`), not the leading term — leading
+  with it would let a card failed once since the column existed outrank one
+  failed twenty times before it. It counts from its migration forward and
+  cannot be back-filled, because each failure overwrote the only count there
+  was. It *is* in `SCHEDULE_FIELDS`: the word list loads with `SELECT *` and so
+  already carries the column, and a grade that did not return it would leave
+  the browser's copy one behind.
+- **`filter: "lapsed"` is the sharp question.** `difficult` answers "has ever
+  lost ground", which on a well-used collection is most of the list (270 of 333
+  on the author's). `review_count = 0 AND ease_factor < DEFAULT` is "failed at
+  its last review" — `review_count` reaches 0 only after a failure or before
+  the first review, and the ease condition rules the second out.
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
