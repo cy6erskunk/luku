@@ -316,6 +316,14 @@ reasoning is in `CLAUDE.md`; these are the lines not to cross.
 - Answer a tool's refusal with `isError: true` in a successful result, so the
   model can read it. Reserve JSON-RPC errors for a broken envelope.
 - Return only the columns a write owned, as `pickSchedule` does for a grade.
+- Interpolate every number in `lib/mcp/instructions.js` from `lib/srs.js`
+  (`easeDelta`, `DEFAULT_EASE_FACTOR`, `MIN_EASE_FACTOR`) rather than typing it.
+  That text is a specification a remote model acts on, so a stale number in it
+  is a wrong instruction, not a stale comment.
+- Say anything a client must not misread in **both** `instructions` and the
+  relevant tool description. `instructions` is the spec's own slot for it, but
+  support is uneven and some clients store the field without reading it; a tool
+  description always arrives.
 
 **Don't**
 
@@ -326,6 +334,9 @@ reasoning is in `CLAUDE.md`; these are the lines not to cross.
 - Don't call `getAuth().getSession()` in `/api/mcp`. It cannot succeed there,
   and a fallback to it would be a way in.
 - Don't add a tool that deletes or merges cards without its own guardrails.
+- Don't let `instructions` grow into a manual. A client may carry it in its
+  system prompt for a whole conversation, so a sentence that would not change
+  what the model does is a sentence to cut.
 
 ---
 
