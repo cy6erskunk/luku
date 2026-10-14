@@ -431,6 +431,9 @@ dependency change, and don't mix a refactor into a fix.
   `npm test` on Node 24.19.0 for every PR and every push to `main`. A red PR is
   not ready.
 - Run `npm run lint`, `npm test` and `npm run build` before pushing.
+- Assisted work runs `/pre-pr-review` before a PR is opened (a hook enforces
+  it) and `/pre-pr-review learn <PR>` after its review, so a finding a
+  reviewer had to raise becomes a question the next review asks first.
 - Never commit generated output. `coverage/` and `.next/` are ignored for a
   reason: a coverage report committed by accident is unreadable in review and
   carries its own vendored code, which the security scanner will rightly flag.

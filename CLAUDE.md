@@ -303,11 +303,22 @@ what matters when changing it:
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
   `lib/__tests__/helpers/fakeSql.js` for the tagged-template query function
 
+## Before opening or pushing to a PR
+
+Run `/pre-pr-review` (`.claude/skills/pre-pr-review/`). It walks
+`checklist.md` — these practices turned into questions, selected by the paths
+the diff touches — plus `/code-review`, fixes what it finds, and records the
+pass for the commit. A `PreToolUse` hook (`.claude/hooks/require-review.mjs`)
+refuses to open a PR from a commit with no recorded pass. After a PR's review
+lands, `/pre-pr-review learn <PR>` reads the threads and adds what the
+checklist missed to `findings.md`, promoting a pattern into the checklist once
+it recurs; declined findings become its *Proportion* lines.
+
 ## Before pushing UI that waits on a request
 
 Every one of these came up in review on #137, one per round, when they could
 all have been answered before the first push. Answer each one for the change
-in hand, then run `/code-review` on the diff before pushing.
+in hand; `/pre-pr-review` asks them again as its *Async UI* section.
 
 - **What else writes this row while my request is out?** A reply must update
   only the fields its own write owns. Grading once answered with the whole
