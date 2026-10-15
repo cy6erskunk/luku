@@ -134,3 +134,16 @@ CREATE TABLE IF NOT EXISTS mcp_tokens (
 
 -- The panel lists a user's live tokens on every open.
 CREATE INDEX IF NOT EXISTS mcp_tokens_user ON mcp_tokens (user_id) WHERE revoked_at IS NULL;
+
+-- Migration: count lapses.
+--
+-- A failed review resets review_count to 0, so before this column nothing
+-- recorded that a card had ever been failed — and ease_factor, the only
+-- surviving signal, saturates: an Again costs 0.54, so three failures put a
+-- card on the 1.3 floor where every later failure is invisible. On a real
+-- collection that left half the cards pinned at the floor and mutually
+-- indistinguishable.
+--
+-- Counts from here on only. No back-fill is possible: the history it would
+-- need was overwritten each time a card was failed.
+ALTER TABLE words ADD COLUMN IF NOT EXISTS lapses INT NOT NULL DEFAULT 0;

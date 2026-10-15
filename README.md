@@ -347,8 +347,10 @@ stops being true.
 Three filters are there for the cards most likely to need work:
 `filter: "suspect"` finds the ones whose translation or part of speech failed to
 save (`(unavailable)`, or a `pos` of `?`), `filter: "missing_example"` the
-ones with no example sentence, and `filter: "difficult"` the ones you keep
-failing — hardest first.
+ones with no example sentence, `filter: "difficult"` everything you have lost
+ground on — hardest first, which may be most of the list — and
+`filter: "lapsed"` the narrower set you failed at their *last* review, which is
+the one to use for "what should I work on now".
 
 ### What it knows about your reviews
 
@@ -360,8 +362,8 @@ easy to misread, which is the reason the explanation exists:
   Answering *Again* resets it to 0 along with the interval, so a word you have
   drilled for months reads `0` the moment you fail it — identical to a word you
   have never seen.
-- **`ease_factor` is the only lasting record of difficulty.** Nothing counts
-  lapses, so this is it: 2.5 to begin with, `+0.1` for Easy, `-0.14` for Hard,
+- **`ease_factor` is how hard a card has proved overall.** 2.5 to begin with,
+  `+0.1` for Easy, `-0.14` for Hard,
   `-0.54` for Again, floored at 1.3 and uncapped upwards. Under 2.5 means the
   card has lost ground overall, which is what `filter: "difficult"` returns,
   sorted. The reverse does not hold — a card you have answered easily sits
@@ -370,10 +372,19 @@ easy to misread, which is the reason the explanation exists:
   never reviewed.
   What is reliable: `review_count` of 0 together with an ease factor under 2.5
   means you failed that card last time.
+- **`lapses` counts failures**, which is the one thing neither of the others
+  can. It exists because the ease factor *saturates*: an *Again* costs 0.54, so
+  three failures reach the 1.3 floor and every later one moves nothing. On a
+  333-card collection that left about 170 cards sitting at the floor,
+  indistinguishable from each other — so `difficult` sorts by ease factor and
+  then by `lapses` to separate them. It started counting when the column was
+  added and **cannot be back-filled**: each failure had already overwritten the
+  only count there was.
 
-So *"which words do I keep forgetting?"* is answerable. *"How many times have I
-pressed Again on this one?"* is not — no column counts lapses, and each failure
-resets the only counter there is.
+So *"which words do I keep forgetting?"* is answerable now, and *"how many times
+have I pressed Again on this one?"* becomes answerable as you review from here
+on. For everything before the `lapses` column it stays unanswerable, and no
+migration can recover it.
 
 ### When it does not work
 

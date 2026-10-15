@@ -334,6 +334,9 @@ reasoning is in `CLAUDE.md`; these are the lines not to cross.
 - Don't call `getAuth().getSession()` in `/api/mcp`. It cannot succeed there,
   and a fallback to it would be a way in.
 - Don't add a tool that deletes or merges cards without its own guardrails.
+- Don't read `ease_factor` as a count of anything. It saturates at its floor
+  after three failures, so it answers "how hard overall", never "how often
+  failed" — `lapses` is the count, and it only runs from its own migration.
 - Don't let `instructions` grow into a manual. A client may carry it in its
   system prompt for a whole conversation, so a sentence that would not change
   what the model does is a sentence to cut.
