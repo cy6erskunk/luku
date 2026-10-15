@@ -9,6 +9,10 @@
 //   create` unless a marker exists for the PR's head commit. Exit 2 is what
 //   tells Claude Code to refuse the call and show stderr to the model.
 //
+//   It sees only tool calls Claude makes. The Claude app's "Create PR" button
+//   and the GitHub web UI open a PR without one, so they are not gated; the
+//   skill handles a branch whose PR already exists.
+//
 //   As a command, run by the skill once its review is clean:
 //     node .claude/hooks/require-review.mjs --mark "<summary>"
 //     node .claude/hooks/require-review.mjs --mark --skipped "<user's reason>"
@@ -64,14 +68,18 @@ function mark(argv) {
 }
 
 function headSha(cwd, head) {
-  // create_pull_request takes "branch" or "owner:branch". Prefer the local
-  // branch of that name; fall back to whatever is checked out.
+  // create_pull_request takes "branch" or "owner:branch". GitHub opens the
+  // PR at the *remote* branch, which can differ from the local one (pushed
+  // earlier, or since from another clone), so check origin's copy first.
+  // Without a head, or with no such branch anywhere, use what is checked out.
   if (head) {
     const branch = head.includes(":") ? head.split(":").pop() : head;
-    try {
-      return git(["rev-parse", "--verify", `refs/heads/${branch}`], cwd);
-    } catch {
-      // not a local branch — fall through
+    for (const ref of [`refs/remotes/origin/${branch}`, `refs/heads/${branch}`]) {
+      try {
+        return git(["rev-parse", "--verify", ref], cwd);
+      } catch {
+        // no such ref — try the next
+      }
     }
   }
   return git(["rev-parse", "HEAD"], cwd);
@@ -87,9 +95,12 @@ function gate() {
   const { tool_name: tool, tool_input: args = {} } = input;
 
   const isMcp = (tool ?? "").endsWith("create_pull_request");
-  // Only an invocation — at the start of the command or after a separator —
-  // not the phrase appearing inside a quoted string or a commit message.
-  const isGh = tool === "Bash" && /(^|[;&|(]|\n)\s*gh\s+pr\s+create\b/.test(args.command ?? "");
+  // A command segment (split on separators) that runs gh — directly, by path,
+  // or behind env assignments or `env` — with `pr create` in it. Cutting at
+  // separators keeps `git commit -m "... gh pr create ..."` from matching
+  // unless the quoted text itself contains one. `gh api …/pulls` is not
+  // caught: this is a reminder that the review is owed, not a security gate.
+  const isGh = tool === "Bash" && /(^|[;&|(\n])\s*(\w+=\S*\s+|env\s+)*(\S*\/)?gh\s[^;&|\n]*\bpr\s+create\b/.test(args.command ?? "");
   if (!isMcp && !isGh) process.exit(0);
 
   const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
