@@ -26,6 +26,9 @@ Sections are selected by the paths the diff touches. **Every change** and
       is the copy most likely to be believed. (F12, F20, F22)
 - [ ] Every number stated in prose is computed, not estimated; where a reader
       or a model acts on it, a test holds it (F20, §9).
+- [ ] A guard, gate or "this prevents X" claim: every path that reaches X
+      listed — tool calls, UI buttons, other clients, local vs remote state —
+      and the docs claim only the paths it covers (F23).
 - [ ] Claims about a third-party product (Claude Desktop, Telegram, Neon,
       Vercel) were checked against current docs or tried, not recalled (F12).
 - [ ] Structure, an env var or a security property changed → `CLAUDE.md`

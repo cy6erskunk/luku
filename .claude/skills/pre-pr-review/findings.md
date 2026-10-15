@@ -4,7 +4,7 @@ What reviews of Luku PRs actually found, kept so the pre-PR review can ask
 the question next time instead of a reviewer asking it after the push.
 `SKILL.md` (*Mode: learn*) says how entries are added and promoted.
 
-**Learned from:** #107, #108, #109, #120, #137, #140, #152, #153, #155, #156, #161
+**Learned from:** #107, #108, #109, #120, #137, #140, #152, #153, #155, #156, #161, #165
 
 Status is one of:
 
@@ -224,3 +224,21 @@ Missed because: the phrase wasn't grepped for, and the test was updated to
 match rather than read.
 Check: same as F20 — a copy or claim change greps for every occurrence,
 tests included.
+
+## F23 — An enforcement claim tested against one path to the guarded action
+PR #165 · user report, then self-review · tooling / docs · fixed (claim narrowed; the button is still ungated) · promoted
+What happened: this skill's own hook was documented as "blocks PR creation"
+in four places. The first PR it guarded was opened from the Claude app's
+Create PR button, which calls GitHub without a tool call, so no hook ran and
+the PR went up unreviewed.
+Missed because: the hook was tested against the two tool calls it matches,
+not against every way a PR actually gets opened. Same root as F4 and F6 —
+the exits that weren't enumerated.
+Check: when a change claims to guard or enforce something, list every path
+that reaches the guarded action — tool calls, UI buttons, other clients, a
+second tab — and say which ones it covers. Does the documentation claim
+only those?
+Promoted at once: the same review found the hook's own `gh pr create` match
+missing `env gh …` and `/usr/bin/gh …`, and the marker checked against the
+local branch while GitHub opens the PR from the remote one — three paths to
+the guarded action in one change, with F4 and F6 behind them.

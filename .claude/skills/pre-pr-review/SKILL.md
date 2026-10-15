@@ -1,6 +1,6 @@
 ---
 name: pre-pr-review
-description: Luku's own pre-PR code review. Run it before creating a pull request (a hook blocks PR creation until it has passed for the current commit) and before pushing follow-up commits to an open one. Reviews the branch against this repository's practices and against what past reviews found. `/pre-pr-review learn [PR numbers]` reads review threads from merged or open PRs and updates the checklist so the next review catches what the last one missed.
+description: Luku's own pre-PR code review. Run it before creating a pull request (a hook blocks Claude's own PR-creation tool calls until it has passed for the current commit; the app's Create PR button is not gated), on a branch whose PR is already open but unreviewed, and before pushing follow-up commits to an open one. Reviews the branch against this repository's practices and against what past reviews found. `/pre-pr-review learn [PR numbers]` reads review threads from merged or open PRs and updates the checklist so the next review catches what the last one missed.
 ---
 
 # Pre-PR review for Luku
@@ -18,7 +18,7 @@ The files beside this one are the skill's memory, and they are meant to change:
 |---|---|
 | `checklist.md` | The questions a review walks through, grouped by the paths a diff touches. Every item that came from a real finding names it (`F12`). |
 | `findings.md` | The log of what reviews actually found — each entry the pattern, what missed it, and the check that would have caught it. Also the list of PRs already learned from. |
-| `../../hooks/require-review.mjs` | The gate. Blocks `create_pull_request` / `gh pr create` unless this review was recorded for the commit being proposed. |
+| `../../hooks/require-review.mjs` | The gate. Blocks `create_pull_request` / `gh pr create` *tool calls* unless this review was recorded for the commit being proposed. A PR opened from the Claude app's Create PR button or GitHub's UI never passes through it. |
 
 `CLAUDE.md` and `PRACTICES.md` remain the source of the rules. The checklist
 turns them into questions and points back at them; when the two disagree, the
@@ -38,6 +38,11 @@ docs win and the checklist is what gets fixed.
   full where the hunk alone hides the context — a guard added above a `try`
   looks fine in a hunk (F11).
 - List the touched paths. They select the checklist sections in step 3.
+- Check whether the branch already has an open PR (`list_pull_requests`
+  with `head: <owner>:<branch>`, the owner taken from `git remote get-url origin`). The hook cannot stop a PR opened from
+  the app's button, so this is the common case, not an edge one. Review the
+  same way; fixes go on as follow-up commits to that PR, and the report ends
+  with the PR link so the reader knows it is now reviewed.
 
 ### 2. Run the repository's own checks
 

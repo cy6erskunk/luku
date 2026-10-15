@@ -432,7 +432,8 @@ dependency change, and don't mix a refactor into a fix.
   not ready.
 - Run `npm run lint`, `npm test` and `npm run build` before pushing.
 - Assisted work runs `/pre-pr-review` before a PR is opened (a hook enforces
-  it) and `/pre-pr-review learn <PR>` after its review, so a finding a
+  it for PRs Claude opens; one opened from the app's Create PR button gets
+  the review afterwards) and `/pre-pr-review learn <PR>` after its review, so a finding a
   reviewer had to raise becomes a question the next review asks first.
 - Never commit generated output. `coverage/` and `.next/` are ignored for a
   reason: a coverage report committed by accident is unreadable in review and

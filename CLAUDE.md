@@ -309,7 +309,9 @@ Run `/pre-pr-review` (`.claude/skills/pre-pr-review/`). It walks
 `checklist.md` — these practices turned into questions, selected by the paths
 the diff touches — plus `/code-review`, fixes what it finds, and records the
 pass for the commit. A `PreToolUse` hook (`.claude/hooks/require-review.mjs`)
-refuses to open a PR from a commit with no recorded pass. After a PR's review
+refuses Claude's own PR-creation tool calls from a commit with no recorded
+pass. It cannot see the Claude app's **Create PR** button or GitHub's UI, so
+a PR opened that way has not been reviewed: run the skill on it. After a PR's review
 lands, `/pre-pr-review learn <PR>` reads the threads and adds what the
 checklist missed to `findings.md`, promoting a pattern into the checklist once
 it recurs; declined findings become its *Proportion* lines.
