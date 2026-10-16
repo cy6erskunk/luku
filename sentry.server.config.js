@@ -14,16 +14,23 @@ Sentry.init({
   // SENTRY_TRACES_SAMPLE_RATE (0–1) when investigating something.
   tracesSampleRate: sampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE, defaultTracesSampleRate(process.env.NODE_ENV)),
 
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
-
-  // Sends request headers, cookies and user identity with every event, which
-  // is what makes an error report actionable here. redactDeep below is what
-  // keeps that tolerable: it strips the credentials that ride along.
-  sendDefaultPii: true,
+  // Request headers, cookies and user identity travel with every event, which
+  // is what makes an error report actionable here; redactDeep below is what
+  // keeps that tolerable. Bodies are not collected in either direction: they
+  // hold readers' API keys, scanned images, prompts, Telegram messages and the
+  // word list, and an error report has not needed them. Nor are database
+  // parameters. Neon-Connection-String carries the database password on every
+  // query and matches none of Sentry's own sensitive-name snippets, so it is
+  // denied here and redacted by redactDeep as well.
+  dataCollection: {
+    httpHeaders: { deny: ["neon-connection-string", "x-vercel-protection-bypass"] },
+    httpBodies: [],
+    databaseQueryData: false,
+  },
 
   // The Telegram Bot API carries its token in the URL path, so fetch spans and
   // transport errors would otherwise send the bot's master credential to Sentry.
+  // Spans are streamed, so beforeSendSpan rather than beforeSendTransaction.
   beforeSend: (event) => redactDeep(event),
-  beforeSendTransaction: (event) => redactDeep(event),
+  beforeSendSpan: (span) => redactDeep(span),
 });

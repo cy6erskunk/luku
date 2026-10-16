@@ -242,3 +242,22 @@ Promoted at once: the same review found the hook's own `gh pr create` match
 missing `env gh …` and `/usr/bin/gh …`, and the marker checked against the
 local branch while GitHub opens the PR from the remote one — three paths to
 the guarded action in one change, with F4 and F6 behind them.
+
+## F24 — A major dependency bump turns a security option into a silent no-op
+PR #132 · self-review · dependencies / error reporting · fixed · promoted
+What happened: Renovate's `@sentry/nextjs` 10 → 11 bump failed only on
+Vercel, at `next.config.mjs` (`withSentryConfig` moved to
+`@sentry/nextjs/config`). Fixing just that would have shipped a green build
+in which `beforeSendTransaction` — the hook that strips the Telegram bot
+token from fetch spans — never ran, because v11 streams spans. The same
+release removed `sendDefaultPii` and widened default collection to every
+HTTP body and outgoing header, which would have sent the readers' Anthropic
+keys from the browser and the database password from `Neon-Connection-String`.
+Missed because: CI was green — the tests mock `@sentry/nextjs`, and an
+unknown or no-op init option neither throws nor warns. The one visible
+failure invited a one-line fix.
+Check: for a major version bump, read the migration guide against every
+option, hook and default the repo configures for that package, not just the
+error in front of you. Which of them would now be ignored, renamed, or
+widened — and is any of them what keeps a credential out?
+Promoted at once: a security property (credentials reaching a third party).

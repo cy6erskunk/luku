@@ -14,8 +14,6 @@ Sentry.init({
   // Browser tracing is billed per transaction like the server's. The value is
   // inlined at build time, so NEXT_PUBLIC_ is required for it to reach here.
   tracesSampleRate: sampleRate(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE, defaultTracesSampleRate(process.env.NODE_ENV)),
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
 
   // Define how likely Replay events are sampled.
   // This sets the sample rate to be 10%. You may want this to be 100% while
@@ -25,9 +23,11 @@ Sentry.init({
   // Define how likely Replay events are sampled when an error occurs.
   replaysOnErrorSampleRate: 1.0,
 
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
+  // User identity and headers are collected by default. Bodies are not: the
+  // browser has no redactor, and /api/claude's request body carries the
+  // reader's own API key and the scanned image.
+  // https://docs.sentry.io/platforms/javascript/configuration/options/#dataCollection
+  dataCollection: { httpBodies: [] },
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
