@@ -35,6 +35,15 @@ Sections are selected by the paths the diff touches. **Every change** and
       updated in this PR; new env var also in `.env.local.example` (§16).
 - [ ] New dependency → justified in the PR body with its cost (§14).
 
+## Dependencies — `package.json`, `package-lock.json`
+
+- [ ] A major version bump: the migration guide read against every option,
+      hook and default the repo sets for that package. A removed or no-op
+      option fails silently and mocked tests stay green, so the one visible
+      error is not the whole list — ask especially of anything that keeps a
+      credential out (`redactDeep` wiring, data-collection limits). `npm run
+      build` is the only local check that loads `next.config.mjs`. (F24)
+
 ## Async UI — `app/components/**`, `app/hooks/**`, `app/page.jsx` with a fetch or a Claude call
 
 The seven questions in `CLAUDE.md` § *Before pushing UI that waits on a
