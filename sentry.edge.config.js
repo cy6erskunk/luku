@@ -17,14 +17,15 @@ Sentry.init({
 
   // Request headers, cookies and user identity travel with every event, which
   // is what makes an error report actionable here; redactDeep below is what
-  // keeps that tolerable. v11 would also collect every outgoing body and the
-  // response bodies — prompts, OCR images, the word list — so bodies stay at
-  // what v10 sent, as do database parameters. Neon-Connection-String carries
-  // the database password on every query and matches none of Sentry's own
-  // sensitive-name snippets.
+  // keeps that tolerable. Bodies are not collected in either direction: they
+  // hold readers' API keys, scanned images, prompts, Telegram messages and the
+  // word list, and an error report has not needed them. Nor are database
+  // parameters. Neon-Connection-String carries the database password on every
+  // query and matches none of Sentry's own sensitive-name snippets, so it is
+  // denied here and redacted by redactDeep as well.
   dataCollection: {
     httpHeaders: { deny: ["neon-connection-string", "x-vercel-protection-bypass"] },
-    httpBodies: ["incomingRequest"],
+    httpBodies: [],
     databaseQueryData: false,
   },
 
