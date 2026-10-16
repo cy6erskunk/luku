@@ -146,6 +146,22 @@ describe("ReviewStage – card in progress", () => {
     expect(screen.getByRole("button", { name: "Show example" })).toBeTruthy();
   });
 
+  it("hides the example again when a pass restarts on the same word", () => {
+    // Same word, same position, new pass: a key on queue position would match
+    // and leave the example revealed.
+    const a = { ...WORD, example: "Minä juoksen." };
+    const props = {
+      queue: [1], revIdx: 0, showAnswer: false, setShowAnswer: vi.fn(),
+      grading: false, dbWords: [a], loadingWords: false, onGrade: vi.fn(), onScanAnother: vi.fn(),
+    };
+    const { rerender } = render(<ReviewStage {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show example" }));
+    rerender(<ReviewStage {...props} />);
+    expect(screen.queryByRole("button", { name: "Show example" })).toBeNull();
+    rerender(<ReviewStage {...props} queue={[1]} />);
+    expect(screen.getByRole("button", { name: "Show example" })).toBeTruthy();
+  });
+
   it("shows the example plainly once the answer is revealed", () => {
     const withExample = { ...WORD, example: "Minä juoksen." };
     setup({ dbWords: [withExample], showAnswer: true });

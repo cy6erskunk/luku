@@ -10,19 +10,23 @@ const EXAMPLE_STYLE = { fontSize: 13, color: "#6b645e", fontStyle: "italic" };
 // card's spoiler does — so the word can be recalled without its context first
 // and the context revealed without turning the card over. One-way: a stray tap
 // on the revealed sentence should not hide it again.
-function SpoilerExample({ text }) {
-  const [revealed, setRevealed] = useState(false);
+function SpoilerExample({ text, revealed, onReveal }) {
   const revealedRef = useRef(null);
   // Revealing removes the button that had focus; hand it to the sentence
   // instead, so a keyboard reader is not dropped back to the top of the page.
-  useEffect(() => { if (revealed) revealedRef.current?.focus(); }, [revealed]);
+  const focusRef = useRef(false);
+  useEffect(() => {
+    if (!revealed || !focusRef.current) return;
+    focusRef.current = false;
+    revealedRef.current?.focus();
+  }, [revealed]);
   if (revealed) {
     return <div ref={revealedRef} tabIndex={-1} style={{ ...EXAMPLE_STYLE, outline: "none" }}>{text}</div>;
   }
   return (
     <button
       type="button"
-      onClick={() => setRevealed(true)}
+      onClick={() => { focusRef.current = true; onReveal(); }}
       aria-label="Show example"
       title="Show example"
       style={{ ...EXAMPLE_STYLE, background: "rgba(255,255,255,0.04)", border: "none", borderRadius: 6, padding: "1px 4px", margin: "-1px -4px", cursor: "pointer", fontFamily: "inherit" }}
@@ -75,6 +79,12 @@ export default function ReviewStage({
     if (!seenByWord.has(id)) seenByWord.set(id, []);
     return seenByWord.get(id);
   };
+  // Which card's example spoiler was tapped: the word, and the queue it was
+  // tapped in. useReview replaces the queue array on every restart and every
+  // requeue, so neither the same word heading the next pass nor a failed card
+  // coming round again matches — they start hidden, without an effect. Queue
+  // position would collide exactly there.
+  const [revealedIn, setRevealedIn] = useState(null);
   const restoreFocusRef = useRef(false);
   useEffect(() => {
     if (!restoreFocusRef.current) return;
@@ -195,9 +205,11 @@ export default function ReviewStage({
           <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             {w.example && (showAnswer
               ? <div style={EXAMPLE_STYLE}>{w.example}</div>
-              // Keyed per card, so the next card starts hidden even when it
-              // lands on the same element. Unmounted once the answer shows.
-              : <SpoilerExample key={cardKey} text={w.example} />)}
+              : <SpoilerExample
+                  text={w.example}
+                  revealed={revealedIn?.queue === queue && revealedIn.id === w.id}
+                  onReveal={() => setRevealedIn({ queue, id: w.id })}
+                />)}
             {canSuggest && (
               <button
                 ref={triggerRef}
