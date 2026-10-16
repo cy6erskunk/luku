@@ -222,16 +222,21 @@ control of the bot, including reading every message sent to it.
 
 ## 7. Error reporting
 
-Sentry runs with `sendDefaultPii: true`, so request context — headers, full
-URLs — travels with every event. Trace sampling is a variable
-(`SENTRY_TRACES_SAMPLE_RATE`, `NEXT_PUBLIC_…` for the browser), defaulting to
-1 outside production and 0.1 in it.
+Sentry collects request context — headers, full URLs, user identity — by
+default (v11's `dataCollection`), on events and on streamed spans alike. Trace
+sampling is a variable (`SENTRY_TRACES_SAMPLE_RATE`, `NEXT_PUBLIC_…` for the
+browser), defaulting to 1 outside production and 0.1 in it.
 
 **Do**
 
-- Keep `redactDeep()` wired into `beforeSend` and `beforeSendTransaction` on
-  both the server and edge configs, and extend it when a new credential appears
-  in a URL or header.
+- Keep `redactDeep()` wired into `beforeSend` and `beforeSendSpan` on both the
+  server and edge configs, and extend it when a new credential appears in a URL
+  or header. Spans are streamed, so `beforeSendTransaction` would never run.
+- Keep `dataCollection` narrowing what v11 widened: no outgoing or response
+  bodies, no database parameters, and `neon-connection-string` denied — it
+  carries the database password on every query and matches none of Sentry's
+  own sensitive-name snippets. The browser collects no bodies at all, because
+  it has no redactor and `/api/claude`'s body carries the reader's key.
 - Rate-limit anything an anonymous caller can trigger. The webhook reports a
   secret mismatch at most once per five minutes per instance, because the path
   is guessable and an unbounded report is an unbounded bill.
@@ -537,7 +542,7 @@ the two lasts exactly as long as it takes someone to remember, and account
 linking has already broken inside it once. Run the statement before or with the
 deploy — which is what `db/schema.sql` says at each one.
 
-- **Sentry's `sendDefaultPii: true`** sends headers, cookies and user identity
+- **Sentry's default `dataCollection`** sends headers, cookies and user identity
   with every event, in production as well as locally. `redactDeep()` is what
   makes that tolerable rather than a decision anyone has revisited.
 - **`/api/claude` is unthrottled.** A signed-in user can drive it as hard as
