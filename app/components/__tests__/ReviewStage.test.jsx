@@ -116,11 +116,41 @@ describe("ReviewStage – card in progress", () => {
     expect(screen.queryByText(/seen in text/i)).toBeNull();
   });
 
-  it("shows the Finnish example sentence on the card front before answer is revealed", () => {
+  it("keeps the example behind a spoiler on the card front until it is tapped", () => {
     const withExample = { ...WORD, example: "Minä juoksen.", example_translation: "I run." };
-    setup({ dbWords: [withExample], showAnswer: false });
-    expect(screen.getByText("Minä juoksen.")).toBeTruthy();
+    const { setShowAnswer } = setup({ dbWords: [withExample], showAnswer: false });
+    const spoiler = screen.getByRole("button", { name: "Show example" });
+    // Hidden from assistive tech as well as blurred, so it is not read out.
+    expect(screen.getByText("Minä juoksen.").closest("[aria-hidden='true']")).toBeTruthy();
+    fireEvent.click(spoiler);
+    expect(screen.queryByRole("button", { name: "Show example" })).toBeNull();
+    const revealed = screen.getByText("Minä juoksen.");
+    expect(revealed.closest("[aria-hidden='true']")).toBeNull();
+    // Focus follows the button that was removed.
+    expect(document.activeElement).toBe(revealed);
+    // Revealing the context does not turn the card over.
+    expect(setShowAnswer).not.toHaveBeenCalled();
     expect(screen.queryByText("I run.")).toBeNull();
+  });
+
+  it("hides the next card's example again after one was revealed", () => {
+    const a = { ...WORD, example: "Minä juoksen." };
+    const b = { ...WORD_NO_BASE, example: "Iso koira." };
+    const props = {
+      queue: [1, 2], revIdx: 0, showAnswer: false, setShowAnswer: vi.fn(),
+      grading: false, dbWords: [a, b], loadingWords: false, onGrade: vi.fn(), onScanAnother: vi.fn(),
+    };
+    const { rerender } = render(<ReviewStage {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show example" }));
+    rerender(<ReviewStage {...props} revIdx={1} />);
+    expect(screen.getByRole("button", { name: "Show example" })).toBeTruthy();
+  });
+
+  it("shows the example plainly once the answer is revealed", () => {
+    const withExample = { ...WORD, example: "Minä juoksen." };
+    setup({ dbWords: [withExample], showAnswer: true });
+    expect(screen.queryByRole("button", { name: "Show example" })).toBeNull();
+    expect(screen.getByText("Minä juoksen.").closest("[aria-hidden='true']")).toBeNull();
   });
 
   it("shows the example translation on the answer side after reveal", () => {
