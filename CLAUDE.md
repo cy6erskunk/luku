@@ -164,8 +164,10 @@ changing it:
 - `/help` is answered before `getDb()` is called, so it stays a database-free
   connectivity test when a deployment is misconfigured. Keep it that way.
 - A review session keeps **no** stored state — the next card is derived from
-  SQL each turn. Consequently the web app's same-session requeue of failed
-  cards (`useReview.js`) is not reproduced in chat.
+  SQL each turn. The web app's same-session requeue of failed cards
+  (`useReview.js`) is approximated by the schedule instead: *Again* makes a
+  card due in `AGAIN_DELAY_MINUTES` (10, `lib/srs.js`), so it comes round
+  again in a chat session still going by then. That applies to web grades too.
 
 ### MCP server
 
