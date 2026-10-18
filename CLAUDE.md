@@ -167,7 +167,8 @@ changing it:
   SQL each turn. The web app's same-session requeue of failed cards
   (`useReview.js`) is approximated by the schedule instead: *Again* makes a
   card due in `AGAIN_DELAY_MINUTES` (10, `lib/srs.js`), so it comes round
-  again in a chat session still going by then. That applies to web grades too.
+  again in a chat session still going by then; a session that runs out first
+  ends by saying how many are coming back. That applies to web grades too.
 
 ### MCP server
 

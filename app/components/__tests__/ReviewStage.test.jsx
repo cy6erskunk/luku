@@ -242,6 +242,12 @@ describe("ReviewStage – card in progress", () => {
     expect(screen.getByText(/last interval: 3d/)).toBeTruthy();
   });
 
+  it("keeps the ease line for a just-failed card, whose interval is 0", () => {
+    const failed = { ...WORD_NO_BASE, lapses: 1, ease_factor: "1.96" };
+    setup({ showAnswer: true, queue: [2], dbWords: [failed] });
+    expect(screen.getByText(/just missed · ease: 2\.0/)).toBeTruthy();
+  });
+
   it("hides SRS stats when interval is 0", () => {
     setup({ showAnswer: true, queue: [2], dbWords: [WORD_NO_BASE] });
     expect(screen.queryByText(/last interval/)).toBeNull();
