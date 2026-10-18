@@ -361,7 +361,8 @@ easy to misread, which is the reason the explanation exists:
 - **`review_count` is a streak, not a tally.** It counts *consecutive* passes.
   Answering *Again* resets it to 0 along with the interval, so a word you have
   drilled for months reads `0` the moment you fail it — identical to a word you
-  have never seen.
+  have never seen. It also comes back in 10 minutes rather than tomorrow, so
+  its `next_review_at` reads as due again almost at once.
 - **`ease_factor` is how hard a card has proved overall.** 2.5 to begin with,
   `+0.1` for Easy, `-0.14` for Hard,
   `-0.54` for Again, floored at 1.3 and uncapped upwards. Under 2.5 means the
