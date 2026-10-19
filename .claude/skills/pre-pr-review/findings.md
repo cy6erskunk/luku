@@ -261,3 +261,18 @@ option, hook and default the repo configures for that package, not just the
 error in front of you. Which of them would now be ignored, renamed, or
 widened — and is any of them what keeps a credential out?
 Promoted at once: a security property (credentials reaching a third party).
+
+## F25 — A behaviour change leaves copy that described the old behaviour
+PR (this branch, Again in ten minutes) · self-review (`/code-review`) · Telegram copy / UI · fixed · open
+What happened: moving Again from one day to ten minutes left the bot's
+closing message saying "nothing else is due today" after a session whose last
+card had just been failed — due again in minutes — and a code comment saying
+grading always moves a card a day out. The web answer side hid the ease line
+for failed cards, because it was gated on `interval_days > 0`.
+Missed because: the grep for the old claim searched for its *wording*
+("1 day", "tomorrow") near "again/fail", and the stale copy said neither; it
+stated a consequence ("nothing else today") that only held under the old rule.
+Check: when a behaviour changes, list what the old behaviour *guaranteed*
+(here: "a graded card leaves the due set for the rest of the day"), then find
+every message, comment and display gate that relied on that guarantee — not
+only the ones that restate the rule.

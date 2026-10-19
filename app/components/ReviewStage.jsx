@@ -308,9 +308,11 @@ export default function ReviewStage({
       <div role="status" style={{ textAlign: "center", fontSize: 11, color: "#7ab4d4" }}>
         {savingExample && showAnswer && <div style={{ marginTop: 10 }}>Saving the new example…</div>}
       </div>
-      {!isNewReview && w.interval_days > 0 && showAnswer && (
+      {/* A failed card has interval 0 like a new one, but its ease is the
+          difficulty signal worth seeing when it comes back in the same pass. */}
+      {!isNewReview && (w.interval_days > 0 || w.lapses > 0) && showAnswer && (
         <div style={{ textAlign: "center", marginTop: 12, fontSize: 11, color: "#3a4550" }}>
-          last interval: {w.interval_days}d · ease: {Number(w.ease_factor).toFixed(1)}
+          {w.interval_days > 0 ? `last interval: ${w.interval_days}d` : "just missed"} · ease: {Number(w.ease_factor).toFixed(1)}
         </div>
       )}
     </div>
