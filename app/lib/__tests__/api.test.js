@@ -88,6 +88,27 @@ describe("callClaude", () => {
   });
 });
 
+describe("usage kind", () => {
+  // Each helper labels its call so the server's usage log can split cost by
+  // purpose; the label is all that differs, so check each one names its own.
+  const capture = (text) => {
+    const bodies = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_url, opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text }] }) });
+    }));
+    return bodies;
+  };
+
+  it("labels OCR, translation and example calls", async () => {
+    const bodies = capture('{"example":"Uusi.","example_translation":"New."}');
+    await ocrImage("sk-test", "abc", "image/jpeg");
+    await translateWord("sk-test", "talossa", "Asun talossa.");
+    await suggestExample("sk-test", { base: "talo", translations: ["house"] });
+    expect(bodies.map((b) => b.kind)).toEqual(["ocr", "translate", "example"]);
+  });
+});
+
 describe("ocrImage", () => {
   it("calls /api/claude with an image content block", async () => {
     let body;

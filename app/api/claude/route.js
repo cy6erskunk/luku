@@ -1,4 +1,8 @@
+import { after } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getAuth } from "@/lib/auth/server";
+import { getDb } from "@/lib/db";
+import { recordUsage } from "@/lib/usage";
 
 /**
  * Proxy for the Anthropic API.
@@ -38,7 +42,7 @@ export async function POST(request) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { apiKey, messages, system, maxTokens = 1500 } = await request.json();
+    const { apiKey, messages, system, maxTokens = 1500, kind } = await request.json();
 
     // The user's own key always wins, so a real key works in development too.
     const key = apiKey || developmentKey();
@@ -67,6 +71,20 @@ export async function POST(request) {
     if (!res.ok) {
       return Response.json({ error: data?.error?.message || "API error" }, { status: res.status });
     }
+    // After the reply is sent, so recording what a call cost never delays or
+    // fails the call itself — a database without the claude_usage table
+    // still translates.
+    after(async () => {
+      try {
+        await recordUsage(getDb(), { userId: user.id, kind, model: data.model || body.model, usage: data.usage });
+      } catch (e) {
+        Sentry.captureException(e);
+        // Sentry's route wrapper flushes when the handler returns, which is
+        // before this runs; without our own flush the event is only queued,
+        // and Vercel can freeze the function once this promise settles.
+        await Sentry.flush(2000);
+      }
+    });
     return Response.json(data);
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
