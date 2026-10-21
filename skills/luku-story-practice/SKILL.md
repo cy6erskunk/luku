@@ -5,29 +5,29 @@ description: "Two-step Finnish vocabulary practice from the user's Luku cards: a
 
 # Luku story practice
 
-Use this when the user asks for "another dozen", "a story from my due words", or translation practice with their Luku vocabulary. Each round has two steps:
+Use this when the user asks for a story from their due words, "another dozen", or translation practice with their Luku vocabulary. Each round has two steps:
 
-1. **Story**: a short Finnish story built from the ~12 most overdue cards, published as a listening page (template below).
+1. **Story**: a short Finnish story built from the 12 most overdue cards (or as many as are due, if fewer), published as a listening page (template below).
 2. **Translation**: when the user asks, 6 English sentences using those words. The user translates them into Finnish, and you correct them.
 
-Reply in the language the user writes in (usually English, sometimes Finnish).
+Reply in the language the user writes in. Card translations are in English, so glosses and practice sentences are too.
 
 ## Step 0: pick the words
 
 - The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server (a client may show them with a prefix, such as `mcp__luku__list_words`). `list_words` returns pages of up to 50 with a `total`, so page with `offset` until you have them all.
 - "Most overdue" means the lowest `next_review_at` that is earlier than now. The user reviews cards in the app between rounds, so don't trust earlier lists. If you already know likely candidates, confirm them with parallel `get_word` calls. Otherwise list all pages and sort.
-- Take the 12 oldest still-due cards. Skip a card only if it truly can't fit a story, and say so.
-- If a card's example or translation is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed; the base form can't be renamed. Past fixes: *seka* (only used as *sekaan/seassa* or in compounds), *yhtälailla* (standard spelling *yhtä lailla*), *vaaliva* (a participle that takes an object: *perinteitä vaaliva yhdistys*).
+- Take the 12 oldest still-due cards. If fewer than 12 are due, use those and say so; if none are, offer a story from the cards due soonest instead. Skip a card only if it truly can't fit a story, and say so.
+- If a card's example or translation is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed; the base form can't be renamed. Typical problems: *seka* (only used as *sekaan/seassa* or in compounds), *yhtälailla* (standard spelling *yhtä lailla*), *vaaliva* (a participle that takes an object: *perinteitä vaaliva yhdistys*).
 
 ## Step 1: the story
 
-- Write the story freely; the user asked not to be bound to the cards' example sentences. Aim for 5–6 short paragraphs of natural, everyday Finnish with a small plot and a light ending. Some dialogue (with a leading `– `) is good.
+- Write the story freely, rather than reusing the cards' example sentences. Aim for 5–6 short paragraphs of natural, everyday Finnish with a small plot and a light ending. Some dialogue (with a leading `– `) is good.
 - Use each target word once, inflected however the sentence needs. Double-check government and cases (e.g. *totella* + partitive, *suhtautua* + illative, *vaikutus johonkin*), consonant gradation, and adjective order.
 - Give it a short Finnish title (a noun phrase such as *Uiva lehmä*, *Sienikeitto*).
-- Build the page: write the template below to a new file in the scratchpad named after the title, fill in `{{TITLE}}` (twice), `{{DATE}}` (d.m.yyyy), `W` and `P`, then publish it with the Artifact tool (`icon: "book"`, one-sentence `description`). If this client has no Artifact tool, hand the user the HTML file instead. Don't redesign the page; it has been refined with the user (the slow-speed switch and the voice picker were their requests).
+- Build the page: write the template below to a new file named after the title, fill in `{{TITLE}}` (twice), `{{COUNT}}` (the number of target words), `{{DATE}}` (today in the user's time zone, d.m.yyyy), `W` and `P`, then publish it with the Artifact tool (`icon: "book"`, one-sentence `description`). If this client has no Artifact tool, hand the user the HTML file instead. Don't redesign the page: the template already handles narration, slow speed, voice choice, word glosses and dark mode.
   - `W`: `"base": "short English gloss"`, plus a grammar hint in parentheses when useful.
   - `P`: an array of paragraphs, each an array of sentences. Mark each target word as `[inflected form|base]`; the base must match a key in `W`.
-- In the reply, give one sentence on the premise, the 12 words, and 2–4 grammar patterns worth noticing (cases, idioms, partitive with mass nouns, and so on). Don't repeat the story text. End by offering translation sentences.
+- In the reply, give one sentence on the premise, the target words, and 2–4 grammar patterns worth noticing (cases, idioms, partitive with mass nouns, and so on). Don't repeat the story text. End by offering translation sentences.
 
 ## Step 2: translation practice
 
@@ -43,7 +43,7 @@ Reply in the language the user writes in (usually English, sometimes Finnish).
 
 ## Progress chart (when asked)
 
-List all cards and bucket `next_review_at` by the user's local calendar day (Europe/Helsinki). Roll everything already overdue into today as a separate stacked segment. Show a stacked bar chart of the next 14 days, and in the reply comment on the change since last time.
+List all cards and bucket `next_review_at` by calendar day in the user's time zone (ask if you don't know it; don't assume one). Roll everything already overdue into today as a separate stacked segment. Show a stacked bar chart of the next 14 days. If there was an earlier chart in this conversation, comment on what changed since.
 
 ## Listening page template
 
@@ -107,7 +107,7 @@ dd{margin:0;color:var(--muted);min-width:0}
 
 <div class="wrap">
   <header class="mast">
-    <span class="kicker">Luku · 12 sanaa · {{DATE}}</span>
+    <span class="kicker">Luku · {{COUNT}} sanaa · {{DATE}}</span>
     <h1>{{TITLE}}</h1>
   </header>
   <p class="hint">Tap a sentence to hear it. Tap a highlighted word to hear it alone and see what it means.</p>
