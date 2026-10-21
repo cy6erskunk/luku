@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mocks = vi.hoisted(() => ({ session: null }));
+const mocks = vi.hoisted(() => ({ session: null, afterTasks: [], sql: null, captured: [] }));
 
 vi.mock("@/lib/auth/server", () => ({
   getAuth: () => ({ getSession: () => Promise.resolve({ data: mocks.session }) }),
 }));
+// after() needs a live request scope; collecting the callbacks lets a test run
+// them once the response exists, which is the order Next runs them in.
+vi.mock("next/server", () => ({ after: (fn) => mocks.afterTasks.push(fn) }));
+vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
+vi.mock("@sentry/nextjs", () => ({ captureException: (e) => mocks.captured.push(e) }));
+
+const { fakeSql } = await import("../../../../lib/__tests__/helpers/fakeSql.js");
 
 const { GET, POST } = await import("../route.js");
 
@@ -200,6 +207,70 @@ describe("POST /api/claude", () => {
     const req = makeRequest({ apiKey: "sk-ant-test", messages: [] });
     await POST(req);
     expect(capturedBody.max_tokens).toBe(1500);
+  });
+});
+
+describe("POST /api/claude usage logging", () => {
+  const USAGE = { input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  const reply = (body, ok = true, status = 200) =>
+    vi.fn().mockResolvedValue({ ok, status, json: () => Promise.resolve(body) });
+  const runAfter = () => Promise.all(mocks.afterTasks.splice(0).map((fn) => fn()));
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mocks.session = { user: { id: "u1" } };
+    mocks.afterTasks.length = 0;
+    mocks.captured.length = 0;
+    mocks.sql = fakeSql();
+    setEnv("development");
+  });
+
+  afterEach(() => setEnv(ORIGINAL_NODE_ENV));
+
+  it("records the response's token usage under the signed-in user", async () => {
+    vi.stubGlobal("fetch", reply({ model: "claude-sonnet-4-6-20260101", content: [], usage: USAGE }));
+
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [{ role: "user", content: "talo" }], kind: "translate" }));
+    expect(mocks.sql.calls).toHaveLength(0); // not before the response is out
+    await runAfter();
+
+    expect(mocks.sql.calls).toHaveLength(1);
+    expect(mocks.sql.calls[0].text).toMatch(/INSERT INTO claude_usage/);
+    // The model the response names, not the alias that was requested.
+    expect(mocks.sql.calls[0].values).toEqual(["u1", "translate", "claude-sonnet-4-6-20260101", 120, 45, 0, 0]);
+  });
+
+  it("stores no prompt or reply text", async () => {
+    vi.stubGlobal("fetch", reply({ model: "m", content: [{ type: "text", text: "house" }], usage: USAGE }));
+
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [{ role: "user", content: "talo" }], system: "Be terse.", kind: "translate" }));
+    await runAfter();
+
+    const stored = JSON.stringify(mocks.sql.calls[0].values);
+    expect(stored).not.toContain("talo");
+    expect(stored).not.toContain("house");
+    expect(stored).not.toContain("Be terse.");
+  });
+
+  it("records nothing when Anthropic refuses the call", async () => {
+    vi.stubGlobal("fetch", reply({ error: { message: "Invalid API key" } }, false, 401));
+
+    await POST(makeRequest({ apiKey: "bad", messages: [], kind: "ocr" }));
+    await runAfter();
+
+    expect(mocks.sql.calls).toHaveLength(0);
+  });
+
+  it("keeps the reply when the insert fails, and reports the failure", async () => {
+    mocks.sql = fakeSql([new Error('relation "claude_usage" does not exist')]);
+    vi.stubGlobal("fetch", reply({ model: "m", content: [{ type: "text", text: "Hei" }], usage: USAGE }));
+
+    const res = await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], kind: "ocr" }));
+    await runAfter();
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).content[0].text).toBe("Hei");
+    expect(mocks.captured.map((e) => e.message)).toEqual(['relation "claude_usage" does not exist']);
   });
 });
 
