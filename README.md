@@ -27,6 +27,7 @@ Open http://localhost:3000
 - The key is sent to `/api/claude` — a Next.js server route that forwards requests to Anthropic
 - The API key is **never exposed in the browser bundle**
 - OCR and word translation both go through this server route
+- Each successful call's token counts (input, output, cache) are logged per account to the `claude_usage` table for cost analysis — counts and the model name only, never the text sent or received. Re-run `db/schema.sql` to create it; until then calls still work and each failed insert is reported to Sentry. Cost is tokens × the model's current price, computed when you query.
 
 ## Telegram review bot (optional)
 
