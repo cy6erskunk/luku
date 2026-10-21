@@ -9,7 +9,10 @@ vi.mock("@/lib/auth/server", () => ({
 // them once the response exists, which is the order Next runs them in.
 vi.mock("next/server", () => ({ after: (fn) => mocks.afterTasks.push(fn) }));
 vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
-vi.mock("@sentry/nextjs", () => ({ captureException: (e) => mocks.captured.push(e) }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: (e) => mocks.captured.push({ error: e }),
+  flush: () => { mocks.captured.push({ flushed: true }); return Promise.resolve(true); },
+}));
 
 const { fakeSql } = await import("../../../../lib/__tests__/helpers/fakeSql.js");
 
@@ -270,7 +273,12 @@ describe("POST /api/claude usage logging", () => {
 
     expect(res.status).toBe(200);
     expect((await res.json()).content[0].text).toBe("Hei");
-    expect(mocks.captured.map((e) => e.message)).toEqual(['relation "claude_usage" does not exist']);
+    // Captured, then flushed: the wrapper's own flush ran when the handler
+    // returned, before this, so an unflushed event can be lost on Vercel.
+    expect(mocks.captured).toEqual([
+      { error: expect.objectContaining({ message: 'relation "claude_usage" does not exist' }) },
+      { flushed: true },
+    ]);
   });
 });
 

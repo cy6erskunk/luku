@@ -79,6 +79,10 @@ export async function POST(request) {
         await recordUsage(getDb(), { userId: user.id, kind, model: data.model || body.model, usage: data.usage });
       } catch (e) {
         Sentry.captureException(e);
+        // Sentry's route wrapper flushes when the handler returns, which is
+        // before this runs; without our own flush the event is only queued,
+        // and Vercel can freeze the function once this promise settles.
+        await Sentry.flush(2000);
       }
     });
     return Response.json(data);
