@@ -281,8 +281,8 @@ claude mcp add --transport http luku https://your-app.vercel.app/api/mcp \
   --header "Authorization: Bearer luku_mcp_..."
 ```
 
-`/mcp` in Claude Code should then list three tools: `list_words`, `get_word` and
-`update_word`. The panel will show you that command with the token already in
+`/mcp` in Claude Code should then list five tools: `list_words`, `get_word`,
+`update_word`, `list_skills` and `read_skill`. The panel will show you that command with the token already in
 it, so it is one copy rather than two.
 
 **Claude Desktop, claude.ai and mobile** take the endpoint directly, through a
@@ -351,6 +351,30 @@ ones with no example sentence, `filter: "difficult"` everything you have lost
 ground on — hardest first, which may be most of the list — and
 `filter: "lapsed"` the narrower set you failed at their *last* review, which is
 the one to use for "what should I work on now".
+
+### Skills it shares
+
+The server also publishes [Agent Skills](https://agentskills.io/): workflows
+for practising with your cards rather than editing them. There is one so far,
+`luku-story-practice`, which builds a read-aloud story from your most overdue
+words and then sets translation sentences from it. Ask for *"a story from my
+due words"* and Claude picks it up.
+
+They live in `skills/` as ordinary skill folders, and reach a client two ways,
+because support differs between clients:
+
+- **As tools**, `list_skills` and `read_skill`. Every client shows a model its
+  tools, so this works everywhere today.
+- **Through the MCP Skills extension**
+  ([SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2640-skills-extension.md)):
+  each file is a `skill://` resource, and `skills/list` and `skills/get` return
+  each skill's frontmatter with a digest for every file. A client that loads MCP
+  skills natively uses this route instead.
+
+To add one, put a folder with a `SKILL.md` under `skills/`. The folder name must
+match the `name` in its frontmatter, and the frontmatter is flat `key: "value"`
+lines; the tests refuse anything else, because a client checks it against its
+own parse. The same folder zips up as-is for uploading to claude.ai.
 
 ### What it knows about your reviews
 

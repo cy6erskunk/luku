@@ -70,6 +70,8 @@ app/
         ├── link/route.js       # Mint link code / status / unlink (session authenticated)
         └── cron/route.js       # Hourly reminder pass (bearer authenticated)
 
+skills/                         # Agent Skills served by /api/mcp, one folder per skill (SKILL.md + files)
+
 lib/                            # Server-only (except shared/); app/lib/ is the client half
                                 #   boundary enforced by lib/__tests__/serverOnlyBoundary.test.js
 ├── shared/                     # The one isomorphic tier — no imports, so it is safe to bundle
@@ -84,7 +86,8 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 ├── mcp/
 │   ├── protocol.js             # JSON-RPC envelope and method dispatch (hand-rolled, no SDK)
 │   ├── instructions.js         # What the server tells a client about its SRS, at handshake time
-│   ├── tools.js                # list_words / get_word / update_word
+│   ├── tools.js                # list_words / get_word / update_word, plus list_skills / read_skill
+│   ├── skills.js               # Serves skills/ as skill:// resources and SEP-2640 entries
 │   └── tokens.js               # Bearer tokens: mint, resolve, revoke (hashed)
 └── telegram/
     ├── api.js                  # tgCall() and message helpers
@@ -264,6 +267,20 @@ what matters when changing it:
   (`160.79.104.0/21`), not the reader's machine, so the deployment has to be
   publicly reachable. `localhost` works in Claude Code and cannot work as a
   connector — worth knowing before debugging a connector against `npm run dev`.
+- **Skills are served twice over, from one folder.** `skills/` holds ordinary
+  Agent Skills directories; `lib/mcp/skills.js` serves them through the Skills
+  extension (SEP-2640: `skill://` resources, `skills/list`, `skills/get`,
+  sha256 digest and size per file) and `list_skills` / `read_skill` restate them
+  as tools, because most clients show a model tools and nothing else. The
+  tool descriptions are what make a model look, so they say *when* to check.
+  A host verifies digests, sizes and the frontmatter against its own YAML
+  parse, so `parseFrontmatter` takes only flat `key: value` lines and throws on
+  anything a real parser would read differently. Skills are not per-user, so
+  nothing there takes a `userId`. The folder is read at runtime, which is why
+  `next.config.mjs` traces `skills/` into the route — drop that and every
+  skills call on a deployment fails. A skill pointer was tried in
+  `INSTRUCTIONS` and cut: the length budget there is real, and `list_skills`'
+  description already carries it.
 - An MCP write does **not** invalidate an open browser tab: a refined card shows
   stale until the next load. `useReview` self-corrects for a word deleted
   elsewhere; an edited one is not worth a subscription.

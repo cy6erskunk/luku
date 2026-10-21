@@ -18,6 +18,7 @@
  */
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/db";
+import { SKILLS } from "@/lib/mcp/skills";
 import { bearerFrom, resolveToken } from "@/lib/mcp/tokens";
 import { INTERNAL_ERROR, INVALID_REQUEST, PARSE_ERROR, handleMessage, rpcError } from "@/lib/mcp/protocol";
 import { toolsFor } from "@/lib/mcp/tools";
@@ -77,7 +78,7 @@ export async function POST(request) {
 
   let response;
   try {
-    response = await handleMessage(message, toolsFor(sql, authenticated.user_id));
+    response = await handleMessage(message, toolsFor(sql, authenticated.user_id), SKILLS);
   } catch (e) {
     // A query that threw — a half-applied schema is the usual cause — would
     // otherwise surface as Next's 500 HTML page, which an MCP client cannot

@@ -1,6 +1,12 @@
 import { withSentryConfig } from '@sentry/nextjs/config';
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  // lib/mcp/skills.js reads skills/ at runtime, which the bundler cannot see
+  // from an import, so it is traced into the MCP route by hand.
+  outputFileTracingIncludes: {
+    "/api/mcp": ["./skills/**/*"],
+  },
+};
 export default withSentryConfig(nextConfig, {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options

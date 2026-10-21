@@ -82,7 +82,7 @@ describe("authentication", () => {
     const res = await POST(rpc(req("tools/list")));
 
     expect(res.status).toBe(200);
-    expect((await res.json()).result.tools).toHaveLength(3);
+    expect((await res.json()).result.tools).toHaveLength(5);
   });
 });
 
@@ -143,6 +143,14 @@ describe("transport", () => {
     const { result } = await res.json();
     expect(result.serverInfo.name).toBe("luku");
     expect(result.capabilities.tools).toEqual({});
+    expect(result.capabilities.extensions).toHaveProperty(["io.modelcontextprotocol/skills"]);
+  });
+
+  it("serves the shipped skills to an authenticated caller", async () => {
+    const res = await POST(rpc(req("skills/list", {})));
+
+    const { result } = await res.json();
+    expect(result.skills.map((s) => s.uri)).toContain("skill://luku-story-practice/SKILL.md");
   });
 });
 
