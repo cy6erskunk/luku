@@ -206,7 +206,7 @@ what matters when changing it:
   reader, and `lib/__tests__/words.test.js` is what holds it.
 - The protocol is **hand-rolled** (`lib/mcp/protocol.js`) rather than taken from
   `@modelcontextprotocol/sdk` — tools plus read-only skill resources come to
-  nine JSON-RPC methods, and sessions, SSE and sampling would all go unused. The cost is ours:
+  ten JSON-RPC methods, and sessions, SSE and sampling would all go unused. The cost is ours:
   `PROTOCOL_VERSION` is what we claim to speak, and a spec revision is a
   deliberate change.
 - **The server describes its own scheduling, twice over.**
