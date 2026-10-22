@@ -276,3 +276,17 @@ Check: when a behaviour changes, list what the old behaviour *guaranteed*
 (here: "a graded card leaves the due set for the rest of the day"), then find
 every message, comment and display gate that relied on that guarantee — not
 only the ones that restate the rule.
+
+## F26 — A whole-set count read off a page that can be empty
+PR (this branch, `list_words` filter "due") · self-review (`/code-review`) · MCP / database · fixed · open
+What happened: `due_now`, a window count over every matching card, was read
+off the first row of the page and defaulted to 0 when the page was empty. An
+`offset` past the end then told a paging client that nothing was due, even
+though the tool description tells it to rely on that number to separate
+overdue cards from upcoming ones.
+Missed because: it copied the existing `total ?? 0` pattern, where the same
+gap had gone unremarked because nothing tells a client to act on `total`
+alone.
+Check: does any count that describes the whole result ride on the page's
+rows, and what does the reply claim when the page is empty but the set is
+not? Prefer leaving the field out to stating a value the query never computed.

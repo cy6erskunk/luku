@@ -345,13 +345,17 @@ pass never costs you progress on a word you have been drilling. `update_word`
 names those four columns and no others, and there is a test that fails if that
 stops being true.
 
-Three filters are there for the cards most likely to need work:
+Four filters are there for the cards most likely to need work:
 `filter: "suspect"` finds the ones whose translation or part of speech failed to
 save (`(unavailable)`, or a `pos` of `?`), `filter: "missing_example"` the
 ones with no example sentence, `filter: "difficult"` everything you have lost
 ground on — hardest first, which may be most of the list — and
 `filter: "lapsed"` the narrower set you failed at their *last* review, which is
 the one to use for "what should I work on now".
+`filter: "due"` lists every card by when it next comes up — the most overdue
+first, then the ones coming due soonest — and its `due_now` says how many are
+due already, since a chat client has no reliable clock to tell overdue from
+upcoming by itself.
 
 ### What it knows about your reviews
 

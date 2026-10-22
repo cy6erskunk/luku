@@ -249,6 +249,10 @@ what matters when changing it:
   on the author's). `review_count = 0 AND ease_factor < DEFAULT` is "failed at
   its last review" — `review_count` reaches 0 only after a failure or before
   the first review, and the ease condition rules the second out.
+- **`filter: "due"` orders by `next_review_at`**, every card, so one ascending
+  sort gives both "most overdue" and "coming due soonest". It also returns
+  `due_now`, the count already due against the database's `NOW()`, because a
+  chat client has no reliable clock to say where overdue ends.
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
