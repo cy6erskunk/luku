@@ -14,9 +14,10 @@ Reply in the language the user writes in. Card translations are in English, so g
 
 ## Step 0: pick the words
 
-- The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server (a client may show them with a prefix, such as `mcp__luku__list_words`). `list_words` returns pages of up to 50 with a `total`, so page with `offset` until you have them all.
-- "Most overdue" means the lowest `next_review_at` that is earlier than now. The user reviews cards in the app between rounds, so don't trust earlier lists. If you already know likely candidates, confirm them with parallel `get_word` calls. Otherwise list all pages and sort.
-- Take the 12 oldest still-due cards. If fewer than 12 are due, use those and say so; if none are, offer a story from the cards due soonest instead. Skip a card only if it truly can't fit a story, and say so.
+- The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server (a client may show them with a prefix, such as `mcp__luku__list_words`).
+- Call `list_words` with `filter: "due"` and `limit: 20`. It orders every card by `next_review_at`, most overdue first and then the ones coming due soonest, and returns `due_now`: how many cards are already due, counted by the server's clock. The first `due_now` cards are the overdue ones, so there is no need to list everything or sort it yourself. The extra rows leave room to skip a card.
+- Call it again every round, even if you listed earlier: the user reviews cards in the app between rounds.
+- Take the first 12 still-due cards. If `due_now` is under 12, use those and say so; if it is 0, offer a story from the cards due soonest instead (the top of the same list). Skip a card only if it truly can't fit a story, and say so.
 - If a card's example or translation is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed; the base form can't be renamed. Typical problems: *seka* (only used as *sekaan/seassa* or in compounds), *yhtälailla* (standard spelling *yhtä lailla*), *vaaliva* (a participle that takes an object: *perinteitä vaaliva yhdistys*).
 
 ## Step 1: the story
@@ -43,7 +44,7 @@ Reply in the language the user writes in. Card translations are in English, so g
 
 ## Progress chart (when asked)
 
-List all cards and bucket `next_review_at` by calendar day in the user's time zone (ask if you don't know it; don't assume one). Roll everything already overdue into today as a separate stacked segment. Show a stacked bar chart of the next 14 days. If there was an earlier chart in this conversation, comment on what changed since.
+Page through `list_words` with `filter: "due"` (`limit: 50`, raising `offset`) until a card's `next_review_at` is more than 14 days out; the order makes the rest irrelevant. Bucket `next_review_at` by calendar day in the user's time zone (ask if you don't know it; don't assume one). Roll everything already overdue (the first `due_now` cards) into today as a separate stacked segment. Show a stacked bar chart of the next 14 days. If there was an earlier chart in this conversation, comment on what changed since.
 
 ## Listening page template
 
