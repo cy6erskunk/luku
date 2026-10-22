@@ -205,8 +205,8 @@ what matters when changing it:
   recorded inflections. That is the promise the tool descriptions make to the
   reader, and `lib/__tests__/words.test.js` is what holds it.
 - The protocol is **hand-rolled** (`lib/mcp/protocol.js`) rather than taken from
-  `@modelcontextprotocol/sdk` — a tools-only server is five JSON-RPC methods,
-  and sessions, SSE and sampling would all go unused. The cost is ours:
+  `@modelcontextprotocol/sdk` — tools plus read-only skill resources come to
+  nine JSON-RPC methods, and sessions, SSE and sampling would all go unused. The cost is ours:
   `PROTOCOL_VERSION` is what we claim to speak, and a spec revision is a
   deliberate change.
 - **The server describes its own scheduling, twice over.**
@@ -276,7 +276,8 @@ what matters when changing it:
   Agent Skills directories; `lib/mcp/skills.js` serves them through the Skills
   extension (SEP-2640: `skill://` resources, `skills/list`, `skills/get`,
   sha256 digest and size per file) and `list_skills` / `read_skill` restate them
-  as tools, because most clients show a model tools and nothing else. The
+  as tools, because few clients load MCP skills yet and a tool always reaches
+  the model. The
   tool descriptions are what make a model look, so they say *when* to check.
   A host verifies digests, sizes and the frontmatter against its own YAML
   parse, so `parseFrontmatter` takes only flat `key: value` lines and throws on

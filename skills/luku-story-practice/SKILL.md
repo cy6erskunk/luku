@@ -17,7 +17,7 @@ Reply in the language the user writes in. Card translations are in English, so g
 - The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server (a client may show them with a prefix, such as `mcp__luku__list_words`).
 - Call `list_words` with `filter: "due"` and `limit: 20`. It orders every card by `next_review_at`, most overdue first and then the ones coming due soonest, and returns `due_now`: how many cards are already due, counted by the server's clock. The first `due_now` cards are the overdue ones, so there is no need to list everything or sort it yourself. The extra rows leave room to skip a card.
 - Call it again every round, even if you listed earlier: the user reviews cards in the app between rounds.
-- Take the first 12 still-due cards. If `due_now` is under 12, use those and say so; if it is 0, offer a story from the cards due soonest instead (the top of the same list). Skip a card only if it truly can't fit a story, and say so.
+- Take the first 12 still-due cards. If the list is empty, the user has no cards yet: say so and stop. If `due_now` is under 12, use those and say so; if it is 0, offer a story from the cards due soonest instead (the top of the same list). Skip a card only if it truly can't fit a story, and say so.
 - If a card's example or translation is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed; the base form can't be renamed. Typical problems: *seka* (only used as *sekaan/seassa* or in compounds), *yhtälailla* (standard spelling *yhtä lailla*), *vaaliva* (a participle that takes an object: *perinteitä vaaliva yhdistys*).
 
 ## Step 1: the story

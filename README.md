@@ -363,7 +363,8 @@ The server also publishes [Agent Skills](https://agentskills.io/): workflows
 for practising with your cards rather than editing them. There is one so far,
 `luku-story-practice`, which builds a read-aloud story from your most overdue
 words and then sets translation sentences from it. Ask for *"a story from my
-due words"* and Claude picks it up.
+due words"*; the tool descriptions tell Claude to check for a skill before a
+practice session, and if it doesn't, ask it to use `luku-story-practice`.
 
 They live in `skills/` as ordinary skill folders, and reach a client two ways,
 because support differs between clients:
