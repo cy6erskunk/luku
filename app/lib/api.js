@@ -3,14 +3,16 @@ import { SERVER_KEY } from "./utils.js";
 // client and one regenerated in ExamplePicker are held to the same standard.
 import { EXAMPLE_GUIDE } from "../../lib/shared/exampleGuide.js";
 
-export async function callClaude(apiKey, messages, system, maxTokens = 1500) {
+// `kind` labels the call in the server's token-usage log; it changes nothing
+// about the request itself.
+export async function callClaude(apiKey, messages, system, maxTokens = 1500, kind) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "content-type": "application/json" },
     // SERVER_KEY is a marker, not a credential: dropping the field is what
     // tells the route to use the deployment's own key. JSON.stringify omits
     // undefined for us.
-    body: JSON.stringify({ apiKey: apiKey === SERVER_KEY ? undefined : apiKey, messages, system, maxTokens }),
+    body: JSON.stringify({ apiKey: apiKey === SERVER_KEY ? undefined : apiKey, messages, system, maxTokens, kind }),
   });
   let data;
   try { data = await res.json(); } catch { data = {}; }
@@ -26,7 +28,8 @@ export async function ocrImage(apiKey, base64, mediaType) {
       { type: "text", text: "Extract ALL text from this image exactly as written. Return only the raw text, nothing else. Preserve paragraph breaks." },
     ]}],
     "You are an OCR assistant. Extract text from images with high accuracy.",
-    1500
+    1500,
+    "ocr"
   );
 }
 
@@ -35,7 +38,8 @@ export async function translateWord(apiKey, word, context) {
     apiKey,
     [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\n${EXAMPLE_GUIDE}\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English of the dictionary form","alt1","alt2"],"form_translation":"English of \\"${word}\\" exactly as inflected in the sentence","pos":"noun/verb/adj/adv/other","example":"memorable Finnish example sentence","example_translation":"English translation of example"}` }],
     "You are a Finnish linguist. Return only raw JSON, no markdown.",
-    500
+    500,
+    "translate"
   );
   try {
     const d = JSON.parse(raw.replace(/```json|```/g, "").trim());
@@ -66,7 +70,8 @@ export async function suggestExample(apiKey, word, avoid = []) {
       (seen.length ? `Do not repeat or closely paraphrase these examples:\n${seen.map((e) => `- ${e}`).join("\n")}\n` : "") +
       `\nWrite one new example. ${EXAMPLE_GUIDE}\n\nONLY raw JSON:\n{"example":"Finnish example sentence","example_translation":"English translation of example"}` }],
     "You are a Finnish teacher writing flashcard examples. Return only raw JSON, no markdown.",
-    300
+    300,
+    "example"
   );
   let d;
   try { d = JSON.parse(raw.replace(/```json|```/g, "").trim()); }

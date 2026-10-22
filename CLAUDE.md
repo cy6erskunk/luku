@@ -82,6 +82,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 ├── srs.js                      # calcSRS() — simplified SM-2; also easeDelta/DEFAULT_EASE_FACTOR, quoted by the MCP instructions
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
 ├── words.js                    # Word *content*: list/get/update the four meaning columns, shared by PATCH and MCP
+├── usage.js                    # recordUsage(): token counts of each /api/claude call into claude_usage (no text)
 ├── auth/server.js              # getAuth()
 ├── mcp/
 │   ├── protocol.js             # JSON-RPC envelope and method dispatch (hand-rolled, no SDK)
@@ -251,6 +252,10 @@ what matters when changing it:
   on the author's). `review_count = 0 AND ease_factor < DEFAULT` is "failed at
   its last review" — `review_count` reaches 0 only after a failure or before
   the first review, and the ease condition rules the second out.
+- **`filter: "due"` orders by `next_review_at`**, every card, so one ascending
+  sort gives both "most overdue" and "coming due soonest". It also returns
+  `due_now`, the count already due against the database's `NOW()`, because a
+  chat client has no reliable clock to say where overdue ends.
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
@@ -305,6 +310,11 @@ what matters when changing it:
   fallback is spent by whoever is signed in, not by whoever owns the key, and
   the owner gets no per-user visibility or limit. If a shared key is ever
   wanted, it needs a per-user quota, not this variable.
+- Each successful call's `usage` token counts go to `claude_usage`
+  (`lib/usage.js`), written in `after()` so a failed insert never costs the
+  reply. Tokens, not dollars — compute cost at query time. `kind` is a
+  client-supplied label (`translate` / `ocr` / `example`, else `other`); no
+  prompt or reply text is stored.
 - **`/api/claude` requires a session** regardless, which stops the route being
   an open relay to Anthropic for anyone who finds the path.
 

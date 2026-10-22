@@ -147,3 +147,24 @@ CREATE INDEX IF NOT EXISTS mcp_tokens_user ON mcp_tokens (user_id) WHERE revoked
 -- Counts from here on only. No back-fill is possible: the history it would
 -- need was overwritten each time a card was failed.
 ALTER TABLE words ADD COLUMN IF NOT EXISTS lapses INT NOT NULL DEFAULT 0;
+
+-- ── Claude usage ─────────────────────────────────────────────────────────────
+-- One row per successful /api/claude call: Anthropic's `usage` token counts
+-- and the model that served it, for cost analysis. Tokens, not dollars —
+-- prices change, so cost is computed at query time. No prompt or reply text
+-- is stored. Written after the response is sent; a failed insert loses the
+-- row, never the translation.
+
+CREATE TABLE IF NOT EXISTS claude_usage (
+  id                          BIGSERIAL PRIMARY KEY,
+  user_id                     TEXT NOT NULL,      -- from Neon Auth (Stack Auth user ID)
+  kind                        TEXT NOT NULL,      -- translate / ocr / example / other
+  model                       TEXT NOT NULL,      -- as reported by the response
+  input_tokens                INT NOT NULL,
+  output_tokens               INT NOT NULL,
+  cache_creation_input_tokens INT NOT NULL DEFAULT 0,
+  cache_read_input_tokens     INT NOT NULL DEFAULT 0,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS claude_usage_user_time ON claude_usage (user_id, created_at);
