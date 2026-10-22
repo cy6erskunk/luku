@@ -352,6 +352,10 @@ ones with no example sentence, `filter: "difficult"` everything you have lost
 ground on — hardest first, which may be most of the list — and
 `filter: "lapsed"` the narrower set you failed at their *last* review, which is
 the one to use for "what should I work on now".
+`filter: "due"` lists every card by when it next comes up — the most overdue
+first, then the ones coming due soonest — and its `due_now` says how many are
+due already, since a chat client has no reliable clock to tell overdue from
+upcoming by itself.
 
 ### What it knows about your reviews
 
