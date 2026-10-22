@@ -24,7 +24,9 @@ Sections are selected by the paths the diff touches. **Every change** and
       README, UI text, MCP tool descriptions, test assertions — and change
       them together. A retracted claim surviving on the constant it describes
       is the copy most likely to be believed. (F12, F20, F22)
-- [ ] Every number stated in prose is computed, not estimated; where a reader
+- [ ] Every number stated in prose is computed, not estimated — recounted
+      from the code by listing the items, not adjusted from the old figure
+      (F28); where a reader
       or a model acts on it, a test holds it (F20, §9).
 - [ ] A guard, gate or "this prevents X" claim: every path that reaches X
       listed — tool calls, UI buttons, other clients, local vs remote state —
