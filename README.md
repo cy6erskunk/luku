@@ -345,7 +345,7 @@ pass never costs you progress on a word you have been drilling. `update_word`
 names those four columns and no others, and there is a test that fails if that
 stops being true.
 
-Three filters are there for the cards most likely to need work:
+Four filters are there for the cards most likely to need work:
 `filter: "suspect"` finds the ones whose translation or part of speech failed to
 save (`(unavailable)`, or a `pos` of `?`), `filter: "missing_example"` the
 ones with no example sentence, `filter: "difficult"` everything you have lost
