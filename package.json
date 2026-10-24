@@ -17,7 +17,7 @@
     "telegram:status": "node scripts/telegram-set-webhook.mjs --status"
   },
   "dependencies": {
-    "@neondatabase/auth": "0.1.0-beta.21",
+    "@neondatabase/auth": "0.7.0-beta",
     "@neondatabase/serverless": "1.2.0",
     "@sentry/nextjs": "11.8.0",
     "next": "16.4.2",

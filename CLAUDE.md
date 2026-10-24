@@ -397,6 +397,7 @@ thread instead.
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | Neon pooled connection string |
 | `NEON_AUTH_BASE_URL` | Yes | Neon Auth base URL. The Vercel–Neon integration sets `VITE_NEON_AUTH_URL` instead, which `lib/auth/server.js` copies across |
+| `NEON_AUTH_COOKIE_SECRET` | Yes | Signs Neon Auth's session-cache cookie; at least 32 characters (`openssl rand -base64 32`). Without it sign-in reports itself unavailable and every session route returns 500; the cause is in the server log and Sentry |
 | `ANTHROPIC_API_KEY` | No | **Development only.** `/api/claude` falls back to it and the client skips the key screen; a key the user typed still wins. Ignored when `NODE_ENV=production`, so a deployment never spends one key on every signed-in user |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot only. The most sensitive secret here — it grants full control of the bot |
 | `TELEGRAM_BOT_USERNAME` | No | Telegram bot only; used to build the `t.me` deep link |
