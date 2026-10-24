@@ -3,8 +3,21 @@ import { useState } from "react";
 import { authClient } from "../lib/authClient";
 import LukuLogo from "./LukuLogo.jsx";
 import { Bp, Bg } from "../lib/styles.js";
+import { reportClientError } from "../lib/report.js";
 
 const D = "#0f1117";
+
+export const AUTH_UNAVAILABLE = "Sign-in is unavailable right now. Please try again later.";
+
+// A 4xx carries a message meant for the reader ("Invalid email or password").
+// A 5xx is the deployment's fault and its message is not: the auth client
+// fills a missing one with "HTTP 500", and the proxy's own say things like
+// "Could not resolve authentication server hostname". The cause reaches
+// Sentry from the server side.
+function authErrorMessage(error, fallback) {
+  if (error?.status >= 500) return AUTH_UNAVAILABLE;
+  return error?.message || fallback;
+}
 
 export default function SignIn() {
   const [loading, setLoading] = useState(null);
@@ -20,8 +33,8 @@ export default function SignIn() {
     setErr(""); setLoading(provider);
     try {
       const result = await authClient.signIn.social({ provider, callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-in failed. Check your Neon Auth setup.");
-    } catch (e) { setErr(e?.message || "Sign-in failed."); }
+      if (result?.error) setErr(authErrorMessage(result.error, "Sign-in failed."));
+    } catch (e) { reportClientError("[sign-in]", e); setErr(authErrorMessage(e, "Sign-in failed.")); }
     finally { setLoading(null); }
   };
 
@@ -29,8 +42,8 @@ export default function SignIn() {
     setErr(""); setLoading("email");
     try {
       const result = await authClient.signIn.email({ email, password, callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-in failed.");
-    } catch (e) { setErr(e?.message || "Sign-in failed."); }
+      if (result?.error) setErr(authErrorMessage(result.error, "Sign-in failed."));
+    } catch (e) { reportClientError("[sign-in]", e); setErr(authErrorMessage(e, "Sign-in failed.")); }
     finally { setLoading(null); }
   };
 
@@ -38,8 +51,8 @@ export default function SignIn() {
     setErr(""); setLoading("email");
     try {
       const result = await authClient.signUp.email({ email, password, name: name || email.split("@")[0], callbackURL: "/" });
-      if (result?.error) setErr(result.error.message || "Sign-up failed.");
-    } catch (e) { setErr(e?.message || "Sign-up failed."); }
+      if (result?.error) setErr(authErrorMessage(result.error, "Sign-up failed."));
+    } catch (e) { reportClientError("[sign-up]", e); setErr(authErrorMessage(e, "Sign-up failed.")); }
     finally { setLoading(null); }
   };
 
