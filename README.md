@@ -8,8 +8,9 @@ Photograph a Finnish text, tap any word to get its translation and dictionary fo
 2. Go to [vercel.com](https://vercel.com) → New Project → import your repo
 3. Add the Neon integration, which provides `DATABASE_URL` and the Neon Auth
    variables, then run `db/schema.sql` once in the Neon SQL editor
-4. Add `NEON_AUTH_COOKIE_SECRET` yourself (`openssl rand -base64 32`) — the
-   integration does not set it, and sign-in fails without it
+4. Add `NEON_AUTH_COOKIE_SECRET` (`openssl rand -base64 32`) unless the
+   integration already set it. Without it sign-in fails and `/api/auth`
+   answers 500, "cookies.secret must be at least 32 characters long"
 5. Click Deploy
 
 See `.env.local.example` for the full list of variables.
