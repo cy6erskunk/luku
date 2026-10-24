@@ -290,3 +290,29 @@ alone.
 Check: does any count that describes the whole result ride on the page's
 rows, and what does the reply claim when the page is empty but the set is
 not? Prefer leaving the field out to stating a value the query never computed.
+
+## F27 — A hand-rolled reader of a format that a real parser will check
+PR (this branch, MCP skills) · self-review (`/code-review`) · MCP · fixed · open
+What happened: `parseFrontmatter` exists so `skills/list` returns exactly
+what a host's YAML parser reads from the same file, but its refusal list was
+written from the cases that came to mind (`true`, `2.1`). A bare date, `0x1F`,
+`.inf`, `#…` and `foo:` all passed as strings where YAML reads a timestamp,
+number, null or error, and a `__proto__` key vanished on assignment. The
+same pass found the directory walk publishing dotfiles and silently dropping
+symlinks, and common text types served as binary.
+Missed because: the parser was tested against what it should accept, not
+against the other parser's view of what it accepted.
+Check: when your output must match another implementation's reading of the
+same input, is the accepted shape defined positively (a whitelist), and is
+each edge of it tested against how the real parser reads it?
+
+## F28 — A count in prose updated by adding to the old figure
+PR (this branch, MCP skills) · self-review (`/code-review`) · CLAUDE.md · fixed · promoted
+What happened: CLAUDE.md said the server was "five JSON-RPC methods". Adding
+five, the first fix wrote nine, counting only `case` labels; the original
+five had included `notifications/initialized`. It took a second review to
+reach ten.
+Missed because: the new figure was derived from the old one without
+recounting what the old one counted.
+Check: is the figure recounted from the code, by listing the items, rather
+than adjusted from the previous figure?
