@@ -1,14 +1,8 @@
-import { authApiHandler } from "@neondatabase/auth/next/server";
-
-function resolveEnv() {
-  if (!process.env.NEON_AUTH_BASE_URL && process.env.VITE_NEON_AUTH_URL) {
-    process.env.NEON_AUTH_BASE_URL = process.env.VITE_NEON_AUTH_URL;
-  }
-}
+import { getAuth } from "@/lib/auth/server";
 
 let _handler = null;
 function handler() {
-  if (!_handler) { resolveEnv(); _handler = authApiHandler(); }
+  if (!_handler) _handler = getAuth().handler();
   return _handler;
 }
 
