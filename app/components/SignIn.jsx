@@ -19,7 +19,7 @@ function authErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-export default function SignIn() {
+export default function SignIn({ intro = "Sign in to save your vocabulary and review with spaced repetition across devices." }) {
   const [loading, setLoading] = useState(null);
   const [err, setErr] = useState("");
   const [mode, setMode] = useState("main"); // "main" | "sign-in" | "sign-up"
@@ -72,7 +72,7 @@ export default function SignIn() {
         {logo}
 
         {mode === "main" && <>
-          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>Sign in to save your vocabulary and review with spaced repetition across devices.</p>
+          <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>{intro}</p>
           <button onClick={() => signInSocial("google")} disabled={!!loading} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: loading ? 0.6 : 1 }}>
             {loading === "google" ? "Redirecting…" : "Continue with Google"}
           </button>

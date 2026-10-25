@@ -271,9 +271,11 @@ can point Claude at your own vocabulary and have it fix those in bulk — *"go
 through my cards, correct any translation that looks wrong, and give the ones
 with no example a good one."*
 
-Nothing to deploy: the server is `/api/mcp`, and it needs no environment
-variables. Run `db/schema.sql` if you have not since this landed — the
-`mcp_tokens` table is where the credential lives.
+Nothing to deploy: the server is `/api/mcp`, and with panel tokens it needs no
+environment variables. Run `db/schema.sql` if you have not since this landed —
+the `mcp_tokens` table is where the credential lives. Connecting with only the
+URL, signing in through Luku instead of pasting a token, is optional and needs
+a little Neon setup: see [Connect with sign-in](#connect-with-sign-in-oauth).
 
 ### Connect a client
 
@@ -339,6 +341,51 @@ If the **Request headers** section is missing, bridge the endpoint locally with
 ```
 
 Check the flags against `mcp-remote`'s own README — they have moved before.
+
+### Connect with sign-in (OAuth)
+
+Neon Auth can act as an OAuth authorization server for Luku's MCP endpoint. With
+it on, a client that supports OAuth needs only the URL — no token, no request
+headers. Its first call is refused with a challenge naming where to sign in,
+and the client sends you to Luku to sign in and approve, then calls with the
+token Neon Auth issued. Panel tokens keep working alongside it.
+
+It is off until you turn it on, because it takes configuration on both sides
+that must agree exactly:
+
+1. **In the Neon Console**, on the branch your deployment uses, enable the
+   OAuth provider plugin (**Settings → Better Auth → Plugins**). Neon describes
+   it as a preview, so it may not be on every account yet.
+2. **Register the resource**: add `https://your-app.vercel.app/api/mcp` — your
+   production URL, exactly — as a protected resource. It becomes every token's
+   audience.
+3. **Point it at Luku's pages**: the login page is
+   `https://your-app.vercel.app/oauth/login`, the consent page
+   `https://your-app.vercel.app/oauth/consent`.
+4. **Client registration**: Neon accepts Client ID Metadata Documents, which
+   is what the MCP specification recommends. If a client fails at the
+   registration step, also enable dynamic client registration — older clients
+   still use it.
+5. **In Vercel**, set `MCP_OAUTH_RESOURCE` to the same URL as step 2, for
+   Production, and redeploy.
+
+Then check it from a terminal:
+
+```bash
+curl -si -X POST https://your-app.vercel.app/api/mcp | grep -i www-authenticate
+# Bearer realm="luku", resource_metadata="https://your-app.vercel.app/.well-known/oauth-protected-resource/api/mcp"
+curl -s https://your-app.vercel.app/.well-known/oauth-protected-resource/api/mcp
+# {"resource":"https://your-app.vercel.app/api/mcp","authorization_servers":["https://…neonauth…/neondb/auth"]}
+```
+
+Without `resource_metadata` in the first answer, `MCP_OAUTH_RESOURCE` is not set
+on the deployment you are calling. Once connected, ask the client to list your
+cards: you should see your own. An empty list for an account that has cards
+means the token's user id is not the one Luku stores cards under — please open
+an issue rather than working around it.
+
+Preview deployments have their own URLs, which are not the registered resource,
+so leave `MCP_OAUTH_RESOURCE` unset there: they fall back to panel tokens.
 
 ### What it can and cannot change
 
@@ -434,7 +481,24 @@ migration can recover it.
   URL only you can reach — `localhost`, a VPN, a preview deployment with
   protection on — fails there and succeeds locally.
 
-Revoking a token in the panel takes effect on the client's next call.
+- **Signing in through a connector loops back to the sign-in page, or ends on
+  "This page is where an app … sends you".** The second means Luku's login page
+  was opened without the signed query Neon adds, so the authorization has
+  nothing to resume: start again from the connector. A loop usually means the
+  login or consent page URL registered in Neon is not the deployment you are
+  signed into.
+
+- **Sign-in and approval succeed, then the client asks you to sign in again,
+  over and over.** The client is not sending the `resource` parameter the MCP
+  specification requires, so Neon issues it a token meant for no particular
+  API, which Luku refuses. Use a panel token with that client instead.
+
+- **Connected with sign-in, every call fails with `-32603`.** The deployment
+  could not reach Neon Auth to check the token; it answers an error rather than
+  a `401` so the client keeps its token. The cause is in Sentry.
+
+Revoking a token in the panel takes effect on the client's next call. An OAuth
+connection is not listed in the panel; remove it from the client's side.
 
 ## Skipping the key screen while developing
 

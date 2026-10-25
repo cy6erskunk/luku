@@ -63,6 +63,7 @@ app/
     ├── words/route.js          # CRUD for saved vocabulary (PATCH replaces a word's example)
     ├── reviews/route.js        # SRS grading endpoint
     ├── mcp/route.js            # MCP server (bearer-token authenticated, NOT a session)
+    ├── mcp/metadata/route.js   # RFC 9728 metadata, served at /.well-known/oauth-protected-resource by a rewrite
     ├── mcp/tokens/route.js     # Mint / list / revoke MCP tokens (session authenticated)
     ├── auth/[...path]/route.js # Neon Auth catch-all
     └── telegram/
@@ -86,6 +87,8 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 │   ├── protocol.js             # JSON-RPC envelope and method dispatch (hand-rolled, no SDK)
 │   ├── instructions.js         # What the server tells a client about its SRS, at handshake time
 │   ├── tools.js                # list_words / get_word / update_word
+│   ├── authenticate.js         # The route's one auth step: header -> user_id, for either credential
+│   ├── oauth.js                # Neon Auth access tokens: verifier, challenge (off unless MCP_OAUTH_RESOURCE)
 │   └── tokens.js               # Bearer tokens: mint, resolve, revoke (hashed)
 └── telegram/
     ├── api.js                  # tgCall() and message helpers
@@ -185,14 +188,31 @@ what matters when changing it:
   what makes the `user_id` it resolves trustworthy downstream, exactly as the
   webhook secret is what makes Telegram's `from.id` trustworthy. Never add an
   endpoint here that takes a user id from a caller.
-- **The identity is still the web app's.** A token is minted by
+- **Two credentials, one identity.** A `luku_mcp_` token is minted by
   `/api/mcp/tokens`, which *is* session-authenticated, and the `user_id` frozen
-  into the row is whatever `getSession()` reported at that moment. Signing in
-  with Google is what decides whose vocabulary a token reaches.
+  into the row is whatever `getSession()` reported at that moment. An OAuth
+  access token is issued by Neon Auth itself after the reader signs in on
+  `/oauth/login` and approves on `/oauth/consent`; its `sub` is the same user
+  id. Either way, signing in with Google is what decides whose vocabulary a
+  credential reaches.
 - **Keep the auth seam one function wide.** The route's only auth step is
-  "header → `user_id`". Neither `lib/mcp/protocol.js` nor `lib/mcp/tools.js`
-  knows how the caller was identified; they take a `userId`. An OAuth issuer, if
-  one is ever wanted, resolves through the same call and changes nothing else.
+  `authenticate()` (`lib/mcp/authenticate.js`): "header → `user_id`". The
+  `luku_mcp_` prefix routes a token to the hashed lookup and anything else to
+  the verifier, so a panel token never waits on Neon and an access token never
+  touches the database. Neither `lib/mcp/protocol.js` nor `lib/mcp/tools.js`
+  knows which credential it was; they take a `userId`.
+- **OAuth is opt-in per deployment, through `MCP_OAUTH_RESOURCE`.** It is the
+  token's audience and must equal the resource registered on the Neon branch
+  exactly, so it stays off until both sides are configured: unset, no challenge
+  names the metadata and `/.well-known/oauth-protected-resource` is a 404. An
+  unreachable Neon must surface as an error, never as a 401 — a 401 tells the
+  client to discard a good token and send the reader through sign-in again.
+- **The metadata route lives in `app/api/`, behind a rewrite.** RFC 9728 fixes
+  the URL under `/.well-known`, but the `lib/` boundary treats everything under
+  `app/` outside `app/api/` as browser code, so `next.config.mjs` rewrites the
+  public URL onto `/api/mcp/metadata`. It builds the document from the verifier
+  rather than using `@neon/oauth`'s handler, which matches on the request path
+  and would see the rewritten one.
 - Tokens are stored **hashed**, never expire, and are revoked. Only
   `left(token_hash, 8)` ever reaches the browser, so the panel can list and
   revoke without being handed a credential.
@@ -256,8 +276,9 @@ what matters when changing it:
 - A tool that refuses or finds nothing answers with `isError: true` inside a
   successful result, because the model is meant to read it and try again. Only a
   broken envelope is a JSON-RPC error.
-- **Every Claude surface can reach it**, by two different routes, which is why
-  the panel names both. Claude Code takes the `Authorization` header on the
+- **Every Claude surface can reach it with a panel token**, by two different
+  routes, which is why the panel names both. With OAuth on, a client that
+  supports it needs only the URL. Claude Code takes the `Authorization` header on the
   command line. Claude Desktop, claude.ai and mobile take it as a *custom
   connector* with authentication "No sign-in" and the token under **Request
   headers** — "no sign-in" there means no OAuth, not no credential. Their
@@ -398,6 +419,7 @@ thread instead.
 | `DATABASE_URL` | Yes | Neon pooled connection string |
 | `NEON_AUTH_BASE_URL` | Yes | Neon Auth base URL. The Vercel–Neon integration sets `VITE_NEON_AUTH_URL` instead, which `lib/auth/server.js` copies across |
 | `NEON_AUTH_COOKIE_SECRET` | Yes | Signs Neon Auth's session-cache cookie; at least 32 characters (`openssl rand -base64 32`). Without it sign-in reports itself unavailable and every session route returns 500; the cause is in the server log and Sentry |
+| `MCP_OAUTH_RESOURCE` | No | Turns on OAuth sign-in for the MCP server. The MCP endpoint's public URL (`https://<app>/api/mcp`), registered as a resource on the Neon branch's OAuth provider; it becomes the token's `aud`, so it must match exactly. Unset, panel tokens are the only credential |
 | `ANTHROPIC_API_KEY` | No | **Development only.** `/api/claude` falls back to it and the client skips the key screen; a key the user typed still wins. Ignored when `NODE_ENV=production`, so a deployment never spends one key on every signed-in user |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot only. The most sensitive secret here — it grants full control of the bot |
 | `TELEGRAM_BOT_USERNAME` | No | Telegram bot only; used to build the `t.me` deep link |
