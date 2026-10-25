@@ -488,6 +488,11 @@ migration can recover it.
   login or consent page URL registered in Neon is not the deployment you are
   signed into.
 
+- **Sign-in and approval succeed, then the client asks you to sign in again,
+  over and over.** The client is not sending the `resource` parameter the MCP
+  specification requires, so Neon issues it a token meant for no particular
+  API, which Luku refuses. Use a panel token with that client instead.
+
 - **Connected with sign-in, every call fails with `-32603`.** The deployment
   could not reach Neon Auth to check the token; it answers an error rather than
   a `401` so the client keeps its token. The cause is in Sentry.

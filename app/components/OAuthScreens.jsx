@@ -30,22 +30,31 @@ import SignIn from "./SignIn.jsx";
 const D = "#0f1117";
 
 /**
- * Neon appends `sig` when it redirects here. Without it there is no
- * authorization to resume — someone opened the page by hand.
+ * The authorization request Neon redirected with: the client's own parameters
+ * plus `sig`, which Neon appends. Without `sig` there is no authorization to
+ * resume — someone opened the page by hand.
  *
  * null until mounted: the page also renders on the server, which has no URL to
- * read, and answering false there would hydrate into a different page.
+ * read, and answering "not signed" there would hydrate into a different page.
  */
-function useSignedQuery() {
-  const [signed, setSigned] = useState(null);
-  useEffect(() => { setSigned(new URLSearchParams(window.location.search).has("sig")); }, []);
-  return signed;
+function useOAuthQuery() {
+  const [query, setQuery] = useState(null);
+  useEffect(() => { setQuery(new URLSearchParams(window.location.search)); }, []);
+  return query;
 }
 
+/** Throws rather than doing nothing on a reply with nowhere to go, so the
+ *  caller's catch re-enables the buttons instead of leaving them dead. */
 function follow(result) {
   if (result?.error) throw result.error;
   const url = result?.data?.url ?? result?.data?.redirect_uri;
-  if (url) window.location.href = url;
+  if (!url) throw new Error("OAuth reply carried no redirect");
+  window.location.href = url;
+}
+
+/** The host a URL names, or null for anything that is not one. */
+function hostOf(value) {
+  try { return new URL(value).host; } catch { return null; }
 }
 
 function Frame({ children }) {
@@ -76,15 +85,24 @@ function NothingToResume() {
 }
 
 export function OAuthLogin() {
-  const signed = useSignedQuery();
+  const query = useOAuthQuery();
   const session = authClient.useSession();
   const user = session.data?.user ?? null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  if (signed === null || session.isPending) return <Loading />;
-  if (!signed) return <NothingToResume />;
+  if (query === null || session.isPending) return <Loading />;
+  if (!query.has("sig")) return <NothingToResume />;
   if (!user) return <SignIn intro="Sign in to let the app that sent you here read and refine your Luku cards." />;
+
+  // A client asking for a fresh sign-in (prompt=login, or a max_age the
+  // current session may not meet) is not answered by the existing session:
+  // continuing with it would send the reader straight back here. Signing in
+  // again is what satisfies it, and SignIn works while signed in.
+  const prompts = (query.get("prompt") ?? "").split(" ");
+  if (prompts.includes("login") || query.has("max_age")) {
+    return <SignIn intro="The app that sent you here asks you to sign in again before it connects to your Luku cards." />;
+  }
 
   const resume = async () => {
     setErr(""); setBusy(true);
@@ -97,6 +115,17 @@ export function OAuthLogin() {
     }
   };
 
+  const switchAccount = async () => {
+    setErr("");
+    try {
+      const result = await authClient.signOut();
+      if (result?.error) throw result.error;
+    } catch (e) {
+      reportClientError("[oauth sign-out]", e);
+      setErr("Could not sign out. Start the connection again from the app that sent you here.");
+    }
+  };
+
   return (
     <Frame>
       <p style={text}>Signed in as <strong style={{ color: "#e8e0d5" }}>{user.email || user.name}</strong>.</p>
@@ -105,7 +134,7 @@ export function OAuthLogin() {
       </button>
       {/* Signing out keeps the signed query in the URL, so SignIn renders next
           and the authorization resumes under the other account. */}
-      <button onClick={() => authClient.signOut()} disabled={busy} style={{ ...Bg, width: "100%", fontSize: 13 }}>
+      <button onClick={switchAccount} disabled={busy} style={{ ...Bg, width: "100%", fontSize: 13 }}>
         Use a different account
       </button>
       {err && <div role="alert" style={errStyle}>{err}</div>}
@@ -114,11 +143,10 @@ export function OAuthLogin() {
 }
 
 export function OAuthConsent() {
-  const signed = useSignedQuery();
+  const query = useOAuthQuery();
   const session = authClient.useSession();
   const user = session.data?.user ?? null;
   const [clientName, setClientName] = useState(null);
-  const [clientHost, setClientHost] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -128,11 +156,6 @@ export function OAuthConsent() {
   useEffect(() => {
     const clientId = new URLSearchParams(window.location.search).get("client_id");
     if (!clientId) return;
-    // The name comes from a document the client publishes about itself, so
-    // anyone can call their client "Claude". With a Client ID Metadata
-    // Document the client_id is that document's URL, and its host is the part
-    // Neon actually checked — so it is shown beside the name.
-    try { setClientHost(new URL(clientId).host); } catch { /* a registered id, not a URL */ }
     let live = true;
     authClient.oauth2.publicClient({ query: { client_id: clientId } })
       .then(({ data }) => { if (live && data?.client_name) setClientName(data.client_name); })
@@ -140,9 +163,15 @@ export function OAuthConsent() {
     return () => { live = false; };
   }, []);
 
-  if (signed === null || session.isPending) return <Loading />;
-  if (!signed) return <NothingToResume />;
+  if (query === null || session.isPending) return <Loading />;
+  if (!query.has("sig")) return <NothingToResume />;
   if (!user) return <SignIn intro="Sign in to let the app that sent you here read and refine your Luku cards." />;
+
+  // The name is whatever the client says about itself — anyone can register
+  // one called "Claude". The redirect URI is the part that cannot lie: it is
+  // signed into the query and it is where the code goes. Its host is shown
+  // beside the name, so a reader can see who would actually receive access.
+  const returnHost = hostOf(query.get("redirect_uri"));
 
   const answer = async (accept) => {
     setErr(""); setBusy(true);
@@ -160,7 +189,7 @@ export function OAuthConsent() {
       <p style={{ ...text, color: "#e8e0d5", fontSize: 16 }}>
         <strong>{clientName ?? "An app"}</strong> wants to connect to your Luku cards
       </p>
-      {clientHost && <p style={{ ...text, marginTop: -12, fontSize: 12 }}>from {clientHost}</p>}
+      {returnHost && <p style={{ ...text, marginTop: -12, fontSize: 12 }}>Allowing sends you back to {returnHost}</p>}
       <p style={text}>
         It will be able to read your cards and their review schedule, and change a
         card&apos;s translations, part of speech and example sentence. It cannot

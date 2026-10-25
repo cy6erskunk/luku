@@ -87,6 +87,42 @@ describe("OAuthLogin", () => {
     expect(screen.getByRole("button", { name: /^continue$/i }).disabled).toBe(false);
   });
 
+  it.each([["prompt=login", "&prompt=login"], ["max_age", "&max_age=0"]])(
+    "asks for a fresh sign-in instead of continuing when the client sends %s", async (_label, extra) => {
+      // Continuing with the existing session would land straight back here.
+      at(SIGNED + extra);
+      signedIn();
+      render(<OAuthLogin />);
+
+      expect(await screen.findByText(/sign in again/i)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
+    },
+  );
+
+  it("says so, rather than leaving a dead button, when the reply has nowhere to go", async () => {
+    at(SIGNED);
+    signedIn();
+    mocks.continue.mockResolvedValue({ data: { redirect: false } });
+    render(<OAuthLogin />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^continue$/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not continue/i);
+    expect(screen.getByRole("button", { name: /^continue$/i }).disabled).toBe(false);
+  });
+
+  it("reports a sign-out that fails instead of dropping it", async () => {
+    at(SIGNED);
+    signedIn();
+    mocks.signOut.mockResolvedValue({ error: { status: 500, message: "down" } });
+    render(<OAuthLogin />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /different account/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not sign out/i);
+    expect(mocks.report).toHaveBeenCalled();
+  });
+
   it("offers another account by signing out, keeping the signed query", async () => {
     at(SIGNED);
     signedIn();
@@ -110,13 +146,14 @@ describe("OAuthConsent", () => {
     expect(screen.getByText(/cannot\s+reschedule, rename or delete/i)).toBeTruthy();
   });
 
-  it("shows the host behind the client id, which the client cannot choose for itself", async () => {
-    at("?client_id=https%3A%2F%2Fevil.example%2Fclient.json&sig=abc");
+  it("shows where approving sends the code, which a client's self-chosen name cannot hide", async () => {
+    at("?client_id=abc123&redirect_uri=https%3A%2F%2Fevil.example%2Fcallback&sig=abc");
     signedIn();
     mocks.publicClient.mockResolvedValue({ data: { client_name: "Claude" } });
     render(<OAuthConsent />);
 
-    expect(await screen.findByText("from evil.example")).toBeTruthy();
+    expect(await screen.findByText("Claude")).toBeTruthy();
+    expect(screen.getByText(/sends you back to evil\.example/i)).toBeTruthy();
   });
 
   it("falls back to a generic name when the client cannot be looked up", async () => {

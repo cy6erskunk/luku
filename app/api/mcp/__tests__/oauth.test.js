@@ -26,7 +26,9 @@ const mocks = vi.hoisted(() => ({
   // A plain array, not a vi.fn: the one construction happens in whichever
   // test runs first, and call history does not survive to the next.
   created: [],
+  broken: false,
   createMcpAuth: (options) => {
+    if (mocks.broken) throw new Error("OAuthConfigError: resource must be an absolute URL");
     mocks.created.push(options);
     return {
       resourceMetadataUrl: "https://luku.test/.well-known/oauth-protected-resource/api/mcp",
@@ -120,5 +122,37 @@ describe("with OAuth configured", () => {
     expect(res.status).toBe(200);
     expect(mocks.verify).not.toHaveBeenCalled();
     expect(mocks.sql.calls[1].values).toContain("u1");
+  });
+});
+
+describe("with a malformed MCP_OAUTH_RESOURCE", () => {
+  // The route caches its verifier, so these load it afresh with
+  // createMcpAuth throwing — as @neon/oauth does for a resource that is not
+  // an absolute URL.
+  async function loadBroken() {
+    mocks.broken = true;
+    vi.resetModules();
+    return (await import("../route.js")).POST;
+  }
+  afterAll(() => { mocks.broken = false; });
+
+  it("keeps panel tokens working", async () => {
+    const post = await loadBroken();
+    const token = generateToken();
+    mocks.sql = fakeSql([[{ user_id: "u1", token_hash: hashToken(token) }], []]);
+    const res = await post(rpc(listWords, `Bearer ${token}`));
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).error).toBeUndefined();
+  });
+
+  it("still answers 401 with the plain challenge, and reports the setting", async () => {
+    const post = await loadBroken();
+    const Sentry = await import("@sentry/nextjs");
+    const res = await post(rpc(listWords));
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get("WWW-Authenticate")).toBe('Bearer realm="luku"');
+    expect(Sentry.captureException).toHaveBeenCalled();
   });
 });

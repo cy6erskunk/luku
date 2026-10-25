@@ -8,8 +8,9 @@
  * the user_id it resolves to trustworthy downstream, exactly as the Telegram
  * webhook's secret is what makes `from.id` trustworthy there.
  *
- * The identity is still the web app's: the token was minted by a
- * session-authenticated request and the user_id was frozen into its row then.
+ * The identity is still the web app's either way: a panel token was minted by
+ * a session-authenticated request and the user_id was frozen into its row
+ * then, and an OAuth access token's `sub` is the user Neon Auth signed in.
  * Nothing below reads a user id from the request body, and no tool accepts one.
  *
  * Keeping that in one call is deliberate. An OAuth access token from Neon
@@ -33,16 +34,29 @@ export function GET() {
   return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
 }
 
+/**
+ * 401s carry the challenge, so a client can tell "wrong credential" from
+ * "wrong URL" without guessing — and, with OAuth on, where to sign in.
+ *
+ * Built only on the 401 path, and a malformed MCP_OAUTH_RESOURCE falls back to
+ * the plain challenge here: OAuth is optional, and a broken setting for it
+ * must not take panel tokens down with it. Sentry hears about it every time,
+ * which is the point — it is a deployment to fix, not a request to retry.
+ */
+function wwwAuthenticate() {
+  try {
+    return challenge();
+  } catch (e) {
+    Sentry.captureException(e);
+    return 'Bearer realm="luku"';
+  }
+}
+
 export async function POST(request) {
   let sql;
   let authenticated;
-  let wwwAuthenticate;
   try {
     sql = getDb();
-    // Built here, inside the guard, because it is what first constructs the
-    // OAuth verifier on a request with no header — and a malformed
-    // MCP_OAUTH_RESOURCE throws there.
-    wwwAuthenticate = challenge();
     // One auth call. A missing header and an unknown token answer identically:
     // the difference is not something an unauthenticated caller should learn.
     authenticated = await authenticate(sql, request.headers.get("authorization"));
@@ -57,10 +71,8 @@ export async function POST(request) {
     return Response.json(rpcError(null, INTERNAL_ERROR, "Internal error"));
   }
 
-  // 401s carry the challenge, so a client can tell "wrong credential" from
-  // "wrong URL" without guessing — and, with OAuth on, where to sign in.
   if (!authenticated) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: { "WWW-Authenticate": wwwAuthenticate } });
+    return Response.json({ error: "Unauthorized" }, { status: 401, headers: { "WWW-Authenticate": wwwAuthenticate() } });
   }
 
   let message;
