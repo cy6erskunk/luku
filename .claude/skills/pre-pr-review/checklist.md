@@ -141,11 +141,14 @@ request*, answered here explicitly:
 - [ ] Reminders: claim before send; Telegram error releases, transport error
       keeps; 403 disables.
 
-## MCP — `lib/mcp/**`, `app/api/mcp/**`, `lib/words.js`
+## MCP — `lib/mcp/**`, `app/api/mcp/**`, `lib/words.js`, `app/oauth/**`, `app/components/OAuthScreens.jsx`
 
 - [ ] The writable surface is still the four columns, and the tool
       descriptions still say so; `words.test.js` holds it (§9).
 - [ ] Auth seam still one function wide; tools take a `userId` only.
+- [ ] A screen asking the reader to grant access shows something the
+      requesting party cannot choose — the signed redirect host — not only
+      its self-chosen name (F28).
 - [ ] Numbers in `instructions.js` / `SCHEDULE_FIELD_GUIDE` interpolated from
       `lib/srs.js`; anything a client must not misread is in both places.
 - [ ] Refusals are `isError: true` results; JSON-RPC errors only for a broken

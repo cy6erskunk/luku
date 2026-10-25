@@ -290,3 +290,37 @@ alone.
 Check: does any count that describes the whole result ride on the page's
 rows, and what does the reply claim when the page is empty but the set is
 not? Prefer leaving the field out to stating a value the query never computed.
+
+## F27 — An optional feature's bad setting takes the required path down with it
+PR (this branch, MCP OAuth) · self-review (`/code-review`) · MCP / config · fixed · open
+What happened: the OAuth challenge was built at the top of the MCP route's
+auth `try`, so a malformed `MCP_OAUTH_RESOURCE` threw on every request and
+panel-token callers — who never touch OAuth — got `-32603` on every call.
+Missed because: the code was placed for the no-header case (where the
+verifier is first built) without asking who else passes through that line.
+Check: when an optional feature is configured wrong, does only its own path
+fail? Trace a request that does not use the feature through every line the
+feature added.
+
+## F28 — A trust prompt that shows only what the other party says about itself
+PR (this branch, MCP OAuth) · self-review (`/code-review`) · OAuth consent · fixed · promoted
+What happened: the consent page named the client by `client_name`, which a
+dynamically registered client chooses freely, so anyone could ask for access
+as "Claude" and the reader had nothing else to go on. Now it also shows the
+host of the signed `redirect_uri` — where the code actually goes.
+Missed because: the client_id host was added for metadata-document clients,
+and dynamically registered ids, which are not URLs, fell through silently.
+Check: on any screen asking the reader to grant access, is something shown
+that the requesting party cannot choose for itself?
+Promoted at once: a security property (who receives access to the cards).
+
+## F29 — A resumed flow drops a parameter that sends it straight back
+PR (this branch, MCP OAuth) · self-review (`/code-review`) · OAuth login · fixed · open
+What happened: "Continue" on the login page replayed the authorization with
+the existing session, which cannot satisfy `prompt=login` or `max_age`, so
+such a request would bounce back to the same page forever.
+Missed because: the happy path was read from the library's README, not from
+the code that decides when authorize redirects to the login page.
+Check: for a step that resumes someone else's protocol flow, which request
+parameters make that flow return to this step, and does the step satisfy
+them rather than only re-sending?
