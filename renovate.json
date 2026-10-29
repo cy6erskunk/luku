@@ -5,5 +5,13 @@
     "github>cy6erskunk/renovate-config:automerge-minor-patch-devdeps",
     "github>cy6erskunk/renovate-config:automerge-patch-deps",
     "github>cy6erskunk/renovate-config:supply-chain-security"
+  ],
+  "packageRules": [
+    {
+      "description": "neon-js only publishes pre-releases; allow upgrading between them, but never automerge",
+      "matchPackageNames": ["@neondatabase/neon-js"],
+      "ignoreUnstable": false,
+      "automerge": false
+    }
   ]
 }
