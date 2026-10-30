@@ -8,8 +8,8 @@
   ],
   "packageRules": [
     {
-      "description": "neon-js only publishes pre-releases; allow upgrading between them, but never automerge",
-      "matchPackageNames": ["@neondatabase/neon-js"],
+      "description": "neon auth only publishes pre-releases; allow upgrading between them, but never automerge",
+      "matchPackageNames": ["@neondatabase/auth"],
       "ignoreUnstable": false,
       "automerge": false
     }
