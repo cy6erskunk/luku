@@ -7,48 +7,83 @@ description: "Two-step Finnish vocabulary practice from the user's Luku cards: a
 
 Use this when the user asks for a story from their due words, "another dozen", or translation practice with their Luku vocabulary. Each round has two steps:
 
-1. **Story**: a short Finnish story built from the 12 most overdue cards (or as many as are due, if fewer), published as a listening page (template below).
+1. **Story**: a Finnish story built from the 12 most overdue cards (or all overdue cards, when the user asks for that), published as a listening page (template below).
 2. **Translation**: when the user asks, 6 English sentences using those words. The user translates them into Finnish, and you correct them.
 
 Reply in the language the user writes in. Card translations are in English, so glosses and practice sentences are too.
 
 ## Step 0: pick the words
 
-- The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server (a client may show them with a prefix, such as `mcp__luku__list_words`).
-- Call `list_words` with `filter: "due"` and `limit: 20`. It orders every card by `next_review_at`, most overdue first and then the ones coming due soonest, and returns `due_now`: how many cards are already due, counted by the server's clock. The first `due_now` cards are the overdue ones, so there is no need to list everything or sort it yourself. The extra rows leave room to skip a card.
-- Call it again every round, even if you listed earlier: the user reviews cards in the app between rounds.
-- Take the first 12 still-due cards. If the list is empty, the user has no cards yet: say so and stop. If `due_now` is under 12, use those and say so; if it is 0, offer a story from the cards due soonest instead (the top of the same list). Skip a card only if it truly can't fit a story, and say so.
-- If a card's example or translation is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed; the base form can't be renamed. Typical problems: *seka* (only used as *sekaan/seassa* or in compounds), *yhtälailla* (standard spelling *yhtä lailla*), *vaaliva* (a participle that takes an object: *perinteitä vaaliva yhdistys*).
+- The Luku tools are `list_words`, `get_word` (by `base`) and `update_word`, from the Luku MCP server. A client may show them with a prefix, such as `mcp__luku__list_words`, and may need them loaded first if it defers tools.
+- Get the words with one call: `list_words` with `filter: "due"` and `limit: 16`. It returns cards sorted by `next_review_at`, most overdue first and then the ones coming due soonest, along with `due_now`: how many cards are due right now, by the server's clock. Call it again every round, because the user reviews cards in the app between rounds; the result is fresh, so there's no need to re-check with `get_word`.
+  - Take the first 12. The extra rows are there so you can skip a card that truly can't fit a story; say which, and why.
+  - If `due_now` is under 12, still take 12, and tell the user how many are due now and roughly when the rest come due.
+  - If the list is empty, the user has no cards yet: say so and stop.
+  - If the user asks for all overdue words, call with `limit: 50` and take the first `due_now` cards, paging with `offset` if there are more than 50.
+  - If your copy of the tool definition doesn't list `"due"` (it may be cached), call it anyway. Fall back to paging all cards and sorting by `next_review_at` only if the call is actually rejected.
+- If the user asks for their hardest words instead, use `filter: "difficult"` (lowest ease first, then most lapses) or `filter: "lapsed"` (failed at the last review).
+- If a card's example, translation or part of speech is wrong, misleading or truncated, point it out and offer to fix it with `update_word`. Only `translations`, `pos`, `example` and `example_translation` can be changed through the tool, so for a wrong base form, say what it should be and leave the fix to the user in the app. When fixing, correct what is there rather than inventing new content: keep the user's example sentence and fix only the wrong form, unless they ask for a new one. Typical problems: a usage note missing (*seka* is only used as *sekaan/seassa* or in compounds), a non-standard spelling (*yhtälailla* for *yhtä lailla*), the wrong part of speech, an inflected form saved as the base form, or an example that is only a fragment.
 
 ## Step 1: the story
 
-- Write the story freely, rather than reusing the cards' example sentences. Aim for 5–6 short paragraphs of natural, everyday Finnish with a small plot and a light ending. Some dialogue (with a leading `– `) is good.
-- Use each target word once, inflected however the sentence needs. Double-check government and cases (e.g. *totella* + partitive, *suhtautua* + illative, *vaikutus johonkin*), consonant gradation, and adjective order.
-- Give it a short Finnish title (a noun phrase such as *Uiva lehmä*, *Sienikeitto*).
+### Level
+
+- **Always adult in tone**, at either level: work, courts, politics, the environment, the media, relationships, city life. No talking animals, cute mishaps or moral-of-the-story endings. Learners are adults, and a children's story is a poor way to meet grown-up vocabulary.
+- **Ask the level once.** On the first story request in a conversation, if the request doesn't make the level clear (nothing like "advanced", "simple/easy", or "another dozen" continuing an earlier round), ask one short question, with a multiple-choice question tool if the client has one: "Advanced (roughly B2–C1)" or "Simpler, everyday language". Don't ask again in the same conversation.
+- **Advanced:** a newspaper-feature or literary voice, "not too simple and at times challenging".
+  - Longer sentences with subordinate and relative clauses; participle constructions (*-neen/-van* reporting after *epäillä, olettaa, todeta*; agent participles like *kyläläisten keräämä*); the essive and translative (*syytettynä*, *riekaleiksi*); the conditional in reported decisions (*vaati, ettei oikeus kelpuuttaisi*); the passive; idioms in natural context (*katsoa vierestä*, *päästää helpolla*).
+  - Keep it readable: one clear storyline, concrete details, no strings of abstract nouns. A journalist covering an environmental-crime trial (*Totuuden jyvä*) is the right register.
+- **Simpler:** short paragraphs of plain everyday Finnish with a small plot.
+
+### Writing it
+
+- Write the story freely rather than reusing the cards' example sentences. For 12 words, aim for 5–6 paragraphs; for a larger set (up to ~40), 8–10 paragraphs, with every word used. Dialogue (with a leading `– `) is optional.
+- Use each target word once, inflected however the sentence needs. Double-check government and cases (e.g. *totella* + partitive, *suhtautua* + illative, *syyllistyä* + illative, *vaikutus johonkin*, *tarttua johonkin*), consonant gradation, and adjective order. Prefer idioms that are actually common; if you use a rarer one (e.g. *totuuden jyvä*), be ready to say so and give the common alternative (*siinä on perää*).
+- Give it a short Finnish title (a noun phrase such as *Totuuden jyvä*, *Sienikeitto*).
 - Build the page: write the template below to a new file named after the title, fill in `{{TITLE}}` (twice), `{{COUNT}}` (the number of target words), `{{DATE}}` (today in the user's time zone, d.m.yyyy), `W` and `P`, then publish it with the Artifact tool (`icon: "book"`, one-sentence `description`). If this client has no Artifact tool, hand the user the HTML file instead. Don't redesign the page: the template already handles narration, slow speed, voice choice, word glosses and dark mode.
   - `W`: `"base": "short English gloss"`, plus a grammar hint in parentheses when useful.
-  - `P`: an array of paragraphs, each an array of sentences. Mark each target word as `[inflected form|base]`; the base must match a key in `W`.
-- In the reply, give one sentence on the premise, the target words, and 2–4 grammar patterns worth noticing (cases, idioms, partitive with mass nouns, and so on). Don't repeat the story text. End by offering translation sentences.
+  - `P`: an array of paragraphs, each an array of sentences. Mark each target word as `[inflected form|base]`; the base must match a key in `W`. Check with a quick script that every key in `W` is marked exactly once in `P`.
+- In the reply, give one sentence on the premise, the word list, and 2–4 grammar patterns worth noticing at the story's level. Don't repeat the story text. Mention any card problems you noticed. End by offering translation sentences.
+- If the user asks for a translation of the story, give a close English translation paragraph by paragraph, following the Finnish structure so they can match sentences, then 3–4 notes on the spots that are easy to misread (legal terms, idioms, the conditional).
 
 ## Step 2: translation practice
 
 - Write 6 everyday English sentences that use words from the current story. Don't copy story sentences, and vary the forms (past, negative, plural, passive, conditional).
-- Add 2–4 hints about the traps without giving the answers: the case a verb takes, an idiom, gradation.
+- Don't label the sentences with the Finnish target words (no "(tavoittaa)" after a sentence): recalling the word is the point of the exercise.
+- Add 2–4 hints about the traps without giving the answers: the case a verb takes, an idiom, gradation. Refer to the word by its English meaning (e.g. "the verb for 'obey' takes the partitive"), not by its Finnish form.
 - To correct, open with one line saying what went well. Then, for each sentence:
   - Bold the corrected Finnish, or bold the original with ✓ if it's right.
-  - Explain each fix briefly: the case and why, gradation, a look-alike word mix-up (e.g. *lakkauttaa*/*lakkautua*, *kelpuuttaa*/*kelvata*, *pudota*/*kaatua*, *syttyä*/*syyllistyä*), or register.
+  - Explain each fix briefly: the case and why, gradation, a look-alike word mix-up (e.g. *lakkauttaa*/*lakkautua*, *kelpuuttaa*/*kelvata*, *pudota*/*kaatua*, *syttyä*/*syyllistyä*, *hahmottaa*/*hahmotella*, *käskyttää*/*käskeä*, *lopulta*/*lopuksi*, *kritiikki*/*kriitikko*), or register.
   - Mention natural alternatives when the user's version is grammatical but unidiomatic.
 - End with the round's 1–2 main takeaways.
+- If the user answers only some sentences, correct those and invite the rest.
+- If the user asks for more sentences, give another 6 that target that round's weak points. Common ones: the negative past *en/ei + -nut/-neet*; the partitive object after a negative; the passive perfect/pluperfect *on/oli peruttu* (with no extra *ollut*); *pitää jostakin kiinni*; *yrittää* + basic infinitive; *soittaa jollekulle*; vowel harmony in compounds (follows the last part); *-e* noun stems (*sade → sateessa*); gradation.
 - If the user challenges a correction and they're right (e.g. the perfect tense for a time period that isn't over), say so plainly. If one of your hints was misleading, admit it.
 - If the user asks to drill one word (e.g. *kelpuuttaa*), give 6 sentences labelled with the target form, and finish the corrections with a strong-grade/weak-grade table.
 
 ## Progress chart (when asked)
 
-Page through `list_words` with `filter: "due"` (`limit: 50`, raising `offset`) until a card's `next_review_at` is more than 14 days out; the order makes the rest irrelevant. Bucket `next_review_at` by calendar day in the user's time zone (ask if you don't know it; don't assume one). Roll everything already overdue (the first `due_now` cards) into today as a separate stacked segment. Show a stacked bar chart of the next 14 days. If there was an earlier chart in this conversation, comment on what changed since.
+- Page through `list_words` with `filter: "due"` and `limit: 50` (send the page calls in parallel). Results are sorted by due date, so stop once you pass the 14-day window.
+- Bucket `next_review_at` by calendar day in the user's time zone. Ask if you don't know it rather than assuming one, and mind daylight saving: the UTC hour at which a local day starts shifts with it. Today's bar = the first `due_now` cards (overdue) plus whatever else comes due before local midnight.
+- Draw it with whatever chart tool the client offers (Chart.js works well), in this compact look:
+  - Container ~340px tall.
+  - X labels: "Today", then weekday + day number ("Wed 28", "Sun 1"), 11px, rotated 60°. Y ticks 11px, gridlines every 10, no axis border lines.
+  - Stacked bars: overdue (orange) as the bottom segment of Today's bar, due that day (blue) on top with small 3px rounded top corners. Wide bars (`categoryPercentage: 0.8`, `barPercentage: 0.85`).
+  - Chart.js's built-in legend on a single line at the top left: 12px text, 11px square swatches with a 2px radius, `padding: 12`, reading "Due that day" then "Overdue (N, rolled into today)". Put the overdue dataset first so it stacks at the bottom and set `legend.reverse: true` to get that order. No custom HTML legend, and no totals in the legend apart from the overdue count.
+  - Each day's total as a number above its bar (12px, regular weight), drawn with a small `afterDatasetsDraw` plugin (sum the datasets per index, `fillText` ~4px above the topmost segment).
+  - Tooltip: the day as the title, then short labels instead of the dataset names: "Overdue: N" for the orange segment and "Due: N" for the blue one. Hide zero-value segments (`tooltip.filter: it => it.raw > 0`).
+  - Theme-aware colours, since canvas can't resolve CSS variables: detect the theme (the host's theme attribute if it sets one, falling back to `prefers-color-scheme: dark`). Dark: ticks #a3a29b, legend #e3e2dc, value labels #ffffff, grid #2c2c2a, bars #d2643a / #4a86e0. Light: ticks #6b6a65, legend #2b2b29, value labels #0b0b0b, grid #e1e0d9, bars #eb6834 / #2a78d6. Hard-coded light colours are unreadable in a dark theme.
+- In the reply, comment on the backlog, the peak day, any humps from story batches reviewed together, and how many come after the window. If there was an earlier chart in this conversation, say what changed since.
 
 ## Listening page template
 
-Narration uses the browser's built-in speech (`speechSynthesis`). Its quality depends on the voices installed on the device. In Edge, the *Noora/Harri Online (Natural)* voices sound best; on a Mac, download Satu (Enhanced or Premium). The page lists the Finnish voices with natural-sounding ones first, and remembers the choice per page.
+Narration uses the browser's built-in speech (`speechSynthesis`). Its quality depends on the voices installed on the device. The page lists the Finnish voices with natural-sounding ones first, and remembers the choice per page.
+
+Voice setup, if the user says the narration sounds robotic or wrong:
+- **Edge** (any OS): the *Noora/Harri Online (Natural)* voices sound best.
+- **Mac, Safari or Chrome**: download Satu (Enhanced or Premium) in System Settings → Accessibility → Vision → **Read & Speak** (called *Spoken Content* on older macOS) → System voice → Manage Voices… → Finnish. Then pick it in the page's Ääni menu.
+- **Mac, Firefox**: Firefox only shows the compact Satu voice, ignores Enhanced/Premium, and may read the text with the English system voice instead. The simplest fix is to use Safari. Otherwise, set the macOS **System voice** (in Read & Speak) to *Satu (Enhanced)*, so Firefox's fallback is Finnish too.
+- If System Settings doesn't show the section, search for "System voice" in its search field.
 
 ```html
 <title>{{TITLE}}</title>
@@ -112,7 +147,7 @@ dd{margin:0;color:var(--muted);min-width:0}
     <h1>{{TITLE}}</h1>
   </header>
   <p class="hint">Tap a sentence to hear it. Tap a highlighted word to hear it alone and see what it means.</p>
-  <div class="warn" id="warn" hidden>This device has no Finnish voice installed, so the reading may sound wrong. On iPhone: Settings → Accessibility → Spoken Content → Voices → Finnish. On Android: Settings → Text-to-speech → install Finnish.</div>
+  <div class="warn" id="warn" hidden>This device has no Finnish voice installed, so the reading may sound wrong. On iPhone: Settings → Accessibility → Read &amp; Speak (or Spoken Content) → Voices → Finnish. On Android: Settings → Text-to-speech → install Finnish.</div>
   <article class="story" id="story"></article>
 
   <section style="display:flex;flex-direction:column;gap:10px">
