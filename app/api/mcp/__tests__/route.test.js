@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({ sql: null }));
 
 vi.mock("@/lib/db", () => ({ getDb: () => mocks.sql }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+// OAuth is off here (no MCP_OAUTH_RESOURCE); oauth.test.js covers it on.
+vi.mock("@/lib/auth/server", () => ({ authBaseUrl: () => "https://auth.test/neondb/auth" }));
 
 const Sentry = await import("@sentry/nextjs");
 
@@ -48,6 +50,15 @@ describe("authentication", () => {
     const res = await POST(rpc(req("tools/list"), { authorization: "Bearer nonsense" }));
 
     expect(res.status).toBe(401);
+    expect(mocks.sql.calls).toHaveLength(0);
+  });
+
+  it("refuses an access token without querying while OAuth is not configured", async () => {
+    mocks.sql = fakeSql();
+    const res = await POST(rpc(req("tools/list"), { authorization: "Bearer aaa.bbb.ccc" }));
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get("WWW-Authenticate")).not.toContain("resource_metadata");
     expect(mocks.sql.calls).toHaveLength(0);
   });
 
