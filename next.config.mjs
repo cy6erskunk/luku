@@ -1,6 +1,11 @@
 import { withSentryConfig } from '@sentry/nextjs/config';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // lib/mcp/skills.js reads skills/ at runtime, which the bundler cannot see
+  // from an import, so it is traced into the MCP route by hand.
+  outputFileTracingIncludes: {
+    "/api/mcp": ["./skills/**/*"],
+  },
   // RFC 9728 fixes where an MCP client looks for the protected-resource
   // metadata: under /.well-known, with the resource's path appended
   // (/.well-known/oauth-protected-resource/api/mcp), or bare for older
