@@ -1,8 +1,9 @@
 import Cropper from "react-easy-crop";
 import { Bp, Bg } from "../lib/styles.js";
+import ReverseButton from "./ReverseButton.jsx";
 import Spinner from "./Spinner.jsx";
 
-export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat }) {
+export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
   const {
     busy, step, err, preview, ocrProgress,
     cropImage, crop, setCrop, zoom, setZoom, croppedAreaPixels, cropAspect, setCropAspect,
@@ -129,6 +130,9 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
         <button onClick={onStartRepeat} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13, borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
           Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
         </button>
+      )}
+      {reverseCount > 0 && onStartReverse && (
+        <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ marginTop: dueWords.length > 0 || repeatWords.length > 0 ? 10 : 20 }} />
       )}
     </div>
   );

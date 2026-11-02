@@ -9,6 +9,8 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
   const [mode, setMode] = useState("due");
   const isRepeat = mode === "repeat";
   const isNewReview = mode === "new";
+  // Reverse practice (app/lib/reverse.js): English → Finnish, ungraded.
+  const isReverse = mode === "reverse";
 
   // Self-correct if the current queue entry refers to a word no longer in
   // dbWords (e.g. deleted in another tab). Without this the review screen
@@ -40,6 +42,14 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
     setGrading(false);
   };
 
+  const startReverse = (words) => {
+    setMode("reverse");
+    setQueue(words.map((w) => w.id));
+    setRevIdx(0);
+    setShowAnswer(false);
+    setGrading(false);
+  };
+
   const startNewReview = (words) => {
     setMode("new");
     setQueue(words.map((w) => w.id));
@@ -60,7 +70,8 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
       setShowAnswer(false);
       return;
     }
-    if (isRepeat) {
+    // Neither pass writes a schedule; a miss just comes round again.
+    if (isRepeat || isReverse) {
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
@@ -125,7 +136,7 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
   };
 
   return {
-    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, mode, isRepeat, isNewReview,
-    startReview, startRepeat, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
+    queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, mode, isRepeat, isNewReview, isReverse,
+    startReview, startRepeat, startReverse, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
 }
