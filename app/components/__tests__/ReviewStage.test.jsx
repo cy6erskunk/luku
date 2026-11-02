@@ -424,3 +424,55 @@ describe("ReviewStage – session-complete step label", () => {
     expect(screen.getByText(/step 3 — review/i)).toBeTruthy();
   });
 });
+
+describe("ReviewStage – reverse practice", () => {
+  const REV = { ...WORD, example: "Hän juoksee kotiin.", example_translation: "She runs home.", forms: [{ word: "juoksee" }] };
+
+  it("asks with the English side and hides the Finnish word", () => {
+    setup({ isReverse: true, dbWords: [REV] });
+    expect(screen.getByText("to run")).toBeTruthy();
+    expect(screen.getByText("verb")).toBeTruthy();
+    expect(screen.queryByText("juosta")).toBeNull();
+    expect(screen.queryByText("Hän juoksee kotiin.")).toBeNull();
+  });
+
+  it("is labelled as an ungraded alpha", () => {
+    setup({ isReverse: true, dbWords: [REV] });
+    expect(screen.getByText("Reverse practice")).toBeTruthy();
+    expect(screen.getByText(/alpha · not graded/i)).toBeTruthy();
+  });
+
+  it("answers with the Finnish word, its example and the forms seen", () => {
+    setup({ isReverse: true, dbWords: [REV], showAnswer: true });
+    expect(screen.getByText("juosta")).toBeTruthy();
+    expect(screen.getByText("Hän juoksee kotiin.")).toBeTruthy();
+    expect(screen.getByText("juoksee")).toBeTruthy();
+  });
+
+  it("offers Again and Got it instead of the three grades", () => {
+    const onGrade = vi.fn();
+    setup({ isReverse: true, dbWords: [REV], showAnswer: true, onGrade });
+    expect(screen.queryByRole("button", { name: "Hard" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+    expect(onGrade.mock.calls).toEqual([[1], [5]]);
+  });
+
+  it("does not offer a new example", () => {
+    setup({ isReverse: true, dbWords: [REV], showAnswer: true, onSuggestExample: vi.fn(), onAcceptExample: vi.fn() });
+    expect(screen.queryByRole("button", { name: /suggest/i })).toBeNull();
+  });
+
+  it("offers another session when the pass is done", () => {
+    const onStartReverse = vi.fn();
+    setup({ isReverse: true, dbWords: [REV], revIdx: 1, reverseCount: 12, onStartReverse });
+    expect(screen.getByText(/practised/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /another session/i }));
+    expect(onStartReverse).toHaveBeenCalled();
+  });
+
+  it("does not offer another reverse session after a regular review", () => {
+    setup({ dbWords: [REV], revIdx: 1, reverseCount: 12, onStartReverse: vi.fn() });
+    expect(screen.queryByRole("button", { name: /another session/i })).toBeNull();
+  });
+});

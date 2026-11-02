@@ -313,3 +313,44 @@ describe("useReview – self-correction effect", () => {
     expect(result.current.queue).toContain(1);
   });
 });
+
+describe("useReview – reverse practice", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is its own mode", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReverse(WORDS));
+    expect(result.current.isReverse).toBe(true);
+    expect(result.current.isRepeat).toBe(false);
+    expect(result.current.queue).toEqual([1, 2, 3]);
+  });
+
+  it("writes no schedule, whatever the answer", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ word: null }) })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const applySchedule = vi.fn();
+    const { result } = renderHook(() => useReview(makeProps({ applySchedule })));
+    act(() => result.current.startReverse(WORDS));
+    await act(() => result.current.gradeWord(5));
+    await act(() => result.current.gradeWord(1));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(applySchedule).not.toHaveBeenCalled();
+    expect(result.current.revIdx).toBe(2);
+  });
+
+  it("brings a missed card round again in the same pass", async () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReverse(WORDS));
+    await act(() => result.current.gradeWord(1));
+    expect(result.current.queue).toEqual([1, 2, 3, 1]);
+  });
+
+  it("is left by starting a regular review", () => {
+    const { result } = renderHook(() => useReview(makeProps()));
+    act(() => result.current.startReverse(WORDS));
+    act(() => result.current.startReview(WORDS));
+    expect(result.current.isReverse).toBe(false);
+  });
+});

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Bp, Bg } from "../lib/styles.js";
 import { wordForms } from "../lib/utils.js";
 import ExamplePicker from "./ExamplePicker.jsx";
+import ReverseButton, { AlphaTag } from "./ReverseButton.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 const EXAMPLE_STYLE = { fontSize: 13, color: "#6b645e", fontStyle: "italic" };
@@ -39,11 +40,47 @@ function SpoilerExample({ text, revealed, onReveal }) {
   );
 }
 
+// A reverse-practice card (app/lib/reverse.js): the English side asks, the
+// Finnish side answers. The part of speech is on the question side because
+// "run" alone could be juosta or juoksu. The English example is a tappable
+// hint, as the Finnish one is on a forward card; the Finnish example stays on
+// the answer side, since it contains the word being recalled.
+function ReverseCard({ w, forms, showAnswer, revealed, onReveal }) {
+  const [first, ...rest] = w.translations || [];
+  return (
+    <>
+      {w.pos && <div style={{ fontSize: 10, color: POS_CLR[w.pos] ?? "#666", marginBottom: 10 }}>{w.pos}</div>}
+      <div style={{ fontSize: 26, marginBottom: 4 }}>{first}</div>
+      {rest.length > 0 && <div style={{ fontSize: 13, color: "#6b645e" }}>{rest.join(", ")}</div>}
+      {w.example_translation && (
+        <div style={{ marginTop: 10 }}>
+          {showAnswer
+            ? <div style={EXAMPLE_STYLE}>{w.example_translation}</div>
+            : <SpoilerExample text={w.example_translation} revealed={revealed} onReveal={onReveal} />}
+        </div>
+      )}
+      {showAnswer && (
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", width: "100%", paddingTop: 18, marginTop: 14 }}>
+          <div lang="fi" style={{ fontSize: 30, marginBottom: 4 }}>{w.base}</div>
+          {w.example && <div lang="fi" style={{ ...EXAMPLE_STYLE, marginTop: 8 }}>{w.example}</div>}
+          {forms.length > 0 && (
+            <div style={{ marginTop: 14, fontSize: 12, color: "#6b645e" }}>
+              <span style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#4a7c9e", fontFamily: "monospace", marginRight: 6 }}>seen as</span>
+              <span lang="fi" style={{ color: "#a89f93" }}>{forms.map((f) => f.word).join(", ")}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function ReviewStage({
   queue, revIdx, showAnswer, setShowAnswer, grading,
   dbWords, loadingWords,
   onGrade, onScanAnother, onRemoveNew, onKeepNew,
-  isRepeat, isNewReview,
+  isRepeat, isNewReview, isReverse,
+  reverseCount, onStartReverse,
   repeatWords, onStartRepeat,
   dueWords, onStartReview,
   preexistingNewIds,
@@ -93,7 +130,9 @@ export default function ReviewStage({
   });
   // Offered on the answer side only: on the question side a new example would
   // give the answer away before the reader has tried.
-  const canSuggest = showAnswer && !!onSuggestExample && !!onAcceptExample;
+  // Not in reverse practice either: that card's Finnish side is the answer,
+  // and the pass is an alpha that keeps to reading.
+  const canSuggest = showAnswer && !isReverse && !!onSuggestExample && !!onAcceptExample;
   // Every way off a card closes the popup, at the click rather than when the
   // grade comes back.
   const leaving = (fn) => (...args) => { setPickingFor(null); return fn?.(...args); };
@@ -145,13 +184,16 @@ export default function ReviewStage({
             {isNewReview ? "New words triaged" : "Session complete"}
           </h2>
           <p style={{ color: "#6b645e", marginBottom: 24 }}>
-            {isNewReview ? "Went through " : "Reviewed "}
+            {isNewReview ? "Went through " : isReverse ? "Practised " : "Reviewed "}
             <strong style={{ color: "#4a7c9e" }}>{queue.length}</strong> card{queue.length !== 1 ? "s" : ""}.
           </p>
           {isNewReview && dueRemaining > 0 && onStartReview && (
             <button onClick={onStartReview} style={{ ...Bp, width: "100%", marginBottom: 10 }}>
               Continue → Review {dueRemaining} due word{dueRemaining !== 1 ? "s" : ""}
             </button>
+          )}
+          {isReverse && reverseCount > 0 && onStartReverse && (
+            <ReverseButton count={reverseCount} onClick={onStartReverse} label="Another session" style={{ width: "100%", marginBottom: 10 }} />
           )}
           <button onClick={onScanAnother} style={{ ...(isNewReview && dueRemaining > 0 ? Bg : Bp), width: "100%", marginBottom: 10 }}>📸 Scan Another Page</button>
         </div>
@@ -168,7 +210,7 @@ export default function ReviewStage({
   // Every way off the card waits for its grade to land and its example to save.
   const held = grading || savingExample;
 
-  const heading = isNewReview ? "New words" : isRepeat ? "Extra practice" : "Review";
+  const heading = isNewReview ? "New words" : isRepeat ? "Extra practice" : isReverse ? "Reverse practice" : "Review";
   const isPreexisting = isNewReview && !!preexistingNewIds && preexistingNewIds.has(w.id);
 
   return (
@@ -177,6 +219,7 @@ export default function ReviewStage({
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 400 }}>{heading}</div>
+          {isReverse && <AlphaTag />}
           {isRepeat && <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a9ebe", background: "rgba(74,124,158,0.12)", border: "1px solid rgba(74,124,158,0.25)", borderRadius: 10, padding: "2px 7px", fontFamily: "monospace" }}>no schedule update</div>}
           {/* Not a gate: the word was written to the database the moment it
               was added, and this pass is only an offer to undo. The bucket
@@ -188,9 +231,10 @@ export default function ReviewStage({
         <div style={{ fontSize: 12, color: "#555" }}>{revIdx + 1} / {queue.length}</div>
       </div>
       <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 24, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${(revIdx / queue.length) * 100}%`, background: isRepeat || isNewReview ? "rgba(74,124,158,0.5)" : "#4a7c9e", transition: "width 0.3s" }} />
+        <div style={{ height: "100%", width: `${(revIdx / queue.length) * 100}%`, background: isRepeat || isNewReview || isReverse ? "rgba(74,124,158,0.5)" : "#4a7c9e", transition: "width 0.3s" }} />
       </div>
       <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 18, minHeight: 180, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        {isReverse ? <ReverseCard w={w} forms={forms} showAnswer={showAnswer} revealed={revealedIn?.queue === queue && revealedIn.id === w.id} onReveal={() => setRevealedIn({ queue, id: w.id })} /> : <>
         <div style={{ fontSize: 32, marginBottom: 4 }}>{w.base}</div>
         {isPreexisting && (
           <div
@@ -272,9 +316,17 @@ export default function ReviewStage({
             )}
           </div>
         )}
+        </>}
       </div>
       {!showAnswer
         ? <button onClick={() => setShowAnswer(true)} style={{ ...Bp, width: "100%" }}>Show answer</button>
+        : isReverse
+        ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => onGrade(1)} style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
+            <button onClick={() => onGrade(5)} style={{ ...Bp, flex: 1, fontSize: 13 }}>Got it</button>
+          </div>
+        )
         : isNewReview
         ? (() => {
           const isDeleting = !!deletingIds && deletingIds.has(w.id);
@@ -310,7 +362,7 @@ export default function ReviewStage({
       </div>
       {/* A failed card has interval 0 like a new one, but its ease is the
           difficulty signal worth seeing when it comes back in the same pass. */}
-      {!isNewReview && (w.interval_days > 0 || w.lapses > 0) && showAnswer && (
+      {!isNewReview && !isReverse && (w.interval_days > 0 || w.lapses > 0) && showAnswer && (
         <div style={{ textAlign: "center", marginTop: 12, fontSize: 11, color: "#3a4550" }}>
           {w.interval_days > 0 ? `last interval: ${w.interval_days}d` : "just missed"} · ease: {Number(w.ease_factor).toFixed(1)}
         </div>

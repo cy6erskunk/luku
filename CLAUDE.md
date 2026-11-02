@@ -47,7 +47,8 @@ app/
 ├── components/
 │   ├── ScanStage.jsx           # Stage 0 — image upload / crop UI
 │   ├── ReadStage.jsx           # Stage 1 — tappable text + TranslationPopup
-│   ├── ReviewStage.jsx         # Stage 2 — flashcard review
+│   ├── ReviewStage.jsx         # Stage 2 — flashcard review (also the ungraded reverse pass)
+│   ├── ReverseButton.jsx       # Entry point for reverse practice, with its "alpha · not graded" tag
 │   ├── ExamplePicker.jsx       # Answer-side popup: request / accept / reject a new example
 │   ├── TranslationPopup.jsx    # Absolutely-positioned word popup (inside ReadStage)
 │   ├── WordList.jsx            # Full word-list overlay (all stages)
@@ -123,7 +124,7 @@ All domain state lives in custom hooks:
 | `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
 | `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
 | `useWords` | `dbWords`, `loadingWords`, `loadError`, word CRUD |
-| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic |
+| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic; `mode` is `due` / `new` / `repeat` / `reverse`, and only `due` writes a schedule |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
 Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleScanAnother`, `onWord`) are composed in `page.jsx`.
@@ -136,6 +137,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `ocrImage()` (`api.js`) | Extracts text from image using Claude Vision |
 | `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech |
 | `suggestExample()` (`api.js`) | A fresh example for a saved word, avoiding the ones already seen; shares its memorability guide with `translateWord()` |
+| `pickReverseSession()` (`reverse.js`) | Up to 12 words for an ungraded English → Finnish pass, from those with `review_count >= 2`, unseen ones first so "another session" moves on |
 | `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |
 | `fileToBase64()` (`image.js`) | Client-side image resize/compress (max 1024px, ≤400KB) |
 | `getCroppedImg()` (`image.js`) | Crops a canvas region to base64 |

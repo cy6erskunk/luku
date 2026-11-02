@@ -5,6 +5,7 @@ import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord
 import { translateWord, suggestExample } from "./lib/api.js";
 import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
+import { REVERSE_SESSION_SIZE, reverseEligible, pickReverseSession } from "./lib/reverse.js";
 import SignIn from "./components/SignIn.jsx";
 import ApiKeyScreen from "./components/ApiKeyScreen.jsx";
 import WordList from "./components/WordList.jsx";
@@ -100,6 +101,10 @@ function LukuApp({ user }) {
   // new words, the ✓, the notice — belongs to that scan, so a late arrival
   // must not write any of it into the next one.
   const scanIdRef = useRef(0);
+  // Words already drawn into a reverse pass, so "another session" moves on to
+  // different ones. Lives as long as LukuApp — a sitting, not a scan — and is
+  // emptied by pickReverseSession once every eligible word has had a turn.
+  const reverseSeenRef = useRef(new Set());
 
   const words = useWords(user.id);
 
@@ -230,6 +235,17 @@ function LukuApp({ user }) {
   // look the same from here.
   const handleExampleSaveLost = () =>
     setNotice({ stage: null, message: "Couldn't confirm the new example was saved." });
+
+  const reverseCount = Math.min(REVERSE_SESSION_SIZE, reverseEligible(words.dbWords).length);
+
+  const handleStartReverse = () => {
+    if (words.loadingWords || review.grading) return;
+    const pool = pickReverseSession(words.dbWords, reverseSeenRef.current);
+    if (pool.length === 0) return;
+    review.startReverse(pool);
+    setPopup(null);
+    setStage(2);
+  };
 
   const handleStartRepeat = () => {
     if (words.loadingWords || review.grading || words.dbWords.length === 0) return;
@@ -481,7 +497,7 @@ function LukuApp({ user }) {
         </div>
       </div>
 
-      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} />}
+      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} reverseCount={reverseCount} onStartReverse={handleStartReverse} />}
       {stage === 1 && (
         <ReadStage
           tokens={tokens}
@@ -513,6 +529,9 @@ function LukuApp({ user }) {
           grading={review.grading}
           isRepeat={review.isRepeat}
           isNewReview={review.isNewReview}
+          isReverse={review.isReverse}
+          reverseCount={reverseCount}
+          onStartReverse={handleStartReverse}
           dbWords={words.dbWords}
           loadingWords={words.loadingWords}
           onGrade={handleGrade}
