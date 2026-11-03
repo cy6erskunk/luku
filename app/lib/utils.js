@@ -79,6 +79,13 @@ export function dehyphenate(text) {
   );
 }
 
+// Whether a saved word is due for review. The clock is read here rather than
+// in the component body: the page re-derives its due list on every render on
+// purpose, and React's purity lint rejects `new Date()` written inline there.
+export function isDue(w, now = Date.now()) {
+  return new Date(w.next_review_at).getTime() <= now;
+}
+
 export function wordForms(w) {
   return Array.isArray(w?.forms) ? w.forms : [];
 }

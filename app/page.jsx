@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, isDue } from "./lib/utils.js";
 import { translateWord, suggestExample } from "./lib/api.js";
 import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
@@ -153,7 +153,7 @@ function LukuApp({ user }) {
   // instead; a failure raised inside a dialog is that dialog's to report.
   const dialogOpen = showWordList || showTelegram || showMcp;
   const noticeMessage = !notice || dialogOpen || (notice.stage != null && notice.stage !== stage) ? "" : notice.message;
-  const allDueWords = words.dbWords.filter((w) => new Date(w.next_review_at) <= new Date());
+  const allDueWords = words.dbWords.filter((w) => isDue(w));
   const newWords = words.dbWords.filter((w) => newWordIds.has(w.id));
   // Words freshly added this session get their own review pass, so keep them
   // out of the regular due queue until the user is done triaging them.
