@@ -15,9 +15,16 @@ const LEGACY_STORAGE_KEY = "luku_api_key";
 export const apiKeyStorageKey = (userId) => `${LEGACY_STORAGE_KEY}:${userId}`;
 
 function readKey(userId) {
+  // The cleanup is the security-relevant line here, so it gets its own try:
+  // its failure must not decide whether the read runs, nor the read's its.
+  // Swallowed because there is nothing to report to — storage that refuses a
+  // removeItem cannot be holding a readable copy for the next caller either.
+  try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch {}
+
+  if (!userId) return "";
+  // Unavailable storage (private mode, blocked site data) reads as no key,
+  // which sends the reader to the key screen rather than breaking the app.
   try {
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    if (!userId) return "";
     return localStorage.getItem(apiKeyStorageKey(userId)) || "";
   } catch { return ""; }
 }

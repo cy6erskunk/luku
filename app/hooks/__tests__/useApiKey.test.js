@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useApiKey, apiKeyStorageKey } from "../useApiKey.js";
 
@@ -66,5 +66,20 @@ describe("useApiKey – one key per account", () => {
     const { result } = renderHook(() => useApiKey(U1));
     expect(result.current.savedKey).toBe("");
     expect(localStorage.getItem("luku_api_key")).toBeNull();
+  });
+
+  it("still reads this account's key when clearing the pre-scoping one throws", () => {
+    // The cleanup and the read fail independently: one shared try meant a
+    // throwing removeItem skipped the read and lost the reader's own key.
+    localStorage.setItem(KEY_U1, "sk-ant-mine");
+    const remove = vi.spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => { throw new Error("SecurityError"); });
+    try {
+      const { result } = renderHook(() => useApiKey(U1));
+      expect(result.current.savedKey).toBe("sk-ant-mine");
+      expect(remove).toHaveBeenCalledWith("luku_api_key");
+    } finally {
+      remove.mockRestore();
+    }
   });
 });
