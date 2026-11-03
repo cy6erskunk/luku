@@ -147,6 +147,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 | `tokenize()` (`utils.js`) | Splits text into words, punctuation, spaces, and line breaks. A word hyphenated across a line break keeps both halves visible but gives each the whole word in `w` and a shared key, so tapping either translates the whole word |
 | `dehyphenate()` (`utils.js`) | Rejoins words split across lines; `sentenceOf()` runs it first so context is a whole sentence |
 | `sentenceOf()` (`utils.js`) | Finds the sentence containing a given word for context |
+| `isDue()` (`utils.js`) | Whether a word's `next_review_at` has passed; reads the clock outside render, which oxlint's `react(purity)` rule requires of `page.jsx` |
 | `wordForms()` (`utils.js`) | Array-guarded accessor for a word's recorded inflections |
 | `findExistingWord()` (`utils.js`) | Case-insensitive match on a base form or any recorded inflection |
 | `savedWordEntry()` (`utils.js`) | Shapes a saved word into popup fields, so tapping a word already on the list shows its stored translation immediately — while the form lookup runs, or without an API key at all |
