@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, isDue, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -319,5 +319,18 @@ describe("savedWordEntry", () => {
 
   it("returns null when there is no saved word", () => {
     expect(savedWordEntry(null, "koira")).toBeNull();
+  });
+});
+
+describe("isDue", () => {
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  it("is due when next_review_at is in the past", () => {
+    expect(isDue({ next_review_at: "2026-11-03T11:59:59Z" }, now)).toBe(true);
+  });
+  it("is due exactly at next_review_at", () => {
+    expect(isDue({ next_review_at: "2026-11-03T12:00:00Z" }, now)).toBe(true);
+  });
+  it("is not due when next_review_at is in the future", () => {
+    expect(isDue({ next_review_at: "2026-11-03T12:00:01Z" }, now)).toBe(false);
   });
 });
