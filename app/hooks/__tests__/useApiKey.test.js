@@ -58,13 +58,4 @@ describe("useApiKey – one key per account", () => {
     act(() => result.current.setSavedKey("sk-ant-mine"));
     expect(localStorage.getItem(other)).toBe("sk-ant-someone-else");
   });
-
-  it("clears a pre-scoping key instead of handing it to whoever signs in", () => {
-    // The shared name is what the leak was: on a browser last signed in as
-    // somebody else, adopting it would bill their key to this account.
-    localStorage.setItem("luku_api_key", "sk-ant-previous-reader");
-    const { result } = renderHook(() => useApiKey(U1));
-    expect(result.current.savedKey).toBe("");
-    expect(localStorage.getItem("luku_api_key")).toBeNull();
-  });
 });

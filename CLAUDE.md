@@ -320,9 +320,7 @@ what matters when changing it:
 - Key is persisted to `localStorage` (not server-side), under a key carrying
   the account's own id. Both hooks take a `userId` for that reason: one shared
   name handed the key to whoever signed in next on a shared browser, and every
-  translation was then billed to its owner with nothing on screen to say so.
-  The pre-scoping name is cleared rather than adopted on load — the next person
-  to sign in is not necessarily the key's owner
+  translation was then billed to its owner with nothing on screen to say so
 - The server route (`route.js`) receives the key per-request and forwards it to Anthropic
 - Optional, **development only**: set `ANTHROPIC_API_KEY` in `.env.local` and
   `/api/claude` falls back to it, while `useServerKey` (a `GET` on the same

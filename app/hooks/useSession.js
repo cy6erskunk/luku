@@ -6,14 +6,11 @@ import { useState, useEffect } from "react";
  * same reason the API key is: one shared name showed one reader's page to the
  * next person to sign in on the browser.
  */
-const LEGACY_STORAGE_KEY = "luku_session";
-
-export const sessionStorageKey = (userId) => `${LEGACY_STORAGE_KEY}:${userId}`;
+export const sessionStorageKey = (userId) => `luku_session:${userId}`;
 
 function readSession(userId) {
+  if (!userId) return {};
   try {
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    if (!userId) return {};
     const v = JSON.parse(localStorage.getItem(sessionStorageKey(userId)) || "{}");
     return v && typeof v === "object" && !Array.isArray(v) ? v : {};
   } catch { return {}; }

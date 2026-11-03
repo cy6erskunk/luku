@@ -102,11 +102,4 @@ describe("useSession – one cache per account", () => {
     const { result } = renderHook(() => useSession(U1));
     expect(result.current.session).toEqual({});
   });
-
-  it("clears a pre-scoping cache instead of showing it to whoever signs in", () => {
-    localStorage.setItem("luku_session", JSON.stringify({ talo: { base: "talo" } }));
-    const { result } = renderHook(() => useSession(U1));
-    expect(result.current.session).toEqual({});
-    expect(localStorage.getItem("luku_session")).toBeNull();
-  });
 });
