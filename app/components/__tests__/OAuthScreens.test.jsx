@@ -136,6 +136,28 @@ describe("OAuthLogin", () => {
 });
 
 describe("OAuthConsent", () => {
+  it("explains itself instead of offering Allow when Neon did not send the reader", async () => {
+    // An unsigned visit has nothing to resume: Allow and Deny would answer
+    // nothing.
+    at("");
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await screen.findByText(/start from that app/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /allow/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /deny/i })).toBeNull();
+  });
+
+  it("shows the sign-in screen, with its reason, when signed out", async () => {
+    // Without the gate the page reads user.email of nobody and throws.
+    at(SIGNED);
+    render(<OAuthConsent />);
+
+    expect(await screen.findByText(/read and refine your luku cards/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /allow/i })).toBeNull();
+  });
+
   it("names the client and what it will be able to change", async () => {
     at(SIGNED);
     signedIn();
