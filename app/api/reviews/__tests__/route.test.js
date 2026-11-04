@@ -90,41 +90,4 @@ describe("POST /api/reviews", () => {
     expect(mocks.sql.calls[0].values).toEqual([7, "u1"]);
     expect(mocks.sql.calls[1].values).toContain("u1");
   });
-
-  describe("restart", () => {
-    it("restarts the schedule instead of grading, and needs no grade", async () => {
-      const NEXT = new Date("2026-08-14T06:00:00.000Z");
-      const restarted = { ...CARD, interval_days: 1, review_count: 0, next_review_at: NEXT, example: "Hän juoksee." };
-      mocks.sql = fakeSql([[restarted]]);
-
-      const res = await POST(makeRequest({ wordId: 7, restart: true }));
-      expect(res.status).toBe(200);
-      expect((await res.json()).word).toEqual(JSON.parse(JSON.stringify({
-        id: 7, ease_factor: 2.5, interval_days: 1, next_review_at: NEXT, review_count: 0,
-      })));
-      // One UPDATE, no read-then-grade, scoped to the signed-in user.
-      expect(mocks.sql.calls).toHaveLength(1);
-      expect(mocks.sql.calls[0].text).toMatch(/^UPDATE words SET/);
-      expect(mocks.sql.calls[0].values).toContain("u1");
-    });
-
-    it("returns 404 when the word belongs to someone else", async () => {
-      mocks.sql = fakeSql([[]]);
-      const res = await POST(makeRequest({ wordId: 7, restart: true }));
-      expect(res.status).toBe(404);
-    });
-
-    it("still validates the wordId", async () => {
-      const res = await POST(makeRequest({ wordId: "7", restart: true }));
-      expect(res.status).toBe(400);
-      expect(mocks.sql.calls).toHaveLength(0);
-    });
-
-    it("treats anything but restart: true as a grade", async () => {
-      const res = await POST(makeRequest({ wordId: 7, restart: "yes" }));
-      expect(res.status).toBe(400);
-      expect((await res.json()).error).toBe("Invalid grade");
-      expect(mocks.sql.calls).toHaveLength(0);
-    });
-  });
 });

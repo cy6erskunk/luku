@@ -85,8 +85,8 @@ function LukuApp({ user }) {
   // new scan costs the offer, not the words. For a word added fresh, Keep is
   // deliberately a no-op — an untriaged word and a kept one end up identical,
   // which is the invariant the "saved · remove?" wording in ReviewStage is
-  // there to tell the reader. For a re-added word, Keep restarts its schedule
-  // and Skip leaves it alone (handleKeepNew).
+  // there to tell the reader. A re-added word is offered Skip (nothing
+  // changes) and Again (a real Again grade) instead.
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
@@ -201,21 +201,17 @@ function LukuApp({ user }) {
     return review.gradeWord(grade);
   };
 
-  // Keeping a word that was already on the list restarts its schedule: the
-  // reader met it again and wanted it back, so it should not stay months away.
-  // A word added fresh this session has no schedule worth restarting. The pass
-  // moves on either way; a failed restart costs only the reset, so it is a
-  // notice rather than a card that will not advance.
   const handleKeepNew = (id) => {
-    const restart = preexistingNewIds.has(id);
     retireFromNew(id);
     review.gradeWord(5);
-    if (restart) {
-      words.restartSchedule(id).catch((e) => {
-        reportClientError("restart schedule", e);
-        setNotice({ stage: null, message: "Couldn't confirm that word's reviews were restarted." });
-      });
-    }
+  };
+
+  // A re-added word the reader marks Again is graded exactly as in the due
+  // queue. It leaves the new-words bucket only once the grade lands; a failed
+  // grade keeps the card on screen with the usual "Couldn't confirm" notice.
+  const handleAgainNew = async (id) => {
+    setNotice(null);
+    if (await review.gradeWord(1, { persist: true })) retireFromNew(id);
   };
 
   const handleRemoveNew = async (id) => {
@@ -550,6 +546,7 @@ function LukuApp({ user }) {
           loadingWords={words.loadingWords}
           onGrade={handleGrade}
           onKeepNew={handleKeepNew}
+          onAgainNew={handleAgainNew}
           onRemoveNew={handleRemoveNew}
           preexistingNewIds={preexistingNewIds}
           deletingIds={deletingIds}

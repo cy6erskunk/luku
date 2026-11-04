@@ -62,7 +62,7 @@ app/
 └── api/
     ├── claude/route.js         # Server proxy for Anthropic API
     ├── words/route.js          # CRUD for saved vocabulary (PATCH replaces a word's example)
-    ├── reviews/route.js        # SRS grading endpoint (also restarts a re-added word kept in triage)
+    ├── reviews/route.js        # SRS grading endpoint
     ├── mcp/route.js            # MCP server (bearer-token authenticated, NOT a session)
     ├── mcp/metadata/route.js   # RFC 9728 metadata, served at /.well-known/oauth-protected-resource by a rewrite
     ├── mcp/tokens/route.js     # Mint / list / revoke MCP tokens (session authenticated)
@@ -127,7 +127,7 @@ All domain state lives in custom hooks:
 | `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
 | `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
 | `useWords` | `dbWords`, `loadingWords`, `loadError`, word CRUD |
-| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic; `mode` is `due` / `new` / `repeat` / `reverse`, and only `due` writes a schedule |
+| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic; `mode` is `due` / `new` / `repeat` / `reverse`, and only `due` writes a schedule — apart from Again on a re-added word in the `new` pass, which is a real Again |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
 Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleScanAnother`, `onWord`) are composed in `page.jsx`.
@@ -273,11 +273,8 @@ what matters when changing it:
 - **`filter: "lapsed"` is the sharp question.** `difficult` answers "has ever
   lost ground", which on a well-used collection is most of the list (270 of 333
   on the author's). `review_count = 0 AND ease_factor < DEFAULT` is "failed at
-  its last review" — `review_count` reaches 0 only after a failure, before
-  the first review, or when a re-added word is kept in triage
-  (`restartWord`), and the ease condition rules out the second. A restarted
-  card that had already lost ground does match, which is close enough: the
-  reader re-added it because they no longer knew it.
+  its last review" — `review_count` reaches 0 only after a failure or before
+  the first review, and the ease condition rules the second out.
 - **`filter: "due"` orders by `next_review_at`**, every card, so one ascending
   sort gives both "most overdue" and "coming due soonest". It also returns
   `due_now`, the count already due against the database's `NOW()`, because a
