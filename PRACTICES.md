@@ -273,10 +273,23 @@ browser), defaulting to 1 outside production and 0.1 in it.
   visible, unannounced and unreachable by keyboard. `WordList` owns its delete
   error for that reason, and the page's `Notice` withholds itself while any
   dialog is open.
-- Swallow a fetch failure only where the fallback is the whole answer.
-  `useServerKey` may `.catch(() => {})` because a failed probe just shows the
-  key screen; `useWords` did the same and made a word list that never arrived
-  indistinguishable from an account with no words in it.
+- An empty `catch {}` or `.catch(() => {})` claims that **nobody** needs to
+  know: not the reader, and not the operator. Those are two questions, and
+  the `{}` answers both with "no". When only the reader can be spared, call
+  `reportClientError()` and change nothing on screen.
+- Write the comment beside the empty catch, and answer both questions in it.
+  If you can say in a line what the fallback is and why it is enough, keep
+  the catch. If the honest comment describes a symptom instead of a fallback,
+  the catch is a bug. `useServerKey`'s passes: in production the probe always
+  answers "no", and a route that throws is already reported by
+  `onRequestError`. `useWords` had no comment, and the honest one ("the
+  reader sees an empty list for good") reads as a bug the moment it is
+  written down.
+- Say so when an empty `.catch` is not suppression at all. `ocrLocal`'s
+  `_ocrQueue = task.catch(() => {})` forks the chain so the next scan does not
+  inherit this one's rejection, while the caller still gets the error from
+  `task`. It is the one most likely to be "fixed" by someone who reads it as
+  a swallow.
 
 - Fall back rather than trust a configured value. `sampleRate()` treats an
   absent, blank or nonsensical rate as unset, because `Number("")` and

@@ -24,7 +24,11 @@ export function useApiKey(userId) {
     try {
       const name = apiKeyStorageKey(userId);
       if (v) localStorage.setItem(name, v); else localStorage.removeItem(name);
-    } catch {}
+    } catch {
+      // Storage refused (quota, private mode, blocked site data). The key still
+      // works for this visit, and next time the reader is asked again; the
+      // cause is in their browser, so there is nothing for an operator to fix.
+    }
   }, [userId]);
 
   return { savedKey, setSavedKey };

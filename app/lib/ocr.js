@@ -49,6 +49,8 @@ export function resetTesseractWorker() {
   const p = tesseractWorkerPromise;
   tesseractWorkerPromise = null;
   _ocrQueue = Promise.resolve();
+  // Nothing to tell anyone: this worker is already dropped and nobody awaits
+  // the result. If it never started, the scan that awaited it got that error.
   p.then((w) => w.terminate()).catch(() => {});
 }
 
@@ -65,6 +67,9 @@ export function ocrLocal(base64, mediaType, onStatus) {
       _activeOnStatus = null;
     }
   });
+  // A fork, not a swallow: the caller still gets this scan's error from
+  // `task`. Without it the queue would inherit the rejection, and every later
+  // scan would fail with this one's error without ever running.
   _ocrQueue = task.catch(() => {});
   return task;
 }

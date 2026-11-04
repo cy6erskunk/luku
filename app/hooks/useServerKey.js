@@ -25,8 +25,11 @@ export function useServerKey(userId) {
     fetch("/api/claude")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled) setServerKey(Boolean(d?.serverKey)); })
-      // A failed probe just means the key screen shows, which is the same
-      // place the user would have started anyway.
+      // The reader: a failed probe just shows the key screen, where they would
+      // have started anyway. The operator: in production the answer is always
+      // "no" (`developmentKey()`), and a route that throws is already reported
+      // by `onRequestError`. A non-2xx never gets here: it resolved to null
+      // above. See #110.
       .catch(() => {})
       .finally(() => { if (!cancelled) setChecking(false); });
 

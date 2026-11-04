@@ -24,6 +24,10 @@ export function useSession(userId) {
   // reading the next value out of the updater in order to write it here left
   // the string "undefined" in storage whenever another update was already
   // pending on this component — and the whole scan's cache with it.
+  //
+  // A refused write (quota, private mode, blocked site data) is ignored: the
+  // cache still serves this visit, a reload just means scanning the page
+  // again, and the cause is in the reader's browser, not the deployment.
   useEffect(() => {
     if (!userId) return;
     try { localStorage.setItem(sessionStorageKey(userId), JSON.stringify(session)); } catch {}
