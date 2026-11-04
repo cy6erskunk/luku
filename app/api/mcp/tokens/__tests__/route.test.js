@@ -4,7 +4,7 @@
  * — a signed-out caller mints nothing, and a token's row carries the session's
  * user rather than anything the request said.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fakeSql } from "@/lib/__tests__/helpers/fakeSql.js";
 
 const mocks = vi.hoisted(() => ({ session: null, sql: null }));
@@ -40,6 +40,22 @@ describe("GET /api/mcp/tokens", () => {
 
     expect((await res.json()).tokens).toHaveLength(1);
     expect(mocks.sql.calls[0].values).toEqual(["u1"]);
+  });
+
+  describe("whether OAuth connections exist outside the list", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("says OAuth is on when the deployment opted in", async () => {
+      vi.stubEnv("MCP_OAUTH_RESOURCE", "https://luku.test/api/mcp");
+      const res = await GET();
+      expect((await res.json()).oauth).toBe(true);
+    });
+
+    it("says OAuth is off when the resource is unset", async () => {
+      vi.stubEnv("MCP_OAUTH_RESOURCE", "");
+      const res = await GET();
+      expect((await res.json()).oauth).toBe(false);
+    });
   });
 
   it("never hands the browser a full token hash", async () => {
