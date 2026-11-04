@@ -68,6 +68,22 @@ export function useWords(userId) {
   };
 
   /**
+   * Starts a saved word's schedule over (no passes, due in a day). Only the
+   * schedule columns of the reply are merged, as for a grade. Throws when the
+   * write is refused or its reply is lost; the caller reports it.
+   */
+  const restartSchedule = async (id) => {
+    const r = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ wordId: id, restart: true }),
+    });
+    if (!r.ok) throw new Error(`restart failed: ${r.status}`);
+    const { word } = await r.json();
+    if (word) applySchedule(word);
+  };
+
+  /**
    * Stores a new example for a saved word. Only the example fields are merged
    * into the local copy: the row may have been graded while the request was
    * out, and the reply carries nothing else.
@@ -94,5 +110,5 @@ export function useWords(userId) {
     setDbWords((prev) => prev.some((w) => w.id === word.id) ? prev : [...prev, word]);
   };
 
-  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, saveExample, applySchedule, removeWord, restoreWord };
+  return { dbWords, loadingWords, loadError, reloadWords: loadWords, saveWord, saveExample, applySchedule, restartSchedule, removeWord, restoreWord };
 }

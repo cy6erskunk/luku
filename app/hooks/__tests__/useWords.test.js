@@ -202,6 +202,38 @@ describe("useWords – applySchedule", () => {
   });
 });
 
+describe("useWords – restartSchedule", () => {
+  it("asks /api/reviews to restart the word and merges only its schedule", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, review_count: 5, interval_days: 40, example: "Hän juoksee." }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    const reply = { id: 1, review_count: 0, interval_days: 1, next_review_at: "2026-11-05T20:00:00.000Z", example: "stale" };
+    mockFetchJson({ word: reply });
+    await act(() => result.current.restartSchedule(1));
+
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe("/api/reviews");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ wordId: 1, restart: true });
+    const word = result.current.dbWords[0];
+    expect(word.review_count).toBe(0);
+    expect(word.interval_days).toBe(1);
+    expect(word.next_review_at).toBe(reply.next_review_at);
+    expect(word.example).toBe("Hän juoksee.");
+  });
+
+  it("throws on a refused restart and leaves the word as it was", async () => {
+    mockFetchJson({ words: [{ ...WORD_A, review_count: 5 }] });
+    const { result } = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(result.current.dbWords).toHaveLength(1));
+
+    mockFetch({ ok: false, status: 500, json: () => Promise.resolve({}) });
+    await expect(act(() => result.current.restartSchedule(1))).rejects.toThrow("restart failed: 500");
+    expect(result.current.dbWords[0].review_count).toBe(5);
+  });
+});
+
 describe("useWords – saveExample", () => {
   it("sends a PATCH and merges only the example fields", async () => {
     mockFetchJson({ words: [{ ...WORD_A, example: "Hän juoksee.", interval_days: 3 }] });

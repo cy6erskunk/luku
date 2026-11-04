@@ -343,7 +343,7 @@ export default function ReviewStage({
               >
                 {isPreexisting ? "Skip" : "Remove"}
               </button>
-              <button onClick={leaving(() => onKeepNew?.(w.id))} disabled={busy} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
+              <button onClick={leaving(() => onKeepNew?.(w.id))} disabled={busy} title={isPreexisting ? "Keep: restart its reviews, due again tomorrow" : undefined} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
             </div>
           );
         })()

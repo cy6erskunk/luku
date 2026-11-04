@@ -82,9 +82,11 @@ function LukuApp({ user }) {
   // Ids added during this reading session, and nothing more: the rows are
   // already in the database. The bucket only holds them out of the regular
   // due queue long enough to offer a Remove, so losing it to a refresh or a
-  // new scan costs the offer, not the words. Keep is deliberately a no-op —
-  // an untriaged word and a kept one end up identical, which is the invariant
-  // the "saved · remove?" wording in ReviewStage is there to tell the reader.
+  // new scan costs the offer, not the words. For a word added fresh, Keep is
+  // deliberately a no-op — an untriaged word and a kept one end up identical,
+  // which is the invariant the "saved · remove?" wording in ReviewStage is
+  // there to tell the reader. For a re-added word, Keep restarts its schedule
+  // and Skip leaves it alone (handleKeepNew).
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
@@ -199,9 +201,21 @@ function LukuApp({ user }) {
     return review.gradeWord(grade);
   };
 
+  // Keeping a word that was already on the list restarts its schedule: the
+  // reader met it again and wanted it back, so it should not stay months away.
+  // A word added fresh this session has no schedule worth restarting. The pass
+  // moves on either way; a failed restart costs only the reset, so it is a
+  // notice rather than a card that will not advance.
   const handleKeepNew = (id) => {
+    const restart = preexistingNewIds.has(id);
     retireFromNew(id);
     review.gradeWord(5);
+    if (restart) {
+      words.restartSchedule(id).catch((e) => {
+        reportClientError("restart schedule", e);
+        setNotice({ stage: null, message: "Couldn't confirm that word's reviews were restarted." });
+      });
+    }
   };
 
   const handleRemoveNew = async (id) => {
