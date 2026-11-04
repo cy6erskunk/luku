@@ -524,7 +524,7 @@ migration can recover it.
 
 Revoking a token in the panel takes effect on the client's next call. An
 approved OAuth connection cannot be revoked yet: it is not listed in the panel,
-and Luku checks its access tokens without asking Neon, so there is nothing on
+and Luku accepts its access tokens on their signature alone, with no record on
 Luku's side to withdraw. Removing the connector from a client deletes only that
 client's copy. Per Neon's docs, access tokens last an hour and refresh tokens
 30 days, rotating on use, so a client that keeps refreshing keeps its access:
