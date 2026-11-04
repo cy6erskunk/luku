@@ -35,10 +35,11 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     return out;
   };
 
-  const processFile = async (file) => {
-    setErr(""); setBusy(true); setStep("Reading image…");
+  // The one pipeline both entry points share: encode, preview, local OCR.
+  const scan = async (label, encode) => {
+    setErr(""); setBusy(true); setStep(label);
     try {
-      const { base64, mediaType } = await fileToBase64(file);
+      const { base64, mediaType } = await encode();
       setPreview(`data:${mediaType};base64,${base64}`);
       const out = await runOcr(base64, mediaType);
       if (!out?.trim()) { setErr("No text found — try a clearer photo."); return; }
@@ -47,6 +48,8 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); setStep(""); }
   };
+
+  const processFile = (file) => scan("Reading image…", () => fileToBase64(file));
 
   const showCropper = (f) => {
     if (!f || busy) return;
@@ -66,16 +69,7 @@ export function useImageProcessing({ savedKey, onTextReady }) {
   const cropAndProcess = async () => {
     if (!cropImage || !croppedAreaPixels) return;
     setCropImage(null); setCropFile(null);
-    setErr(""); setBusy(true); setStep("Cropping image…");
-    try {
-      const { base64, mediaType } = await getCroppedImg(cropImage, croppedAreaPixels);
-      setPreview(`data:${mediaType};base64,${base64}`);
-      const out = await runOcr(base64, mediaType);
-      if (!out?.trim()) { setErr("No text found — try a clearer photo."); return; }
-      setOcrSource("local");
-      onTextReady(out.trim());
-    } catch (e) { setErr(e.message); }
-    finally { setBusy(false); setStep(""); }
+    return scan("Cropping image…", () => getCroppedImg(cropImage, croppedAreaPixels));
   };
 
   const skipCrop = () => {
