@@ -79,8 +79,11 @@ request*, answered here explicitly:
 - [ ] Every browser-side `catch` calls `reportClientError()`; `console.error`
       alone reaches nobody (F2).
 - [ ] Optimistic display (✓ Added) is withdrawn when the write fails.
-- [ ] A fetch failure is swallowed only where the fallback is the whole
-      answer (§7, `useServerKey` vs `useWords`).
+- [ ] Every empty `catch {}` / `.catch(() => {})` has a comment beside it
+      saying why neither the reader nor the operator needs to know. A comment
+      that honestly describes a symptom, not a fallback, means it is a bug; a
+      fork like `_ocrQueue` says it is not suppression (§7, `useServerKey` vs
+      `useWords`).
 
 ## React state — `app/hooks/**`, `app/page.jsx`
 
