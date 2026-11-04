@@ -9,6 +9,23 @@ const D = "#0f1117";
 
 export const AUTH_UNAVAILABLE = "Sign-in is unavailable right now. Please try again later.";
 
+/** What every dead end in the OAuth flow tells the reader to do. */
+export const RESTART_CONNECTION = "Start the connection again from the app that sent you here.";
+
+export const OAUTH_QUERY_EXPIRED = `This connection request has expired or is no longer valid. ${RESTART_CONNECTION}`;
+
+// On /oauth/login and /oauth/consent the auth client adds the page's signed
+// query to every POST, and the OAuth provider checks its signature and expiry
+// (`codeExpiresIn`, ten minutes by default in @better-auth/oauth-provider)
+// before it looks at any credentials. Past that, it answers 400
+// `invalid_signature` to every attempt, the right password included, so the
+// only way forward is a fresh request from the client. The same code covers a
+// signature that does not match, which is why the message does not claim
+// expiry alone.
+function isExpiredOAuthQuery(error) {
+  return error?.error === "invalid_signature" || error?.code === "INVALID_SIGNATURE";
+}
+
 // A 4xx carries a message meant for the reader ("Invalid email or password").
 // A 5xx is the deployment's fault and its message is not: the auth client
 // fills a missing one with "HTTP 500", and the proxy's own say things like
@@ -16,6 +33,7 @@ export const AUTH_UNAVAILABLE = "Sign-in is unavailable right now. Please try ag
 // Sentry from the server side.
 function authErrorMessage(error, fallback) {
   if (error?.status >= 500) return AUTH_UNAVAILABLE;
+  if (isExpiredOAuthQuery(error)) return OAUTH_QUERY_EXPIRED;
   return error?.message || fallback;
 }
 

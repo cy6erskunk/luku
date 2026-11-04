@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import SignIn, { AUTH_UNAVAILABLE } from "../SignIn.jsx";
+import SignIn, { AUTH_UNAVAILABLE, OAUTH_QUERY_EXPIRED, RESTART_CONNECTION } from "../SignIn.jsx";
 import { authClient } from "../../lib/authClient";
 
 afterEach(cleanup);
@@ -85,5 +85,43 @@ describe("SignIn", () => {
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     expect(await screen.findByText("Invalid email or password")).toBeTruthy();
+  });
+
+  // What the auth client returns when the OAuth provider rejects an expired
+  // signed query: the body is `{ error: "invalid_signature" }` with no
+  // `message`, so the client fills one from the status line.
+  const expiredQuery = { error: { status: 400, statusText: "Bad Request", message: "HTTP 400 Bad Request", error: "invalid_signature" } };
+
+  it("tells the reader to restart when the signed OAuth query has expired on email sign-in", async () => {
+    authClient.signIn.email.mockResolvedValueOnce(expiredQuery);
+    render(<SignIn />);
+    fireEvent.click(screen.getByRole("button", { name: /sign in with email/i }));
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "a@b.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "right" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    expect(await screen.findByText(OAUTH_QUERY_EXPIRED)).toBeTruthy();
+    expect(OAUTH_QUERY_EXPIRED).toContain(RESTART_CONNECTION);
+    expect(screen.queryByText(/HTTP 400/)).toBeNull();
+  });
+
+  it("tells the reader to restart when the signed OAuth query has expired on Google sign-in", async () => {
+    authClient.signIn.social.mockResolvedValueOnce(expiredQuery);
+    render(<SignIn />);
+    fireEvent.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    expect(await screen.findByText(OAUTH_QUERY_EXPIRED)).toBeTruthy();
+  });
+
+  it("keeps an ordinary 400 refusal's own message", async () => {
+    authClient.signIn.email.mockResolvedValueOnce({ error: { status: 400, message: "Invalid email" } });
+    render(<SignIn />);
+    fireEvent.click(screen.getByRole("button", { name: /sign in with email/i }));
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "nope" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    expect(await screen.findByText("Invalid email")).toBeTruthy();
+    expect(screen.queryByText(OAUTH_QUERY_EXPIRED)).toBeNull();
   });
 });
