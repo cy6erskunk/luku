@@ -522,8 +522,15 @@ migration can recover it.
   could not reach Neon Auth to check the token; it answers an error rather than
   a `401` so the client keeps its token. The cause is in Sentry.
 
-Revoking a token in the panel takes effect on the client's next call. An OAuth
-connection is not listed in the panel; remove it from the client's side.
+Revoking a token in the panel takes effect on the client's next call. An
+approved OAuth connection cannot be revoked yet: it is not listed in the panel,
+and Luku checks its access tokens without asking Neon, so there is nothing on
+Luku's side to withdraw. Removing the connector from a client deletes only that
+client's copy. Per Neon's docs, access tokens last an hour and refresh tokens
+30 days, rotating on use, so a client that keeps refreshing keeps its access:
+it can read your cards and rewrite their four writable fields, though never
+delete or reschedule them. If you may need to cut a client off, connect it
+with a panel token instead.
 
 ## Skipping the key screen while developing
 
