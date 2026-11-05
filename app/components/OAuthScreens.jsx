@@ -65,10 +65,19 @@ const SCOPE_GRANTS = {
   offline_access: "Keep its access after this visit, renewing it without asking you again",
 };
 
-/** The requested scopes, deduplicated, each as a line a reader can act on. */
+/**
+ * The requested scopes, deduplicated, each as a line a reader can act on.
+ * Known scopes come in SCOPE_GRANTS' order whatever order the client asked
+ * in, so what it learns about you reads together; unknown ones follow, as
+ * asked.
+ */
 function scopeGrants(scope) {
   const scopes = [...new Set((scope ?? "").split(" ").filter(Boolean))];
-  return scopes.map((s) => ({ scope: s, text: SCOPE_GRANTS[s] ?? `Other access it asked for: ${s}` }));
+  const known = Object.keys(SCOPE_GRANTS);
+  const rank = (s) => (known.includes(s) ? known.indexOf(s) : known.length);
+  return scopes
+    .sort((a, b) => rank(a) - rank(b))
+    .map((s) => ({ scope: s, text: SCOPE_GRANTS[s] ?? `Other access it asked for: ${s}` }));
 }
 
 /** The host a URL names, or null for anything that is not one. */
@@ -88,6 +97,11 @@ function Frame({ children }) {
 }
 
 const text = { color: "#9a928a", fontSize: 14, lineHeight: 1.7, marginBottom: 20 };
+const grantPanel = { textAlign: "left", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "12px 16px", marginBottom: 20 };
+const grantHeading = { fontSize: 12, color: "#6b645e", margin: "0 0 8px" };
+const grantList = { listStyle: "none", margin: 0, padding: 0 };
+const grantItem = { display: "flex", gap: 10, color: "#9a928a", fontSize: 13, lineHeight: 1.5, padding: "3px 0" };
+const grantMark = { color: "#4a7c9e", flexShrink: 0 };
 const errStyle = { marginTop: 12, padding: "10px 14px", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, fontSize: 12, color: "#c48a8a" };
 
 function Loading() {
@@ -216,12 +230,19 @@ export function OAuthConsent() {
         reschedule, rename or delete a card. Signed in as {user.email || user.name}.
       </p>
       {grants.length > 0 && (
-        <>
-          <p id="oauth-scope-heading" style={{ ...text, marginBottom: 6 }}>Allowing also lets it:</p>
-          <ul aria-labelledby="oauth-scope-heading" style={{ ...text, marginTop: 0, paddingLeft: 20 }}>
-            {grants.map((g) => <li key={g.scope}>{g.text}</li>)}
+        // Left-aligned in a panel: centred list items leave their bullets at
+        // the edge and wrap raggedly under the centred page.
+        <div style={grantPanel}>
+          <p id="oauth-scope-heading" style={grantHeading}>Allowing also lets it</p>
+          <ul aria-labelledby="oauth-scope-heading" style={grantList}>
+            {grants.map((g) => (
+              <li key={g.scope} style={grantItem}>
+                <span aria-hidden="true" style={grantMark}>•</span>
+                <span>{g.text}</span>
+              </li>
+            ))}
           </ul>
-        </>
+        </div>
       )}
       <button onClick={() => answer(true)} disabled={busy} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: busy ? 0.6 : 1 }}>
         Allow
