@@ -20,6 +20,10 @@ import { useDialog } from "../hooks/useDialog.js";
  */
 export default function McpConnect({ endpoint, onClose, onLost }) {
   const [tokens, setTokens] = useState(null);
+  // Whether the deployment also accepts OAuth sign-in. Those connections have
+  // no row to list or revoke here, so the panel says so instead of letting an
+  // empty list read as "nothing is connected".
+  const [oauthOn, setOauthOn] = useState(false);
   // The token on display, with the short id of its own row, so revoking that
   // row from the list below can stop showing a credential that is already dead.
   const [minted, setMinted] = useState(null);
@@ -44,13 +48,14 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
   const load = useCallback(async () => {
     const res = await fetch("/api/mcp/tokens");
     if (!res.ok) throw new Error(`Failed to load connections (${res.status})`);
-    return (await res.json()).tokens ?? [];
+    const json = await res.json();
+    return { tokens: json.tokens ?? [], oauth: Boolean(json.oauth) };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     load()
-      .then((list) => { if (!cancelled) setTokens(list); })
+      .then(({ tokens: list, oauth }) => { if (!cancelled) { setTokens(list); setOauthOn(oauth); } })
       // An empty list and a failed load must not look alike: one offers
       // Connect, the other has no idea what is already connected.
       .catch((e) => { if (!cancelled) { setTokens([]); setErr(e.message); } })
@@ -75,7 +80,7 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
       if (!mountedRef.current) { onLost?.(); return; }
       setMinted({ token: json.token, id: json.id });
       setLabel("");
-      setTokens(await load().catch(() => tokens ?? []));
+      setTokens(await load().then((r) => r.tokens).catch(() => tokens ?? []));
     } catch (e) {
       // No onLost here: a refused mint stored nothing, so there is no orphaned
       // token to go and revoke. Telling the reader to hunt for one would send
@@ -244,6 +249,13 @@ export default function McpConnect({ endpoint, onClose, onLost }) {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {oauthOn && (
+            <div style={{ fontSize: 11, color: "#6b645e", marginTop: 14, lineHeight: 1.6 }}>
+              Clients you connected by signing in (OAuth) are not listed here, and
+              cannot be revoked from this panel.
             </div>
           )}
         </div>

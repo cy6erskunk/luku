@@ -523,7 +523,8 @@ migration can recover it.
   a `401` so the client keeps its token. The cause is in Sentry.
 
 Revoking a token in the panel takes effect on the client's next call. An OAuth
-connection is not listed in the panel; remove it from the client's side.
+connection is not listed in the panel, which says so when OAuth is on; remove
+it from the client's side.
 
 ## Skipping the key screen while developing
 

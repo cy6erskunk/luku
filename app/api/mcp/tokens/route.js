@@ -9,6 +9,7 @@
  */
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
+import { oauthEnabled } from "@/lib/mcp/oauth";
 import { MAX_LABEL, MAX_LIVE_TOKENS, createToken, listTokens, revokeToken } from "@/lib/mcp/tokens";
 
 async function requireUser() {
@@ -21,7 +22,9 @@ export async function GET() {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const tokens = await listTokens(getDb(), user.id);
-  return Response.json({ tokens });
+  // OAuth connections have no row here (their tokens are verified, not
+  // stored), so the panel needs to know to say they are missing from its list.
+  return Response.json({ tokens, oauth: oauthEnabled() });
 }
 
 /**
