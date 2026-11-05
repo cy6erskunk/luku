@@ -16,14 +16,14 @@ const TOKEN = "luku_mcp_ZXhhbXBsZXRva2VudmFsdWU";
 const jsonOk = (body) => ({ ok: true, json: () => Promise.resolve(body) });
 
 /** Routes fetch by method so GET/POST/DELETE can be driven independently. */
-function stubApi({ tokens = [], post, del } = {}) {
+function stubApi({ tokens = [], post, del, oauth = false } = {}) {
   const calls = [];
   vi.stubGlobal("fetch", vi.fn((url, opts = {}) => {
     const method = opts.method ?? "GET";
     calls.push({ url, method, body: opts.body });
     if (method === "POST") return Promise.resolve(post ?? jsonOk({ token: TOKEN, id: "abcdef12" }));
     if (method === "DELETE") return Promise.resolve(del ?? jsonOk({ ok: true }));
-    return Promise.resolve(jsonOk({ tokens: typeof tokens === "function" ? tokens(calls.length) : tokens }));
+    return Promise.resolve(jsonOk({ tokens: typeof tokens === "function" ? tokens(calls.length) : tokens, oauth }));
   }));
   return calls;
 }
@@ -294,6 +294,36 @@ describe("the connected list", () => {
 
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
     expect(calls.find((c) => c.method === "DELETE").url).toContain("id=abcdef12");
+  });
+});
+
+describe("OAuth connections", () => {
+  const NOTE = /connected by signing in \(OAuth\) are not listed here/;
+
+  it("says OAuth connections are not listed, even when no token is", async () => {
+    // With nothing listed, an empty panel would otherwise read as "nothing is
+    // connected" while an approved OAuth client can still change cards.
+    stubApi({ tokens: [], oauth: true });
+    setup();
+
+    expect(await screen.findByText(NOTE)).toBeTruthy();
+    expect(screen.queryByText("Connected clients")).toBeNull();
+  });
+
+  it("says so beside a list of panel tokens too", async () => {
+    stubApi({ tokens: [{ id: "abcdef12", label: "Laptop", last_used_at: null }], oauth: true });
+    setup();
+
+    expect(await screen.findByText("Laptop")).toBeTruthy();
+    expect(screen.getByText(NOTE)).toBeTruthy();
+  });
+
+  it("says nothing about OAuth on a deployment without it", async () => {
+    stubApi({ tokens: [{ id: "abcdef12", label: "Laptop", last_used_at: null }], oauth: false });
+    setup();
+
+    expect(await screen.findByText("Laptop")).toBeTruthy();
+    expect(screen.queryByText(NOTE)).toBeNull();
   });
 });
 

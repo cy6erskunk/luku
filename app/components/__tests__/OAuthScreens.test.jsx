@@ -136,6 +136,28 @@ describe("OAuthLogin", () => {
 });
 
 describe("OAuthConsent", () => {
+  it("explains itself instead of offering Allow when Neon did not send the reader", async () => {
+    // An unsigned visit has nothing to resume: Allow and Deny would answer
+    // nothing.
+    at("");
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await screen.findByText(/start from that app/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /allow/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /deny/i })).toBeNull();
+  });
+
+  it("shows the sign-in screen, with its reason, when signed out", async () => {
+    // Without the gate the page reads user.email of nobody and throws.
+    at(SIGNED);
+    render(<OAuthConsent />);
+
+    expect(await screen.findByText(/read and refine your luku cards/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /allow/i })).toBeNull();
+  });
+
   it("names the client and what it will be able to change", async () => {
     at(SIGNED);
     signedIn();
@@ -186,5 +208,75 @@ describe("OAuthConsent", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
 
     expect((await screen.findByRole("alert")).textContent).toMatch(/could not send your answer/i);
+  });
+});
+
+describe("OAuthConsent – requested scopes", () => {
+  // Allow sends no `scope`, so the provider grants every scope the signed
+  // query asked for. The screen has to name each of them before Allow.
+  const consentFor = (scope) => `?client_id=abc&scope=${encodeURIComponent(scope)}&sig=abc`;
+  const grantItems = async () => {
+    const list = await screen.findByRole("list", { name: /allowing also lets it/i });
+    // The bullet is decoration, hidden from assistive tech; read the text.
+    return Array.from(list.querySelectorAll("li"), (li) => li.lastElementChild?.textContent ?? li.textContent);
+  };
+
+  it("orders what it learns about you together, whatever order the client asked in", async () => {
+    // ChatGPT's real request order, which put name and email apart.
+    at(consentFor("openid email offline_access profile"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "See your name and profile picture",
+      "See your email address",
+      "Keep its access after this visit, renewing it without asking you again",
+    ]);
+  });
+
+  it("lists an unexplained scope after the known ones", async () => {
+    at(consentFor("cards:admin offline_access openid"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "Keep its access after this visit, renewing it without asking you again",
+      "Other access it asked for: cards:admin",
+    ]);
+  });
+
+  it("names what each standard scope adds beyond card access", async () => {
+    at(consentFor("openid profile email offline_access"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "See your name and profile picture",
+      "See your email address",
+      "Keep its access after this visit, renewing it without asking you again",
+    ]);
+  });
+
+  it("shows a scope it cannot explain as it was asked for, once", async () => {
+    at(consentFor("openid cards:admin cards:admin"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "Other access it asked for: cards:admin",
+    ]);
+  });
+
+  it("lists nothing extra when the request names no scope", async () => {
+    at("?client_id=abc&sig=abc");
+    signedIn();
+    render(<OAuthConsent />);
+
+    await screen.findByRole("button", { name: "Allow" });
+    expect(screen.queryByRole("list", { name: /allowing also lets it/i })).toBeNull();
   });
 });
