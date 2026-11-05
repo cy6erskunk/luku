@@ -217,8 +217,35 @@ describe("OAuthConsent – requested scopes", () => {
   const consentFor = (scope) => `?client_id=abc&scope=${encodeURIComponent(scope)}&sig=abc`;
   const grantItems = async () => {
     const list = await screen.findByRole("list", { name: /allowing also lets it/i });
-    return Array.from(list.querySelectorAll("li"), (li) => li.textContent);
+    // The bullet is decoration, hidden from assistive tech; read the text.
+    return Array.from(list.querySelectorAll("li"), (li) => li.lastElementChild?.textContent ?? li.textContent);
   };
+
+  it("orders what it learns about you together, whatever order the client asked in", async () => {
+    // ChatGPT's real request order, which put name and email apart.
+    at(consentFor("openid email offline_access profile"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "See your name and profile picture",
+      "See your email address",
+      "Keep its access after this visit, renewing it without asking you again",
+    ]);
+  });
+
+  it("lists an unexplained scope after the known ones", async () => {
+    at(consentFor("cards:admin offline_access openid"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "Keep its access after this visit, renewing it without asking you again",
+      "Other access it asked for: cards:admin",
+    ]);
+  });
 
   it("names what each standard scope adds beyond card access", async () => {
     at(consentFor("openid profile email offline_access"));
