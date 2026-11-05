@@ -52,6 +52,25 @@ function follow(result) {
   window.location.href = url;
 }
 
+/**
+ * What each scope adds beyond the card access the consent screen describes.
+ * `consent({ accept })` sends no `scope`, and the provider then grants every
+ * scope in the signed query, so the screen lists all of them. A scope not
+ * named here is shown as it was asked for: we can't say what it grants.
+ */
+const SCOPE_GRANTS = {
+  openid: "Confirm which Luku account you signed in with",
+  profile: "See your name and profile picture",
+  email: "See your email address",
+  offline_access: "Keep its access after this visit, renewing it without asking you again",
+};
+
+/** The requested scopes, deduplicated, each as a line a reader can act on. */
+function scopeGrants(scope) {
+  const scopes = [...new Set((scope ?? "").split(" ").filter(Boolean))];
+  return scopes.map((s) => ({ scope: s, text: SCOPE_GRANTS[s] ?? `Other access it asked for: ${s}` }));
+}
+
 /** The host a URL names, or null for anything that is not one. */
 function hostOf(value) {
   try { return new URL(value).host; } catch { return null; }
@@ -172,6 +191,7 @@ export function OAuthConsent() {
   // signed into the query and it is where the code goes. Its host is shown
   // beside the name, so a reader can see who would actually receive access.
   const returnHost = hostOf(query.get("redirect_uri"));
+  const grants = scopeGrants(query.get("scope"));
 
   const answer = async (accept) => {
     setErr(""); setBusy(true);
@@ -195,6 +215,14 @@ export function OAuthConsent() {
         card&apos;s translations, part of speech and example sentence. It cannot
         reschedule, rename or delete a card. Signed in as {user.email || user.name}.
       </p>
+      {grants.length > 0 && (
+        <>
+          <p id="oauth-scope-heading" style={{ ...text, marginBottom: 6 }}>Allowing also lets it:</p>
+          <ul aria-labelledby="oauth-scope-heading" style={{ ...text, marginTop: 0, paddingLeft: 20 }}>
+            {grants.map((g) => <li key={g.scope}>{g.text}</li>)}
+          </ul>
+        </>
+      )}
       <button onClick={() => answer(true)} disabled={busy} style={{ ...Bp, width: "100%", marginBottom: 10, opacity: busy ? 0.6 : 1 }}>
         Allow
       </button>

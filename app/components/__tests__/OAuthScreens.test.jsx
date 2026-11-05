@@ -210,3 +210,46 @@ describe("OAuthConsent", () => {
     expect((await screen.findByRole("alert")).textContent).toMatch(/could not send your answer/i);
   });
 });
+
+describe("OAuthConsent – requested scopes", () => {
+  // Allow sends no `scope`, so the provider grants every scope the signed
+  // query asked for. The screen has to name each of them before Allow.
+  const consentFor = (scope) => `?client_id=abc&scope=${encodeURIComponent(scope)}&sig=abc`;
+  const grantItems = async () => {
+    const list = await screen.findByRole("list", { name: /allowing also lets it/i });
+    return Array.from(list.querySelectorAll("li"), (li) => li.textContent);
+  };
+
+  it("names what each standard scope adds beyond card access", async () => {
+    at(consentFor("openid profile email offline_access"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "See your name and profile picture",
+      "See your email address",
+      "Keep its access after this visit, renewing it without asking you again",
+    ]);
+  });
+
+  it("shows a scope it cannot explain as it was asked for, once", async () => {
+    at(consentFor("openid cards:admin cards:admin"));
+    signedIn();
+    render(<OAuthConsent />);
+
+    expect(await grantItems()).toEqual([
+      "Confirm which Luku account you signed in with",
+      "Other access it asked for: cards:admin",
+    ]);
+  });
+
+  it("lists nothing extra when the request names no scope", async () => {
+    at("?client_id=abc&sig=abc");
+    signedIn();
+    render(<OAuthConsent />);
+
+    await screen.findByRole("button", { name: "Allow" });
+    expect(screen.queryByRole("list", { name: /allowing also lets it/i })).toBeNull();
+  });
+});
