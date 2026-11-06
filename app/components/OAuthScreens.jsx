@@ -25,7 +25,7 @@ import { authClient } from "../lib/authClient.js";
 import { reportClientError } from "../lib/report.js";
 import { Bp, Bg } from "../lib/styles.js";
 import LukuLogo from "./LukuLogo.jsx";
-import SignIn from "./SignIn.jsx";
+import SignIn, { RESTART_CONNECTION } from "./SignIn.jsx";
 
 const D = "#0f1117";
 
@@ -143,7 +143,7 @@ export function OAuthLogin() {
       follow(await authClient.oauth2.continue({ selected: true }));
     } catch (e) {
       reportClientError("[oauth continue]", e);
-      setErr("Could not continue. Start the connection again from the app that sent you here.");
+      setErr(`Could not continue. ${RESTART_CONNECTION}`);
       setBusy(false);
     }
   };
@@ -155,7 +155,7 @@ export function OAuthLogin() {
       if (result?.error) throw result.error;
     } catch (e) {
       reportClientError("[oauth sign-out]", e);
-      setErr("Could not sign out. Start the connection again from the app that sent you here.");
+      setErr(`Could not sign out. ${RESTART_CONNECTION}`);
     }
   };
 
@@ -213,7 +213,7 @@ export function OAuthConsent() {
       follow(await authClient.oauth2.consent({ accept }));
     } catch (e) {
       reportClientError("[oauth consent]", e);
-      setErr("Could not send your answer. Start the connection again from the app that sent you here.");
+      setErr(`Could not send your answer. ${RESTART_CONNECTION}`);
       setBusy(false);
     }
   };
