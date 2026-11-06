@@ -3,6 +3,19 @@ import { Bp, Bg } from "../lib/styles.js";
 import ReverseButton from "./ReverseButton.jsx";
 import Spinner from "./Spinner.jsx";
 
+const HORIZONTAL = 4 / 3;
+const VERTICAL = 3 / 4;
+
+// The slider's end icons, as presets: 44px square so they are a fair tap
+// target beside the thumb, dimmed unless the crop is exactly that shape.
+const shapeButton = (active) => ({
+  ...Bg,
+  width: 44, height: 44, padding: 0, flexShrink: 0,
+  display: "flex", alignItems: "center", justifyContent: "center",
+  color: "#4a7c9e", fontSize: 18, lineHeight: 1,
+  opacity: active ? 1 : 0.5,
+});
+
 export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
   const {
     busy, step, err, preview, ocrProgress,
@@ -33,7 +46,13 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 400, marginBottom: 12 }}>
-          <span aria-hidden="true" style={{ color: "#4a7c9e", fontSize: 18 }}>▮</span>
+          <button
+            type="button"
+            onClick={() => setCropAspect(VERTICAL)}
+            aria-label="Vertical crop"
+            aria-pressed={cropAspect === VERTICAL}
+            style={shapeButton(cropAspect === VERTICAL)}
+          >▮</button>
           {/* pan-y: a sideways drag belongs to the slider, a vertical one
               still scrolls the page. */}
           <input
@@ -43,7 +62,13 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
             className="luku-ratio"
             style={{ flex: 1, minWidth: 0, height: 44, padding: "8px 0", touchAction: "pan-y" }}
           />
-          <span aria-hidden="true" style={{ color: "#4a7c9e", fontSize: 18 }}>▬</span>
+          <button
+            type="button"
+            onClick={() => setCropAspect(HORIZONTAL)}
+            aria-label="Horizontal crop"
+            aria-pressed={cropAspect === HORIZONTAL}
+            style={shapeButton(cropAspect === HORIZONTAL)}
+          >▬</button>
         </div>
         {/* The thumb can only be sized through pseudo-elements. The track is as
             tall as the thumb, drawing its line with a gradient, so the thumb
@@ -55,10 +80,6 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           .luku-ratio::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
           .luku-ratio::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
         `}</style>
-        <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400, marginBottom: 10 }}>
-          <button onClick={() => setCropAspect(4 / 3)} style={{ ...Bg, flex: 1, opacity: cropAspect === 4 / 3 ? 1 : 0.5 }}>▬ Horizontal</button>
-          <button onClick={() => setCropAspect(3 / 4)} style={{ ...Bg, flex: 1, opacity: cropAspect === 3 / 4 ? 1 : 0.5 }}>▮ Vertical</button>
-        </div>
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
           <button onClick={cancelCrop} style={{ ...Bg, flex: 1 }}>Cancel</button>
           <button onClick={skipCrop} style={{ ...Bg, flex: 1 }}>Skip crop</button>
