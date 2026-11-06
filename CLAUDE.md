@@ -127,7 +127,7 @@ All domain state lives in custom hooks:
 | `useApiKey` | `savedKey` + localStorage persistence, under `luku_api_key:<userId>` |
 | `useSession` | Per-scan translation cache + localStorage persistence, under `luku_session:<userId>` |
 | `useWords` | `dbWords`, `loadingWords`, `loadError`, word CRUD |
-| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic; `mode` is `due` / `new` / `repeat` / `reverse`, and only `due` writes a schedule |
+| `useReview` | `queue`, `revIdx`, `showAnswer`, `grading`, SRS grading logic; `mode` is `due` / `new` / `repeat` / `reverse`, and only `due` writes a schedule — apart from Again on a re-added word in the `new` pass, which is a real Again |
 | `useImageProcessing` | `busy`, `step`, `err`, `preview`, `ocrProgress`, `ocrSource`, all crop state |
 
 Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`, `handleStartReview`, `handleScanAnother`, `onWord`) are composed in `page.jsx`.

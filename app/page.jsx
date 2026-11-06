@@ -82,9 +82,11 @@ function LukuApp({ user }) {
   // Ids added during this reading session, and nothing more: the rows are
   // already in the database. The bucket only holds them out of the regular
   // due queue long enough to offer a Remove, so losing it to a refresh or a
-  // new scan costs the offer, not the words. Keep is deliberately a no-op —
-  // an untriaged word and a kept one end up identical, which is the invariant
-  // the "saved · remove?" wording in ReviewStage is there to tell the reader.
+  // new scan costs the offer, not the words. For a word added fresh, Keep is
+  // deliberately a no-op — an untriaged word and a kept one end up identical,
+  // which is the invariant the "saved · remove?" wording in ReviewStage is
+  // there to tell the reader. A re-added word is offered Skip (nothing
+  // changes) and Again (a real Again grade) instead.
   const [newWordIds, setNewWordIds] = useState(() => new Set());
   // Subset of newWordIds: words that already existed in the DB when the user
   // re-added them this session. Kept separate so Remove can retire them from
@@ -202,6 +204,14 @@ function LukuApp({ user }) {
   const handleKeepNew = (id) => {
     retireFromNew(id);
     review.gradeWord(5);
+  };
+
+  // A re-added word the reader marks Again is graded exactly as in the due
+  // queue. It leaves the new-words bucket only once the grade lands; a failed
+  // grade keeps the card on screen with the usual "Couldn't confirm" notice.
+  const handleAgainNew = async (id) => {
+    setNotice(null);
+    if (await review.gradeWord(1, { persist: true })) retireFromNew(id);
   };
 
   const handleRemoveNew = async (id) => {
@@ -536,6 +546,7 @@ function LukuApp({ user }) {
           loadingWords={words.loadingWords}
           onGrade={handleGrade}
           onKeepNew={handleKeepNew}
+          onAgainNew={handleAgainNew}
           onRemoveNew={handleRemoveNew}
           preexistingNewIds={preexistingNewIds}
           deletingIds={deletingIds}

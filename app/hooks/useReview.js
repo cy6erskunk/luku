@@ -58,7 +58,11 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
     setGrading(false);
   };
 
-  const gradeWord = async (grade) => {
+  // Resolves true once the grade has landed (or needed no write). `persist`
+  // writes a grade from the new-words pass, which otherwise writes nothing:
+  // Again on a word the reader re-added is a real Again. It is not requeued
+  // in that pass; the schedule brings it back in the due queue.
+  const gradeWord = async (grade, { persist = false } = {}) => {
     const wordId = queue[revIdx];
     const word = dbWords.find((w) => w.id === wordId);
     if (!word) {
@@ -68,20 +72,20 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
         if (adjust > 0) setRevIdx((i) => i - adjust);
       }
       setShowAnswer(false);
-      return;
+      return false;
     }
     // Neither pass writes a schedule; a miss just comes round again.
     if (isRepeat || isReverse) {
       if (grade < 3) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
-      return;
+      return true;
     }
-    if (isNewReview) {
-      // New-word review is a keep/reject pass — grading is not persisted.
+    if (isNewReview && !persist) {
+      // New-word review is a keep/reject pass — Keep and Skip write nothing.
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
-      return;
+      return true;
     }
     setGrading(true);
     try {
@@ -93,14 +97,16 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError }) {
       if (!r.ok) throw new Error(`grade failed: ${r.status}`);
       const { word: updated } = await r.json();
       if (updated) applySchedule(updated);
-      if (grade < 3) setQueue((q) => [...q, wordId]);
+      if (grade < 3 && !isNewReview) setQueue((q) => [...q, wordId]);
       setRevIdx((i) => i + 1);
       setShowAnswer(false);
+      return true;
     } catch (e) {
       // The card stays put, which on its own reads as a button that did
       // nothing. The caller says so on screen.
       reportClientError("grade word", e);
       onGradeError?.(e);
+      return false;
     }
     finally { setGrading(false); }
   };

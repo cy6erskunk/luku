@@ -78,7 +78,7 @@ function ReverseCard({ w, forms, showAnswer, revealed, onReveal }) {
 export default function ReviewStage({
   queue, revIdx, showAnswer, setShowAnswer, grading,
   dbWords, loadingWords,
-  onGrade, onScanAnother, onRemoveNew, onKeepNew,
+  onGrade, onScanAnother, onRemoveNew, onKeepNew, onAgainNew,
   isRepeat, isNewReview, isReverse,
   reverseCount, onStartReverse,
   repeatWords, onStartRepeat,
@@ -343,7 +343,9 @@ export default function ReviewStage({
               >
                 {isPreexisting ? "Skip" : "Remove"}
               </button>
-              <button onClick={leaving(() => onKeepNew?.(w.id))} disabled={busy} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>
+              {isPreexisting
+                ? <button onClick={leaving(() => onAgainNew?.(w.id))} disabled={busy} title="Again: grade it as forgotten, so it comes back soon" style={{ ...Bg, flex: 1, borderColor: "rgba(180,80,80,0.4)", color: "#c48a8a", fontSize: 13 }}>Again</button>
+                : <button onClick={leaving(() => onKeepNew?.(w.id))} disabled={busy} style={{ ...Bp, flex: 1, fontSize: 13 }}>Keep</button>}
             </div>
           );
         })()

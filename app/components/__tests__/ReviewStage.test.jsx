@@ -359,6 +359,31 @@ describe("ReviewStage – new-review mode with preexisting words", () => {
     expect(screen.queryByRole("button", { name: /^remove$/i })).toBeNull();
   });
 
+  it("offers Skip and Again, not Keep, for a preexisting card", () => {
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+    });
+    expect(screen.getByRole("button", { name: /^skip$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^again$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^keep$/i })).toBeNull();
+  });
+
+  it("Again calls onAgainNew with the word id, not onKeepNew or onGrade", () => {
+    const onAgainNew = vi.fn();
+    const onKeepNew = vi.fn();
+    const onGrade = vi.fn();
+    setup({
+      isNewReview: true, showAnswer: true,
+      preexistingNewIds: new Set([WORD.id]),
+      onAgainNew, onKeepNew, onGrade,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^again$/i }));
+    expect(onAgainNew).toHaveBeenCalledWith(WORD.id);
+    expect(onKeepNew).not.toHaveBeenCalled();
+    expect(onGrade).not.toHaveBeenCalled();
+  });
+
   it("Skip calls onRemoveNew with the word id (parent branches by preexistence)", () => {
     const onRemoveNew = vi.fn();
     setup({

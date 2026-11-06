@@ -291,6 +291,49 @@ describe("useReview – gradeWord in new-review mode", () => {
   });
 });
 
+describe("useReview – a persisted Again in new-review mode", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("writes the grade, merges the reply and moves on without requeueing", async () => {
+    const reply = { id: 1, review_count: 0, interval_days: 0, ease_factor: 1.96, lapses: 1 };
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ word: reply }) })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const props = makeProps();
+    const { result } = renderHook(() => useReview(props));
+    act(() => result.current.startNewReview(WORDS));
+
+    let landed;
+    await act(async () => { landed = await result.current.gradeWord(1, { persist: true }); });
+
+    expect(landed).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ wordId: 1, grade: 1 });
+    expect(props.applySchedule).toHaveBeenCalledWith(reply);
+    expect(result.current.revIdx).toBe(1);
+    // The schedule brings it back in the due queue; the triage pass does not.
+    expect(result.current.queue).toEqual([1, 2, 3]);
+  });
+
+  it("keeps the card and reports when the grade does not land", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500 })));
+    const onGradeError = vi.fn();
+    const props = makeProps({ onGradeError });
+    const { result } = renderHook(() => useReview(props));
+    act(() => result.current.startNewReview(WORDS));
+
+    let landed;
+    await act(async () => { landed = await result.current.gradeWord(1, { persist: true }); });
+
+    expect(landed).toBe(false);
+    expect(onGradeError).toHaveBeenCalled();
+    expect(props.applySchedule).not.toHaveBeenCalled();
+    expect(result.current.revIdx).toBe(0);
+    expect(result.current.grading).toBe(false);
+  });
+});
+
 describe("useReview – self-correction effect", () => {
   it("drops the current word from queue when it disappears from dbWords", () => {
     const { result, rerender } = renderHook(
