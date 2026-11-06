@@ -6,15 +6,23 @@ import Spinner from "./Spinner.jsx";
 const HORIZONTAL = 4 / 3;
 const VERTICAL = 3 / 4;
 
-// The slider's end icons, as presets: 44px square so they are a fair tap
-// target beside the thumb, dimmed unless the crop is exactly that shape.
-const shapeButton = (active) => ({
+// The shape slider's range, and how far one tap on an end icon moves it.
+const MIN_ASPECT = 0.1;
+const MAX_ASPECT = 2;
+const NUDGE = 0.1;
+
+// Rounded to the slider's 0.05 step so repeated taps don't drift off it.
+const nudgeAspect = (aspect, delta) =>
+  Math.min(MAX_ASPECT, Math.max(MIN_ASPECT, Math.round((aspect + delta) * 20) / 20));
+
+// The slider's end icons: 44px square so they are a fair tap target beside
+// the thumb.
+const nudgeButton = {
   ...Bg,
   width: 44, height: 44, padding: 0, flexShrink: 0,
   display: "flex", alignItems: "center", justifyContent: "center",
   color: "#4a7c9e", fontSize: 18, lineHeight: 1,
-  opacity: active ? 1 : 0.5,
-});
+};
 
 export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
   const {
@@ -48,15 +56,14 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
         <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 400, marginBottom: 12 }}>
           <button
             type="button"
-            onClick={() => setCropAspect(VERTICAL)}
-            aria-label="Vertical crop"
-            aria-pressed={cropAspect === VERTICAL}
-            style={shapeButton(cropAspect === VERTICAL)}
+            onClick={() => setCropAspect((a) => nudgeAspect(a, -NUDGE))}
+            aria-label="Taller crop"
+            style={nudgeButton}
           >▮</button>
           {/* pan-y: a sideways drag belongs to the slider, a vertical one
               still scrolls the page. */}
           <input
-            type="range" min="0.1" max="2" step="0.05" value={cropAspect}
+            type="range" min={MIN_ASPECT} max={MAX_ASPECT} step="0.05" value={cropAspect}
             onChange={(e) => setCropAspect(parseFloat(e.target.value))}
             aria-label="Crop shape, tall to wide"
             className="luku-ratio"
@@ -64,10 +71,9 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           />
           <button
             type="button"
-            onClick={() => setCropAspect(HORIZONTAL)}
-            aria-label="Horizontal crop"
-            aria-pressed={cropAspect === HORIZONTAL}
-            style={shapeButton(cropAspect === HORIZONTAL)}
+            onClick={() => setCropAspect((a) => nudgeAspect(a, NUDGE))}
+            aria-label="Wider crop"
+            style={nudgeButton}
           >▬</button>
         </div>
         {/* The thumb can only be sized through pseudo-elements. The track is as
@@ -80,6 +86,10 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
           .luku-ratio::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
           .luku-ratio::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #4a7c9e; border: 2px solid #e8e0d5; }
         `}</style>
+        <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400, marginBottom: 10 }}>
+          <button onClick={() => setCropAspect(HORIZONTAL)} style={{ ...Bg, flex: 1, opacity: cropAspect === HORIZONTAL ? 1 : 0.5 }}>▬ Horizontal</button>
+          <button onClick={() => setCropAspect(VERTICAL)} style={{ ...Bg, flex: 1, opacity: cropAspect === VERTICAL ? 1 : 0.5 }}>▮ Vertical</button>
+        </div>
         <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
           <button onClick={cancelCrop} style={{ ...Bg, flex: 1 }}>Cancel</button>
           <button onClick={skipCrop} style={{ ...Bg, flex: 1 }}>Skip crop</button>
