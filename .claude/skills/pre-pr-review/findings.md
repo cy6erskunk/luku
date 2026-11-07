@@ -350,3 +350,16 @@ Missed because: the new figure was derived from the old one without
 recounting what the old one counted.
 Check: is the figure recounted from the code, by listing the items, rather
 than adjusted from the previous figure?
+
+## F32 — A control meant for repeated taps, left open to double-tap zoom
+PR (this branch, crop nudge buttons) · self-review · UI / touch · fixed · open
+What happened: the ▮ / ▬ buttons beside the crop-shape slider nudge it one
+step per tap, so the natural use is several taps in a row. With no
+`touch-action: manipulation`, a phone reads two quick taps as a double-tap
+zoom: the second nudge is lost and the page zooms under the crop box.
+Missed because: the buttons were checked for size and accessible name, as
+single-press controls, and the change was only tried with a mouse.
+Check: is this control meant to be pressed several times in quick
+succession (a stepper, a nudge, a counter)? Then does it set
+`touch-action: manipulation`, so a phone doesn't take the second tap as a
+zoom?
