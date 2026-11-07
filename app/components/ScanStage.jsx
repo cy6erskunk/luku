@@ -16,12 +16,14 @@ const nudgeAspect = (aspect, delta) =>
   Math.min(MAX_ASPECT, Math.max(MIN_ASPECT, Math.round((aspect + delta) * 20) / 20));
 
 // The slider's end icons: 44px square so they are a fair tap target beside
-// the thumb.
+// the thumb. They are tapped in quick succession, which a phone otherwise
+// reads as a double-tap zoom; manipulation keeps every tap a click.
 const nudgeButton = {
   ...Bg,
   width: 44, height: 44, padding: 0, flexShrink: 0,
   display: "flex", alignItems: "center", justifyContent: "center",
   color: "#4a7c9e", fontSize: 18, lineHeight: 1,
+  touchAction: "manipulation",
 };
 
 export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
