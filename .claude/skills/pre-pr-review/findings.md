@@ -363,3 +363,16 @@ Check: is this control meant to be pressed several times in quick
 succession (a stepper, a nudge, a counter)? Then does it set
 `touch-action: manipulation`, so a phone doesn't take the second tap as a
 zoom?
+
+## F33 — A model swap that kept limits measured in the old model's tokens
+PR (this branch, Sonnet 5) · self-review · Claude calls · fixed · open
+What happened: moving `/api/claude` from Sonnet 4.6 to Sonnet 5 changed only
+the model id, but Sonnet 5's tokenizer counts the same text as ~30% more
+tokens. The AI-rescan OCR call's 1500 `max_tokens` was then near enough a
+dense page to truncate it with no error, and the "a third cheaper" price
+claim was really nearer 13% once the extra tokens were counted.
+Missed because: the change was read as a one-line id swap; the migration
+notes for the target model were checked for request-shape breaks (thinking
+default) but not for what a token means.
+Check: does the new model share the old one's tokenizer? If not, is every
+`max_tokens` and every token-based cost or budget claim rescaled with it?
