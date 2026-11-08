@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { getAuth } from "@/lib/auth/server";
 import { getDb } from "@/lib/db";
 import { recordUsage } from "@/lib/usage";
+import { CLAUDE_MODEL, THINKING } from "@/lib/claudeModel";
 
 /**
  * Proxy for the Anthropic API.
@@ -51,8 +52,9 @@ export async function POST(request) {
     }
 
     const body = {
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
       max_tokens: maxTokens,
+      thinking: THINKING,
       messages,
     };
     if (system) body.system = system;
