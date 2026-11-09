@@ -28,7 +28,9 @@ export async function ocrImage(apiKey, base64, mediaType) {
       { type: "text", text: "Extract ALL text from this image exactly as written. Return only the raw text, nothing else. Preserve paragraph breaks." },
     ]}],
     "You are an OCR assistant. Extract text from images with high accuracy.",
-    1500,
+    // A dense page. Sized for Sonnet 5's tokenizer, which counts the same
+    // text as ~30% more tokens than 4.6's did against the old 1500.
+    2000,
     "ocr"
   );
 }
@@ -70,7 +72,7 @@ export async function suggestExample(apiKey, word, avoid = []) {
       (seen.length ? `Do not repeat or closely paraphrase these examples:\n${seen.map((e) => `- ${e}`).join("\n")}\n` : "") +
       `\nWrite one new example. ${EXAMPLE_GUIDE}\n\nONLY raw JSON:\n{"example":"Finnish example sentence","example_translation":"English translation of example"}` }],
     "You are a Finnish teacher writing flashcard examples. Return only raw JSON, no markdown.",
-    300,
+    400,
     "example"
   );
   let d;

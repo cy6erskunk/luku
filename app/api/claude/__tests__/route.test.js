@@ -158,6 +158,21 @@ describe("POST /api/claude", () => {
     expect(capturedBody.system).toBeUndefined();
   });
 
+  it("sends Sonnet 5 with thinking off, whatever the client asks for", async () => {
+    let capturedBody;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_url, opts) => {
+        capturedBody = JSON.parse(opts.body);
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
+      })
+    );
+
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: "claude-opus-5-5" }));
+    expect(capturedBody.model).toBe("claude-sonnet-5");
+    expect(capturedBody.thinking).toEqual({ type: "disabled" });
+  });
+
   it("forwards Anthropic error status and message", async () => {
     vi.stubGlobal(
       "fetch",

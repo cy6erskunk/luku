@@ -9,7 +9,7 @@
 - **Framework**: Next.js 16 (App Router)
 - **UI**: React 19, plain JavaScript (no TypeScript)
 - **Styling**: Inline CSS (no CSS framework)
-- **AI**: Anthropic Claude API (claude-sonnet-4-6) via server-side proxy
+- **AI**: Anthropic Claude API (`claude-sonnet-5`, set in `lib/claudeModel.js`) via server-side proxy
 - **Database**: Neon Postgres over HTTP (`@neondatabase/serverless`). No ORM, no migration tool — `db/schema.sql` is run by hand and migrations are appended to it as idempotent `ALTER TABLE ... IF NOT EXISTS` statements. **The HTTP driver has no transactions**: each tagged template is its own request, so multi-step writes must be safe half-completed.
 - **Auth**: Neon Auth (`@neondatabase/auth`). Every protected route starts with the same three lines — `getAuth().getSession()`, then 401 if there's no user, then scope every query by `user.id`.
 - **Bot**: optional Telegram bot for reviews and reminders (`lib/telegram/`)
@@ -84,6 +84,7 @@ lib/                            # Server-only (except shared/); app/lib/ is the 
 ├── srs.js                      # calcSRS() — simplified SM-2; also easeDelta/DEFAULT_EASE_FACTOR, quoted by the MCP instructions
 ├── reviews.js                  # Due-word queries + gradeWord, shared by web and bot
 ├── words.js                    # Word *content*: list/get/update the four meaning columns, shared by PATCH and MCP
+├── claudeModel.js              # CLAUDE_MODEL: the one model /api/claude sends, with thinking off
 ├── usage.js                    # recordUsage(): token counts of each /api/claude call into claude_usage (no text)
 ├── auth/server.js              # getAuth()
 ├── mcp/
