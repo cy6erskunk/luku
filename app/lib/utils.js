@@ -79,11 +79,6 @@ export function dehyphenate(text) {
   );
 }
 
-// Whether a saved word is due for review. page.jsx calls this during render,
-// so the clock is still read in render, and that is on purpose: the due list
-// should update on every render. oxlint's react(purity) rule rejects an inline
-// `new Date()` but can't see into this helper. That does not make the page
-// pure, and it is safe only while React Compiler is off (next.config.mjs).
 /**
  * A shuffled copy (Fisher–Yates). `random` is injectable so a test can fix the
  * order; everything else takes Math.random.
@@ -97,6 +92,11 @@ export function shuffle(arr, random = Math.random) {
   return out;
 }
 
+// Whether a saved word is due for review. page.jsx calls this during render,
+// so the clock is still read in render, and that is on purpose: the due list
+// should update on every render. oxlint's react(purity) rule rejects an inline
+// `new Date()` but can't see into this helper. That does not make the page
+// pure, and it is safe only while React Compiler is off (next.config.mjs).
 export function isDue(w, now = Date.now()) {
   return new Date(w.next_review_at).getTime() <= now;
 }
