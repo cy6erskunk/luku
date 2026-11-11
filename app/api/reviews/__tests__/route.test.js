@@ -90,4 +90,44 @@ describe("POST /api/reviews", () => {
     expect(mocks.sql.calls[0].values).toEqual([7, "u1"]);
     expect(mocks.sql.calls[1].values).toContain("u1");
   });
+  describe("with the schedule the tab showed", () => {
+    const SHOWN = "2026-08-13T06:00:00.123Z";
+
+    it("guards the write on it", async () => {
+      // The stored row is the card as the tab saw it: the read and the guard agree.
+      mocks.sql = fakeSql([[CARD], [{ ...CARD, interval_days: 15 }]]);
+      const res = await POST(makeRequest({ wordId: 7, grade: 5, expectedNextReviewAt: SHOWN }));
+      expect(res.status).toBe(200);
+      expect(mocks.sql.calls[1].values).toContain(SHOWN);
+    });
+
+    it("answers 409 with the current schedule when the card was graded since", async () => {
+      // Graded on the bot after the tab loaded: the stored row has moved on, so
+      // the guarded update matches nothing, and the re-read is what comes back.
+      const MOVED = { ...CARD, interval_days: 15, review_count: 3, next_review_at: new Date("2026-08-28T06:00:00.123Z"), example: "Hän juoksee." };
+      mocks.sql = fakeSql([[MOVED], [], [MOVED]]);
+      const res = await POST(makeRequest({ wordId: 7, grade: 1, expectedNextReviewAt: SHOWN }));
+      expect(res.status).toBe(409);
+      expect((await res.json()).word).toEqual(JSON.parse(JSON.stringify({
+        id: 7, ease_factor: 2.5, interval_days: 15, next_review_at: MOVED.next_review_at, review_count: 3,
+      })));
+      expect(mocks.sql.calls[2].values).toEqual([7, "u1"]);
+    });
+
+    it("still answers 404 for a card that is gone", async () => {
+      mocks.sql = fakeSql([[]]);
+      const res = await POST(makeRequest({ wordId: 7, grade: 5, expectedNextReviewAt: SHOWN }));
+      expect(res.status).toBe(404);
+    });
+
+    it("rejects a malformed value before any query", async () => {
+      for (const expectedNextReviewAt of ["soon", 12345, null]) {
+        mocks.sql = fakeSql();
+        const res = await POST(makeRequest({ wordId: 7, grade: 5, expectedNextReviewAt }));
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toBe("Invalid expectedNextReviewAt");
+        expect(mocks.sql.calls).toHaveLength(0);
+      }
+    });
+  });
 });

@@ -397,3 +397,66 @@ describe("useReview – reverse practice", () => {
     expect(result.current.isReverse).toBe(false);
   });
 });
+
+describe("useReview – grading a card that moved on elsewhere", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SHOWN = "2026-11-08T09:00:00.000Z";
+  const DUE = [
+    { id: 1, base: "juosta", next_review_at: SHOWN },
+    { id: 2, base: "koira", next_review_at: "2026-11-08T09:05:00.000Z" },
+  ];
+  const ok = (word) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word }) });
+
+  it("sends the schedule the pass showed, not the live row's", async () => {
+    // The live row differs from what the pass started with, as after a
+    // background refresh brought in a grade made on the bot.
+    const fetchMock = vi.fn(() => ok(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const props = makeProps({ dbWords: DUE });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: props });
+    act(() => result.current.startReview(DUE));
+    const refreshed = [{ ...DUE[0], next_review_at: "2026-11-14T09:00:00.000Z" }, DUE[1]];
+    rerender({ ...props, dbWords: refreshed });
+
+    await act(() => result.current.gradeWord(5));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ wordId: 1, grade: 5, expectedNextReviewAt: SHOWN });
+  });
+
+  it("guards a card failed in this pass on the schedule that failure set", async () => {
+    const AFTER_AGAIN = "2026-11-08T10:10:00.000Z";
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => ok({ id: 1, next_review_at: AFTER_AGAIN, interval_days: 0, review_count: 0 }))
+      .mockImplementation(() => ok(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useReview(makeProps({ dbWords: DUE })));
+    act(() => result.current.startReview(DUE));
+
+    await act(() => result.current.gradeWord(1)); // juosta: Again, requeued
+    await act(() => result.current.gradeWord(5)); // koira
+    await act(() => result.current.gradeWord(5)); // juosta again
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ wordId: 1, grade: 5, expectedNextReviewAt: AFTER_AGAIN });
+  });
+
+  it("on a 409, takes the current schedule, moves on without requeueing, and says so", async () => {
+    const current = { id: 1, next_review_at: "2026-11-14T09:00:00.000Z", interval_days: 6, review_count: 2 };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 409, json: () => Promise.resolve({ error: "Already graded", word: current }),
+    })));
+    const onGradeStale = vi.fn();
+    const onGradeError = vi.fn();
+    const props = makeProps({ dbWords: DUE, onGradeStale, onGradeError });
+    const { result } = renderHook(() => useReview(props));
+    act(() => result.current.startReview(DUE));
+
+    let landed;
+    // Again, so a requeue would show: the refused answer must not bring it back.
+    await act(async () => { landed = await result.current.gradeWord(1); });
+    expect(landed).toBe(true);
+    expect(props.applySchedule).toHaveBeenCalledWith(current);
+    expect(result.current.revIdx).toBe(1);
+    expect(result.current.queue).toEqual([1, 2]);
+    expect(onGradeStale).toHaveBeenCalledTimes(1);
+    expect(onGradeError).not.toHaveBeenCalled();
+  });
+});

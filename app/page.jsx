@@ -123,6 +123,7 @@ function LukuApp({ user }) {
     applySchedule: words.applySchedule,
     stage,
     onGradeError: () => setNotice({ stage: 2, message: "Couldn't confirm that answer was saved." }),
+    onGradeStale: () => setNotice({ stage: 2, message: "That card was already reviewed elsewhere, so this answer wasn't counted." }),
   });
 
   useEffect(() => () => resetTesseractWorker(), []);

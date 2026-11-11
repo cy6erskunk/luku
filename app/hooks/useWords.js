@@ -2,8 +2,15 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { reportClientError } from "../lib/report.js";
 import { pickSchedule } from "../../lib/shared/schedule.js";
 
+/**
+ * The least time between two background refreshes. Switching tabs back and
+ * forth should not cost a request each time; a tab away for half a minute is
+ * worth one, since the bot or another device may have graded cards meanwhile.
+ */
+export const REFRESH_MIN_INTERVAL_MS = 30_000;
+
 export function useWords(userId) {
-  const [dbWords, setDbWords] = useState([]);
+  const [dbWords, setDbWordsState] = useState([]);
   const [loadingWords, setLoadingWords] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -12,11 +19,22 @@ export function useWords(userId) {
   // supersedes outstanding. A counter covers both — a flag closed over by the
   // effect cannot see the retry.
   const loadIdRef = useRef(0);
+  // Bumped by every local change to the list, so a background refresh can tell
+  // that its reply was sent before a grade, save or delete it would undo.
+  const changeSeqRef = useRef(0);
+  const setDbWords = useCallback((update) => {
+    changeSeqRef.current++;
+    setDbWordsState(update);
+  }, []);
+  // When the list last arrived; 0 until the first load lands. Also what stops
+  // a refresh from starting while a load is still out.
+  const loadedAtRef = useRef(0);
 
   const loadWords = useCallback(() => {
     const id = ++loadIdRef.current;
     const newest = () => loadIdRef.current === id;
 
+    loadedAtRef.current = 0;
     if (!userId) { setDbWords([]); setLoadingWords(false); setLoadError(false); return; }
     setDbWords([]);
     setLoadingWords(true);
@@ -29,7 +47,11 @@ export function useWords(userId) {
         if (!r.ok) throw new Error(`Failed to load words (${r.status})`);
         return r.json();
       })
-      .then(({ words }) => { if (newest()) setDbWords(words || []); })
+      .then(({ words }) => {
+        if (!newest()) return;
+        setDbWords(words || []);
+        loadedAtRef.current = Date.now();
+      })
       .catch((e) => {
         // Swallowed, this looked like a brand-new account: an empty list, no
         // review offered, and nothing to say the list had failed to arrive.
@@ -37,11 +59,47 @@ export function useWords(userId) {
         if (newest()) setLoadError(true);
       })
       .finally(() => { if (newest()) setLoadingWords(false); });
-  }, [userId]);
+  }, [userId, setDbWords]);
 
   // No cleanup: starting a load retires the one before it, and an unmount
   // leaves a request whose resolution writes to nothing.
   useEffect(() => { loadWords(); }, [loadWords]);
+
+  /**
+   * Fetches the list again without blanking it, so a tab left open catches up
+   * with grades made on the bot or another device. Without it the due count
+   * only ever grew, and a card already reviewed elsewhere stayed due here.
+   *
+   * Quiet on purpose: no loading state and no Notice. The list on screen
+   * stays usable, and a failed refresh leaves it exactly as it was. The reply
+   * is dropped if a load started since, or if anything changed the list while
+   * it was out — a reply sent before a grade landed would otherwise put the
+   * old schedule back.
+   */
+  const refreshWords = useCallback(() => {
+    if (!userId || loadedAtRef.current === 0) return;
+    if (Date.now() - loadedAtRef.current < REFRESH_MIN_INTERVAL_MS) return;
+    const loadId = loadIdRef.current;
+    const changeSeq = changeSeqRef.current;
+    loadedAtRef.current = Date.now();
+
+    fetch("/api/words")
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to refresh words (${r.status})`);
+        return r.json();
+      })
+      .then(({ words }) => {
+        if (loadIdRef.current !== loadId || changeSeqRef.current !== changeSeq) return;
+        if (Array.isArray(words)) setDbWords(words);
+      })
+      .catch((e) => reportClientError("refresh words", e));
+  }, [userId, setDbWords]);
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refreshWords(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refreshWords]);
 
   const saveWord = async (entry) => {
     const r = await fetch("/api/words", {
