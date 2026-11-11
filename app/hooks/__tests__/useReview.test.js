@@ -397,3 +397,134 @@ describe("useReview – reverse practice", () => {
     expect(result.current.isReverse).toBe(false);
   });
 });
+
+describe("useReview – grading a card that moved on elsewhere", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SHOWN = "2026-11-08T09:00:00.000Z";
+  const DUE = [
+    { id: 1, base: "juosta", next_review_at: SHOWN },
+    { id: 2, base: "koira", next_review_at: "2026-11-08T09:05:00.000Z" },
+  ];
+  const ok = (word) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word }) });
+
+  it("sends the schedule the pass showed, not the live row's", async () => {
+    // The new-words pass keeps a card whose row changed (it grades nothing
+    // unless asked), so a persisted Again there is where a refreshed row can
+    // still meet a grade.
+    const fetchMock = vi.fn(() => ok(null));
+    vi.stubGlobal("fetch", fetchMock);
+    const props = makeProps({ dbWords: DUE });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: props });
+    act(() => result.current.startNewReview(DUE));
+    const refreshed = [{ ...DUE[0], next_review_at: "2026-11-14T09:00:00.000Z" }, DUE[1]];
+    rerender({ ...props, dbWords: refreshed });
+
+    await act(() => result.current.gradeWord(1, { persist: true }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ wordId: 1, grade: 1, expectedNextReviewAt: SHOWN });
+  });
+
+  it("guards a card failed in this pass on the schedule that failure set", async () => {
+    const AFTER_AGAIN = "2026-11-08T10:10:00.000Z";
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => ok({ id: 1, next_review_at: AFTER_AGAIN, interval_days: 0, review_count: 0 }))
+      .mockImplementation(() => ok(null));
+    vi.stubGlobal("fetch", fetchMock);
+    let rows = DUE;
+    const applySchedule = vi.fn((r) => { rows = rows.map((w) => (w.id === r.id ? { ...w, ...r } : w)); });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: makeProps({ dbWords: rows, applySchedule }) });
+    act(() => result.current.startReview(DUE));
+
+    await act(() => result.current.gradeWord(1)); // juosta: Again, requeued
+    rerender(makeProps({ dbWords: rows, applySchedule }));
+    await act(() => result.current.gradeWord(5)); // koira
+    rerender(makeProps({ dbWords: rows, applySchedule }));
+    expect(result.current.queue).toEqual([1, 2, 1]);
+    await act(() => result.current.gradeWord(5)); // juosta again
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ wordId: 1, grade: 5, expectedNextReviewAt: AFTER_AGAIN });
+  });
+
+  it("on a 409, takes the current schedule, moves on without requeueing, and says so", async () => {
+    const current = { id: 1, next_review_at: "2026-11-14T09:00:00.000Z", interval_days: 6, review_count: 2 };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: false, status: 409, json: () => Promise.resolve({ error: "Already graded", word: current }),
+    })));
+    const onGradeStale = vi.fn();
+    const onGradeError = vi.fn();
+    const props = makeProps({ dbWords: DUE, onGradeStale, onGradeError });
+    const { result } = renderHook(() => useReview(props));
+    act(() => result.current.startReview(DUE));
+
+    let landed;
+    // Again, so a requeue would show: the refused answer must not bring it back.
+    await act(async () => { landed = await result.current.gradeWord(1); });
+    expect(landed).toBe(true);
+    expect(props.applySchedule).toHaveBeenCalledWith(current);
+    expect(result.current.revIdx).toBe(1);
+    expect(result.current.queue).toEqual([1, 2]);
+    expect(onGradeStale).toHaveBeenCalledTimes(1);
+    expect(onGradeError).not.toHaveBeenCalled();
+  });
+});
+
+describe("useReview – a refresh shows a queued card was graded elsewhere", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const DUE = [
+    { id: 1, base: "juosta", next_review_at: "2026-11-08T09:00:00.000Z" },
+    { id: 2, base: "koira", next_review_at: "2026-11-08T09:05:00.000Z" },
+    { id: 3, base: "talo", next_review_at: "2026-11-08T09:10:00.000Z" },
+  ];
+  const gradedOnBot = (w) => ({ ...w, next_review_at: "2026-11-14T09:00:00.000Z" });
+
+  it("skips it in a due pass before the reader answers it", () => {
+    const props = makeProps({ dbWords: DUE });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: props });
+    act(() => result.current.startReview(DUE));
+    rerender({ ...props, dbWords: [gradedOnBot(DUE[0]), DUE[1], DUE[2]] });
+    expect(result.current.queue).toEqual([2, 3]);
+    expect(result.current.revIdx).toBe(0);
+  });
+
+  it("leaves a card alone whose only change was this pass's own grade", async () => {
+    const reply = { id: 1, next_review_at: "2026-11-09T09:00:00.000Z", interval_days: 1, review_count: 1 };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ word: reply }) })));
+    let rows = DUE;
+    const applySchedule = vi.fn((r) => { rows = rows.map((w) => (w.id === r.id ? { ...w, ...r } : w)); });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: makeProps({ dbWords: rows, applySchedule }) });
+    act(() => result.current.startReview(DUE));
+    await act(() => result.current.gradeWord(5));
+    rerender(makeProps({ dbWords: rows, applySchedule }));
+    expect(result.current.queue).toEqual([1, 2, 3]);
+    expect(result.current.revIdx).toBe(1);
+  });
+
+  it("does not drop the card while its own grade is still out", async () => {
+    let resolve;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((r) => { resolve = r; })));
+    const props = makeProps({ dbWords: DUE });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: props });
+    act(() => result.current.startReview(DUE));
+    let pending;
+    act(() => { pending = result.current.gradeWord(5); });
+    // The refresh brings in the row that very grade wrote, ahead of its reply.
+    const written = gradedOnBot(DUE[0]);
+    rerender({ ...props, dbWords: [written, DUE[1], DUE[2]] });
+    expect(result.current.queue).toEqual([1, 2, 3]);
+    await act(async () => {
+      resolve({ ok: true, status: 200, json: () => Promise.resolve({ word: { id: 1, next_review_at: written.next_review_at } }) });
+      await pending;
+    });
+    expect(result.current.queue).toEqual([1, 2, 3]);
+    expect(result.current.revIdx).toBe(1);
+  });
+
+  it("leaves the new-words pass alone, which grades nothing", () => {
+    const props = makeProps({ dbWords: DUE });
+    const { result, rerender } = renderHook((p) => useReview(p), { initialProps: props });
+    act(() => result.current.startNewReview(DUE));
+    rerender({ ...props, dbWords: [gradedOnBot(DUE[0]), DUE[1], DUE[2]] });
+    expect(result.current.queue).toEqual([1, 2, 3]);
+  });
+});
+

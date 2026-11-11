@@ -318,9 +318,10 @@ what matters when changing it:
   skills call on a deployment fails. A skill pointer was tried in
   `INSTRUCTIONS` and cut: the length budget there is real, and `list_skills`'
   description already carries it.
-- An MCP write does **not** invalidate an open browser tab: a refined card shows
-  stale until the next load. `useReview` self-corrects for a word deleted
-  elsewhere; an edited one is not worth a subscription.
+- An MCP write does **not** push to an open browser tab: a refined card shows
+  stale until the tab next fetches the list, which it does when it comes back
+  into view (see *A tab left open*). `useReview` self-corrects for a word
+  deleted elsewhere; an edited one is not worth a subscription.
 
 ### API Key Handling
 
@@ -376,6 +377,20 @@ what matters when changing it:
   columns — so a half-applied schema serves the word list happily and rejects
   every insert, which is why the withdrawn "✓" matters
 - `useReview` self-corrects the queue when a word is deleted externally (e.g. another tab)
+- **A tab left open** catches up with the bot and other devices twice over.
+  `useWords` fetches the list again when the tab comes back into view (at most
+  every `REFRESH_MIN_INTERVAL_MS`), replacing it in place with no loading
+  state, and drops the reply if any local change landed while it was out — a
+  load, unlike a write's reply, has no columns of its own to merge. And every
+  web grade carries `expectedNextReviewAt`, the schedule the pass showed, so
+  a card graded elsewhere since is refused with a 409 and its current schedule
+  instead of being graded a second time from it. That value comes from the
+  pass, not the live row: guarding on a schedule a refresh just brought in
+  would let the double grade through. A due pass also skips, unanswered, a
+  card a refresh shows has moved on since the pass began (not while a grade is
+  out, when the moved-on row may be that grade's own). Before all this, the due
+  count only ever grew and a stale tab silently re-graded cards already
+  reviewed on the bot
 - SRS reads and writes go through `lib/reviews.js` so the web app and the bot share one path
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
   `lib/__tests__/helpers/fakeSql.js` for the tagged-template query function

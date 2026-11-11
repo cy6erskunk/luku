@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 // Mocked wherever the module graph reaches it: the real package pulls in a
 // Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
 // is where the reporting contract itself is tested.
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
-import { useWords } from "../useWords.js";
+import { useWords, REFRESH_MIN_INTERVAL_MS } from "../useWords.js";
 
 const WORD_A = { id: 1, base: "juosta", translations: ["to run"], pos: "verb" };
 const WORD_B = { id: 2, base: "koira", translations: ["dog"], pos: "noun" };
@@ -299,5 +299,112 @@ describe("useWords – account changes mid-flight", () => {
 
     expect(result.current.dbWords).toEqual([]);
     expect(result.current.loadingWords).toBe(true);
+  });
+});
+
+describe("useWords – background refresh when the tab comes back", () => {
+  let now;
+  const comeBack = () => act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+  const later = (ms) => { now += ms; };
+
+  beforeEach(() => {
+    now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+  // Unmounted after each test: a hook left mounted keeps its listener, and its
+  // refresh would land on the next test's fetch mock.
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  async function loaded(words = [WORD_A, WORD_B]) {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ words }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const hook = renderHook(() => useWords("user-1"));
+    await waitFor(() => expect(hook.result.current.loadingWords).toBe(false));
+    return { ...hook, fetchMock };
+  }
+
+  it("replaces the list in place, without a loading state", async () => {
+    const { result, fetchMock } = await loaded();
+    const GRADED_ELSEWHERE = { ...WORD_A, next_review_at: "2026-11-14T09:00:00.000Z" };
+    let resolve;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.loadingWords).toBe(false);
+    expect(result.current.dbWords).toEqual([WORD_A, WORD_B]);
+    await act(async () => resolve({ ok: true, json: () => Promise.resolve({ words: [GRADED_ELSEWHERE] }) }));
+    expect(result.current.dbWords).toEqual([GRADED_ELSEWHERE]);
+  });
+
+  it("does not refresh again within the minimum interval", async () => {
+    const { fetchMock } = await loaded();
+    later(REFRESH_MIN_INTERVAL_MS - 1);
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores the tab being hidden", async () => {
+    const { fetchMock } = await loaded();
+    later(REFRESH_MIN_INTERVAL_MS);
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a reply sent before a local grade landed", async () => {
+    // The refresh left before the grade was written, so its copy carries the
+    // old schedule; taking it would undo the grade on screen.
+    const { result, fetchMock } = await loaded();
+    let resolve;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    act(() => result.current.applySchedule({ id: 1, next_review_at: "2026-11-20T00:00:00.000Z" }));
+    await act(async () => resolve({ ok: true, json: () => Promise.resolve({ words: [WORD_A, WORD_B] }) }));
+    expect(result.current.dbWords[0].next_review_at).toBe("2026-11-20T00:00:00.000Z");
+  });
+
+  it("lets the next return try again when a reply was dropped", async () => {
+    const { result, fetchMock } = await loaded();
+    let resolve;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    act(() => result.current.applySchedule({ id: 1, next_review_at: "2026-11-20T00:00:00.000Z" }));
+    await act(async () => resolve({ ok: true, json: () => Promise.resolve({ words: [WORD_A, WORD_B] }) }));
+
+    later(1_000);
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("starts no second refresh while one is out", async () => {
+    const { fetchMock } = await loaded();
+    fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the list as it was when the refresh fails", async () => {
+    const { result, fetchMock } = await loaded();
+    fetchMock.mockImplementationOnce(() => Promise.resolve({ ok: false, status: 500 }));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    await act(async () => {});
+    expect(result.current.dbWords).toEqual([WORD_A, WORD_B]);
+    expect(result.current.loadError).toBe(false);
+  });
+
+  it("stops listening once unmounted", async () => {
+    const { fetchMock, unmount } = await loaded();
+    unmount();
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
