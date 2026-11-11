@@ -376,3 +376,35 @@ notes for the target model were checked for request-shape breaks (thinking
 default) but not for what a token means.
 Check: does the new model share the old one's tokenizer? If not, is every
 `max_tokens` and every token-based cost or budget claim rescaled with it?
+
+## F34 — A background refetch overwrites the state a guard or a pending reply relies on
+PR (this branch, stale-tab grading) · self-review (`/code-review`) · Async UI · fixed · open
+What happened: adding a quiet refresh of the word list on tab focus made two
+other pieces wrong at once. The grade's compare-and-swap value was read from
+the live row, so a refresh that brought in a schedule set on the bot would
+have let the double grade through. The new "skip a card that moved on"
+check could fire while the card's own grade was in flight, because the
+refresh could deliver the row that grade wrote before its reply did, and
+the reply's advance would then skip a second card. Separately, the refresh
+started its throttle when it was sent, so a reply it threw away still held
+off the next try for 30 seconds.
+Missed because: "What else writes this row while my request is out?" was
+asked of the refresh's own reply, not of every other reader of the state it
+replaces.
+Check: when a change starts replacing state in the background, list every
+value read from that state as a *baseline* (CAS guards, "has this changed?"
+comparisons, throttle stamps) and every request in flight whose reply
+assumes the old value. Does each one still hold when the refresh lands
+first, and when it lands second?
+
+## F35 — Input validated with `new Date()`, which parses almost anything
+PR (this branch, stale-tab grading) · self-review (`/code-review`) · API · fixed · open
+What happened: `/api/reviews` accepted `expectedNextReviewAt` if
+`new Date(value)` was valid, so `"1"` passed as 2001-01-01. The guard then
+missed, and a client bug was reported as "already graded" with a 409.
+Missed because: "input validated before the first query" was satisfied in
+form. Nobody asked what the validator lets through.
+Check: for each validator, try a few junk inputs (`"1"`, `"2024"`, `""`)
+and ask what the route reports for them. Where a wrong value turns into a
+plausible domain answer rather than a 400, check the format, not just
+whether it parses.
