@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { authClient } from "./lib/authClient.js";
-import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, isDue } from "./lib/utils.js";
+import { SKIP_KEY, SERVER_KEY, hasApiKey, tokenize, sentenceOf, findExistingWord, savedWordEntry, isDue, shuffle } from "./lib/utils.js";
 import { translateWord, suggestExample } from "./lib/api.js";
 import { reportClientError } from "./lib/report.js";
 import { resetTesseractWorker } from "./lib/ocr.js";
@@ -167,7 +167,10 @@ function LukuApp({ user }) {
 
   const handleStartReview = () => {
     if (words.loadingWords || review.grading) return;
-    review.startReview(dueWords);
+    // Shuffled, because cards graded in one sitting come due together in the
+    // order they were graded, and would otherwise replay it every pass. The
+    // bot draws at random too (listDueWords in lib/reviews.js).
+    review.startReview(shuffle(dueWords));
     setPopup(null);
     setStage(2);
   };
@@ -262,11 +265,7 @@ function LukuApp({ user }) {
     const pool = [...words.dbWords]
       .sort((a, b) => (a.interval_days ?? 0) - (b.interval_days ?? 0))
       .slice(0, 15);
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    review.startRepeat(pool.slice(0, 5));
+    review.startRepeat(shuffle(pool).slice(0, 5));
     setPopup(null);
     setStage(2);
   };

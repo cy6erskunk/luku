@@ -84,6 +84,19 @@ export function dehyphenate(text) {
 // should update on every render. oxlint's react(purity) rule rejects an inline
 // `new Date()` but can't see into this helper. That does not make the page
 // pure, and it is safe only while React Compiler is off (next.config.mjs).
+/**
+ * A shuffled copy (Fisher–Yates). `random` is injectable so a test can fix the
+ * order; everything else takes Math.random.
+ */
+export function shuffle(arr, random = Math.random) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 export function isDue(w, now = Date.now()) {
   return new Date(w.next_review_at).getTime() <= now;
 }
