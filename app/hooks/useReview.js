@@ -70,7 +70,7 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError, onGrade
   };
 
   // Resolves true once the grade has landed, needed no write, or was refused
-  // because the card had already been graded elsewhere. `persist`
+  // because the card had already been graded. `persist`
   // writes a grade from the new-words pass, which otherwise writes nothing:
   // Again on a word the reader re-added is a real Again. It is not requeued
   // in that pass; the schedule brings it back in the due queue.
@@ -114,7 +114,8 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError, onGrade
         }),
       });
       if (r.status === 409) {
-        // Already graded elsewhere. The reply carries the card's current
+        // Already graded — on the bot, in another tab, or by an earlier
+        // answer from this one whose reply was lost. The reply carries the card's current
         // schedule, so this tab catches up and moves past the card without
         // requeueing it: this answer was not counted, and saying it again
         // would only be refused again.
