@@ -121,7 +121,7 @@ describe("POST /api/reviews", () => {
     });
 
     it("rejects a malformed value before any query", async () => {
-      for (const expectedNextReviewAt of ["soon", 12345, null]) {
+      for (const expectedNextReviewAt of ["soon", "1", "2024", 12345, null]) {
         mocks.sql = fakeSql();
         const res = await POST(makeRequest({ wordId: 7, grade: 5, expectedNextReviewAt }));
         expect(res.status).toBe(400);

@@ -24,16 +24,26 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError, onGrade
   // Self-correct if the current queue entry refers to a word no longer in
   // dbWords (e.g. deleted in another tab). Without this the review screen
   // renders blank with no way to progress.
+  //
+  // In a due pass, also skip a card a background refresh shows was graded
+  // elsewhere since the pass began: answering it would only be refused with
+  // a 409. This pass's own grades move the snapshot along with the row, so
+  // they never trip this; a card refused with a 409 does not, so a later copy
+  // of it in the queue is skipped here too.
   useEffect(() => {
     if (stage !== 2) return;
     if (revIdx >= queue.length) return;
     const id = queue[revIdx];
     if (id == null) return;
-    if (dbWords.some((w) => w.id === id)) return;
+    const word = dbWords.find((w) => w.id === id);
+    // Not while a grade is out: a refresh can bring in the row that grade just
+    // wrote, before its reply moves the snapshot, and dropping the card then
+    // would make the reply's advance skip the next one too.
+    if (word && !(mode === "due" && !grading && movedOn(word, shownScheduleRef.current.get(id)))) return;
     const adjust = queue.slice(0, revIdx).filter((qid) => qid === id).length;
     setQueue((q) => q.filter((qid) => qid !== id));
     if (adjust > 0) setRevIdx((i) => i - adjust);
-  }, [stage, revIdx, queue, dbWords]);
+  }, [stage, revIdx, queue, dbWords, mode, grading]);
 
   const startReview = (dueWords) => {
     beginPass(dueWords);
@@ -181,4 +191,11 @@ export function useReview({ dbWords, applySchedule, stage, onGradeError, onGrade
     queue, revIdx, setRevIdx, showAnswer, setShowAnswer, grading, mode, isRepeat, isNewReview, isReverse,
     startReview, startRepeat, startReverse, startNewReview, gradeWord, removeWordFromQueue, restoreWordInQueue, reset,
   };
+}
+
+// Whether a word's schedule is no longer the one a pass first showed. Compared
+// as instants: the row and the snapshot may spell the same time differently.
+function movedOn(word, shown) {
+  if (shown == null) return false;
+  return new Date(word.next_review_at).getTime() !== new Date(shown).getTime();
 }

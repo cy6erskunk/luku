@@ -26,9 +26,12 @@ export function useWords(userId) {
     changeSeqRef.current++;
     setDbWordsState(update);
   }, []);
-  // When the list last arrived; 0 until the first load lands. Also what stops
-  // a refresh from starting while a load is still out.
+  // When the list last arrived and was taken; 0 until the first load lands,
+  // which is also what stops a refresh starting while a load is still out.
+  // Only a reply that was used moves it, so a refresh whose reply was dropped
+  // leaves the next return free to try again.
   const loadedAtRef = useRef(0);
+  const refreshingRef = useRef(false);
 
   const loadWords = useCallback(() => {
     const id = ++loadIdRef.current;
@@ -77,11 +80,11 @@ export function useWords(userId) {
    * old schedule back.
    */
   const refreshWords = useCallback(() => {
-    if (!userId || loadedAtRef.current === 0) return;
+    if (!userId || loadedAtRef.current === 0 || refreshingRef.current) return;
     if (Date.now() - loadedAtRef.current < REFRESH_MIN_INTERVAL_MS) return;
     const loadId = loadIdRef.current;
     const changeSeq = changeSeqRef.current;
-    loadedAtRef.current = Date.now();
+    refreshingRef.current = true;
 
     fetch("/api/words")
       .then((r) => {
@@ -90,9 +93,17 @@ export function useWords(userId) {
       })
       .then(({ words }) => {
         if (loadIdRef.current !== loadId || changeSeqRef.current !== changeSeq) return;
-        if (Array.isArray(words)) setDbWords(words);
+        if (!Array.isArray(words)) return;
+        setDbWords(words);
+        loadedAtRef.current = Date.now();
       })
-      .catch((e) => reportClientError("refresh words", e));
+      .catch((e) => {
+        // A failure waits out the interval like a success, so a server that
+        // is down is not asked again on every tab switch.
+        loadedAtRef.current = Date.now();
+        reportClientError("refresh words", e);
+      })
+      .finally(() => { refreshingRef.current = false; });
   }, [userId, setDbWords]);
 
   useEffect(() => {

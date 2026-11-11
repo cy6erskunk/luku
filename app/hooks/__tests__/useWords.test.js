@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 // Mocked wherever the module graph reaches it: the real package pulls in a
 // Next build plugin that Vitest cannot load. app/lib/__tests__/report.test.js
 // is where the reporting contract itself is tested.
@@ -312,7 +312,9 @@ describe("useWords – background refresh when the tab comes back", () => {
     vi.spyOn(Date, "now").mockImplementation(() => now);
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   });
-  afterEach(() => vi.restoreAllMocks());
+  // Unmounted after each test: a hook left mounted keeps its listener, and its
+  // refresh would land on the next test's fetch mock.
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   async function loaded(words = [WORD_A, WORD_B]) {
     const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ words }) }));
@@ -363,6 +365,29 @@ describe("useWords – background refresh when the tab comes back", () => {
     act(() => result.current.applySchedule({ id: 1, next_review_at: "2026-11-20T00:00:00.000Z" }));
     await act(async () => resolve({ ok: true, json: () => Promise.resolve({ words: [WORD_A, WORD_B] }) }));
     expect(result.current.dbWords[0].next_review_at).toBe("2026-11-20T00:00:00.000Z");
+  });
+
+  it("lets the next return try again when a reply was dropped", async () => {
+    const { result, fetchMock } = await loaded();
+    let resolve;
+    fetchMock.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    act(() => result.current.applySchedule({ id: 1, next_review_at: "2026-11-20T00:00:00.000Z" }));
+    await act(async () => resolve({ ok: true, json: () => Promise.resolve({ words: [WORD_A, WORD_B] }) }));
+
+    later(1_000);
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("starts no second refresh while one is out", async () => {
+    const { fetchMock } = await loaded();
+    fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+    later(REFRESH_MIN_INTERVAL_MS);
+    comeBack();
+    comeBack();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the list as it was when the refresh fails", async () => {

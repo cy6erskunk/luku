@@ -34,6 +34,11 @@ export async function POST(request) {
   return Response.json({ word: pickSchedule(updated) });
 }
 
+// An ISO 8601 timestamp, as the word list sends next_review_at. `new Date`
+// alone would take "1" as the year 2001, and the guard would then miss and
+// report a client bug as a card graded elsewhere.
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
 function isTimestamp(value) {
-  return typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+  return typeof value === "string" && ISO_TIMESTAMP.test(value) && !Number.isNaN(new Date(value).getTime());
 }

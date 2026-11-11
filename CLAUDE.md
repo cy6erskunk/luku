@@ -386,8 +386,11 @@ what matters when changing it:
   a card graded elsewhere since is refused with a 409 and its current schedule
   instead of being graded a second time from it. That value comes from the
   pass, not the live row: guarding on a schedule a refresh just brought in
-  would let the double grade through. Before both, the due count only ever
-  grew and a stale tab silently re-graded cards already reviewed on the bot
+  would let the double grade through. A due pass also skips, unanswered, a
+  card a refresh shows has moved on since the pass began (not while a grade is
+  out, when the moved-on row may be that grade's own). Before all this, the due
+  count only ever grew and a stale tab silently re-graded cards already
+  reviewed on the bot
 - SRS reads and writes go through `lib/reviews.js` so the web app and the bot share one path
 - Tests mock at the boundary: `vi.stubGlobal("fetch", ...)` for network, and
   `lib/__tests__/helpers/fakeSql.js` for the tagged-template query function
