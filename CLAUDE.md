@@ -180,6 +180,12 @@ changing it:
   card due in `AGAIN_DELAY_MINUTES` (10, `lib/srs.js`), so it comes round
   again in a chat session still going by then; a session that runs out first
   ends by saying how many are coming back. That applies to web grades too.
+- Due cards come up in **random order**, on both surfaces: cards graded in
+  one sitting fall due seconds apart and would otherwise replay that order
+  every session. The bot draws a random due card each turn (`listDueWords`),
+  which needs no stored state because a graded card leaves the due set; cards
+  failed within `SITTING_MINUTES` are held back to the end, as oldest-first
+  used to do. The web due pass shuffles its queue in `handleStartReview`.
 
 ### MCP server
 

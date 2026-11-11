@@ -6,6 +6,7 @@
  * would let the easy direction and the hard one push each other around. Until
  * reverse cards get a schedule of their own, a reverse pass writes nothing.
  */
+import { shuffle } from "./utils.js";
 
 /** Cards per reverse pass. */
 export const REVERSE_SESSION_SIZE = 12;
@@ -22,15 +23,6 @@ export const REVERSE_MIN_REVIEW_COUNT = 2;
 /** Words far enough along to be practised in reverse. */
 export function reverseEligible(words) {
   return words.filter((w) => Number(w.review_count ?? 0) >= REVERSE_MIN_REVIEW_COUNT);
-}
-
-function shuffle(arr, random) {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
 }
 
 /**

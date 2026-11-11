@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, isDue, SKIP_KEY, SERVER_KEY } from "../utils.js";
+import { hasApiKey, tokenize, dehyphenate, sentenceOf, wordForms, findExistingWord, savedWordEntry, isDue, shuffle, SKIP_KEY, SERVER_KEY } from "../utils.js";
 
 describe("wordForms", () => {
   it("returns the stored forms array when present", () => {
@@ -332,5 +332,24 @@ describe("isDue", () => {
   });
   it("is not due when next_review_at is in the future", () => {
     expect(isDue({ next_review_at: "2026-11-03T12:00:01Z" }, now)).toBe(false);
+  });
+});
+
+describe("shuffle", () => {
+  it("returns a reordered copy and leaves the input alone", () => {
+    const input = [1, 2, 3, 4];
+    // random() = 0 swaps each element with the first: [1,2,3,4] -> [2,3,4,1].
+    expect(shuffle(input, () => 0)).toEqual([2, 3, 4, 1]);
+    expect(input).toEqual([1, 2, 3, 4]);
+  });
+
+  it("keeps every element exactly once", () => {
+    const input = Array.from({ length: 50 }, (_, i) => i);
+    expect([...shuffle(input)].sort((a, b) => a - b)).toEqual(input);
+  });
+
+  it("copes with empty and single-element lists", () => {
+    expect(shuffle([])).toEqual([]);
+    expect(shuffle(["a"])).toEqual(["a"]);
   });
 });

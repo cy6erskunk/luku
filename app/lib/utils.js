@@ -79,6 +79,19 @@ export function dehyphenate(text) {
   );
 }
 
+/**
+ * A shuffled copy (Fisher–Yates). `random` is injectable so a test can fix the
+ * order; everything else takes Math.random.
+ */
+export function shuffle(arr, random = Math.random) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 // Whether a saved word is due for review. page.jsx calls this during render,
 // so the clock is still read in render, and that is on purpose: the due list
 // should update on every render. oxlint's react(purity) rule rejects an inline
