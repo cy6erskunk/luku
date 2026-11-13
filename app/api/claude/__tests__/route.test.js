@@ -174,18 +174,22 @@ describe("POST /api/claude", () => {
   });
 
   it("sends OCR to Haiku 5.5 and every other kind to Sonnet 5", async () => {
+    // Assertions stay out of the fetch mock: the route catches whatever the
+    // mock throws and answers 500, so a failed expect there would pass.
     const models = {};
     for (const kind of ["ocr", "translate", "example", "anything", undefined]) {
+      let body;
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((_url, opts) => {
-          const body = JSON.parse(opts.body);
-          models[String(kind)] = body.model;
-          expect(body.thinking).toEqual({ type: "disabled" });
+          body = JSON.parse(opts.body);
           return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
         })
       );
-      await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], kind, model: "claude-opus-5-5" }));
+      const res = await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], kind, model: "claude-opus-5-5" }));
+      expect(res.status).toBe(200);
+      expect(body.thinking).toEqual({ type: "disabled" });
+      models[String(kind)] = body.model;
     }
     expect(models).toEqual({
       ocr: "claude-haiku-5-5",
