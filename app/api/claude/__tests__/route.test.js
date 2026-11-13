@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { SONNET_MODEL, HAIKU_MODEL } from "@/lib/claudeModel";
 
 const mocks = vi.hoisted(() => ({ session: null, afterTasks: [], sql: null, captured: [] }));
 
@@ -13,6 +14,10 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: (e) => mocks.captured.push({ error: e }),
   flush: () => { mocks.captured.push({ flushed: true }); return Promise.resolve(true); },
 }));
+
+// What a client might send to pick its own model; the route must ignore it.
+// Not a real id, so no model release makes it collide with the configured ones.
+const CLIENT_CHOSEN_MODEL = "client-chosen-model";
 
 const { fakeSql } = await import("../../../../lib/__tests__/helpers/fakeSql.js");
 
@@ -158,7 +163,7 @@ describe("POST /api/claude", () => {
     expect(capturedBody.system).toBeUndefined();
   });
 
-  it("sends Sonnet 5 with thinking off, whatever the client asks for", async () => {
+  it("sends the Sonnet model with thinking off, whatever the client asks for", async () => {
     let capturedBody;
     vi.stubGlobal(
       "fetch",
@@ -168,9 +173,38 @@ describe("POST /api/claude", () => {
       })
     );
 
-    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: "claude-opus-5-5" }));
-    expect(capturedBody.model).toBe("claude-sonnet-5");
+    await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], model: CLIENT_CHOSEN_MODEL }));
+    expect(capturedBody.model).toBe(SONNET_MODEL);
     expect(capturedBody.thinking).toEqual({ type: "disabled" });
+  });
+
+  it("sends OCR to the Haiku model and every other kind to the Sonnet model", async () => {
+    // Otherwise the routing below would pass with the two set to one model.
+    expect(HAIKU_MODEL).not.toBe(SONNET_MODEL);
+    // Assertions stay out of the fetch mock: the route catches whatever the
+    // mock throws and answers 500, so a failed expect there would pass.
+    const models = {};
+    for (const kind of ["ocr", "translate", "example", "anything", undefined]) {
+      let body;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((_url, opts) => {
+          body = JSON.parse(opts.body);
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
+        })
+      );
+      const res = await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], kind, model: CLIENT_CHOSEN_MODEL }));
+      expect(res.status).toBe(200);
+      expect(body.thinking).toEqual({ type: "disabled" });
+      models[String(kind)] = body.model;
+    }
+    expect(models).toEqual({
+      ocr: HAIKU_MODEL,
+      translate: SONNET_MODEL,
+      example: SONNET_MODEL,
+      anything: SONNET_MODEL,
+      undefined: SONNET_MODEL,
+    });
   });
 
   it("forwards Anthropic error status and message", async () => {
