@@ -173,6 +173,29 @@ describe("POST /api/claude", () => {
     expect(capturedBody.thinking).toEqual({ type: "disabled" });
   });
 
+  it("sends OCR to Haiku 5.5 and every other kind to Sonnet 5", async () => {
+    const models = {};
+    for (const kind of ["ocr", "translate", "example", "anything", undefined]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((_url, opts) => {
+          const body = JSON.parse(opts.body);
+          models[String(kind)] = body.model;
+          expect(body.thinking).toEqual({ type: "disabled" });
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [] }) });
+        })
+      );
+      await POST(makeRequest({ apiKey: "sk-ant-test", messages: [], kind, model: "claude-opus-5-5" }));
+    }
+    expect(models).toEqual({
+      ocr: "claude-haiku-5-5",
+      translate: "claude-sonnet-5",
+      example: "claude-sonnet-5",
+      anything: "claude-sonnet-5",
+      undefined: "claude-sonnet-5",
+    });
+  });
+
   it("forwards Anthropic error status and message", async () => {
     vi.stubGlobal(
       "fetch",

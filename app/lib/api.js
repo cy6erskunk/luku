@@ -29,7 +29,9 @@ export async function ocrImage(apiKey, base64, mediaType) {
     ]}],
     "You are an OCR assistant. Extract text from images with high accuracy.",
     // A dense page. Sized for Sonnet 5's tokenizer, which counts the same
-    // text as ~30% more tokens than 4.6's did against the old 1500.
+    // text as ~30% more tokens than 4.6's did against the old 1500. The
+    // "ocr" kind routes this to Haiku 5.5 (lib/claudeModel.js), whose count
+    // has not been measured; 2000 leaves headroom either way.
     2000,
     "ocr"
   );
