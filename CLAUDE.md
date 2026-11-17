@@ -139,7 +139,7 @@ Cross-cutting actions that touch two hooks (`handleAddWord`, `handleDeleteWord`,
 |----------|---------|
 | `callClaude()` (`api.js`) | Generic wrapper for Claude API calls via `/api/claude` |
 | `ocrImage()` (`api.js`) | Extracts text from image using Claude Vision |
-| `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech |
+| `translateWord()` (`api.js`) | Gets dictionary form, translations, and part of speech, plus `altBase` when the word could be filed under another entry (a participle and its verb, either way round). `{ forceBase }` re-asks under that entry; the popup offers it only before the word is added, and a forced lookup throws rather than fall back to "(unavailable)" |
 | `suggestExample()` (`api.js`) | A fresh example for a saved word, avoiding the ones already seen; shares its memorability guide with `translateWord()` |
 | `pickReverseSession()` (`reverse.js`) | Up to 12 words for an ungraded English → Finnish pass, from those with `review_count >= 2`, unseen ones first so "another session" moves on |
 | `ocrLocal()` (`ocr.js`) | Tesseract.js OCR with progress callbacks |

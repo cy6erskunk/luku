@@ -38,12 +38,39 @@ export async function ocrImage(apiKey, base64, mediaType) {
   );
 }
 
-export async function translateWord(apiKey, word, context) {
+/**
+ * What a reply's `alt_base` may hold: another dictionary entry the tapped word
+ * could be filed under — the verb behind a participle, or the adjective a
+ * participle has become. Anything malformed, or naming the base already
+ * chosen, is no alternative at all.
+ */
+function parseAltBase(alt, base) {
+  if (!alt || typeof alt !== "object" || typeof alt.base !== "string") return null;
+  const altBase = alt.base.trim();
+  if (!altBase || altBase.toLowerCase() === String(base ?? "").toLowerCase()) return null;
+  return {
+    base: altBase,
+    pos: typeof alt.pos === "string" && alt.pos.trim() ? alt.pos.trim() : null,
+    relation: typeof alt.relation === "string" && alt.relation.trim() ? alt.relation.trim() : null,
+  };
+}
+
+/**
+ * `forceBase` asks for the word to be filed under that dictionary form — the
+ * reader picked the popup's alternative. A forced lookup throws on a reply it
+ * cannot read instead of falling back, because the fallback would replace a
+ * good translation with "(unavailable)".
+ */
+export async function translateWord(apiKey, word, context, { forceBase } = {}) {
+  const force = forceBase
+    ? `Use "${forceBase}" as the dictionary form ("base") and translate that entry, even if another reading is possible.\n\n`
+    : "";
   const raw = await callClaude(
     apiKey,
-    [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\n${EXAMPLE_GUIDE}\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English of the dictionary form","alt1","alt2"],"form_translation":"English of \\"${word}\\" exactly as inflected in the sentence","pos":"noun/verb/adj/adv/other","example":"memorable Finnish example sentence","example_translation":"English translation of example"}` }],
+    [{ role: "user", content: `Finnish word: "${word}"\nSentence: "${context}"\n\n${force}${EXAMPLE_GUIDE}\n\n"alt_base" is null unless "${word}" could reasonably be filed under a different dictionary entry than "base" — a participle or derived noun/adjective and the verb it comes from, either way round. Then name that other entry.\n\nONLY raw JSON:\n{"base":"dictionary form","translations":["main English of the dictionary form","alt1","alt2"],"form_translation":"English of \\"${word}\\" exactly as inflected in the sentence","pos":"noun/verb/adj/adv/other","example":"memorable Finnish example sentence","example_translation":"English translation of example","alt_base":null or {"base":"the other dictionary form","pos":"noun/verb/adj/adv/other","relation":"short, e.g. past passive participle of the verb"}}` }],
     "You are a Finnish linguist. Return only raw JSON, no markdown.",
-    500,
+    // Room for alt_base on top of the old 500.
+    600,
     "translate"
   );
   try {
@@ -55,9 +82,13 @@ export async function translateWord(apiKey, word, context) {
       pos: d.pos,
       example: d.example ?? null,
       example_translation: d.example_translation ?? null,
+      altBase: parseAltBase(d.alt_base, d.base),
     };
   }
-  catch { return { base: word, translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null }; }
+  catch {
+    if (forceBase) throw new Error("Unreadable translation");
+    return { base: word, translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null, altBase: null };
+  }
 }
 
 /**

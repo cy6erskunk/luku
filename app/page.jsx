@@ -323,7 +323,7 @@ function LukuApp({ user }) {
     });
     try {
       const d = await translateWord(effectiveKey, form, sentenceOf(text, form));
-      const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, original: form, added: false };
+      const entry = { base: d.base, translations: d.translations, formTranslation: d.formTranslation, pos: d.pos, example: d.example, example_translation: d.example_translation, altBase: d.altBase, original: form, added: false };
       setSession((s) => ({ ...s, [tok.k]: entry }));
       const existing = findExistingWord(words.dbWords, { form, base: d.base });
       // The reader may have dismissed the popup while the request was in
@@ -344,8 +344,54 @@ function LukuApp({ user }) {
     finally { setXlating(null); }
   };
 
+  /**
+   * Re-files the tapped word under the popup's alternative dictionary form —
+   * the verb behind a participle, say — before it is added. Only an entry not
+   * yet added can switch: afterwards it would quietly make a second card.
+   */
+  const handleSwitchBase = async () => {
+    if (!popup?.k || xlating) return;
+    const key = popup.k;
+    const entry = session[key];
+    if (!entry?.altBase || entry.added) return;
+    const form = entry.original;
+    setXlating(key);
+    setPopup((p) => p?.k === key ? { ...p, switching: true, switchError: null } : p);
+    try {
+      const d = await translateWord(effectiveKey, form, sentenceOf(text, form), { forceBase: entry.altBase.base });
+      const next = {
+        ...entry,
+        base: d.base || entry.altBase.base,
+        translations: d.translations,
+        formTranslation: d.formTranslation ?? entry.formTranslation,
+        pos: d.pos,
+        example: d.example,
+        example_translation: d.example_translation,
+        // The way back is the entry just left, whatever the model says: a
+        // switch the reader regrets must stay one tap from undone.
+        altBase: { base: entry.base, pos: entry.pos ?? null, relation: null },
+      };
+      // Written only over the entry the switch started from. A rescan or a new
+      // scan replaces the session and can reuse this token key for another
+      // word; an entry that changed under us is not ours to overwrite.
+      setSession((s) => s[key] === entry ? { ...s, [key]: next } : s);
+      // `switching` marks the popup that asked. A rescan closes it, and taps
+      // are refused while `xlating` is set, so no other popup can carry it.
+      const existing = findExistingWord(words.dbWords, { form, base: next.base });
+      setPopup((p) => p?.k === key && p.switching
+        ? { ...next, word: p.word, k: key, x: p.x, y: p.y, existsInDb: !!existing }
+        : p);
+    } catch (e) {
+      // Nothing was written, so a popup closed meanwhile has lost nothing.
+      setPopup((p) => p?.k === key && p.switching ? { ...p, switching: false, switchError: e.message || "error" } : p);
+    }
+    finally { setXlating(null); }
+  };
+
   const handleAddWord = async () => {
-    if (!popup?.k) return;
+    // Mid-switch the entry is about to be replaced; adding now would save
+    // the one the reader just asked to leave.
+    if (!popup?.k || popup.switching) return;
     const entry = session[popup.k];
     if (!entry) return;
     // Snapshot preexistence BEFORE the save so we can distinguish "brand new to
@@ -526,6 +572,7 @@ function LukuApp({ user }) {
           newWords={newWords}
           onWord={onWord}
           onAddWord={handleAddWord}
+          onSwitchBase={handleSwitchBase}
           onRescanWithAI={image.rescanWithAI}
           onStartReview={handleStartReview}
           onStartNewReview={handleStartNewReview}
