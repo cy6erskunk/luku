@@ -8,7 +8,7 @@ export default function ReadStage({
   popup,
   ocrSource, busy, err,
   loadingWords, dueWords, newWords = [],
-  onWord, onAddWord, onRescanWithAI, onStartReview, onStartNewReview, onAddApiKey,
+  onWord, onAddWord, onSwitchBase, onRescanWithAI, onStartReview, onStartNewReview, onAddApiKey,
 }) {
   const containerRef = useRef();
 
@@ -103,6 +103,7 @@ export default function ReadStage({
         containerRef={containerRef}
         session={session}
         onAddWord={onAddWord}
+        onSwitchBase={onSwitchBase}
         onAddApiKey={onAddApiKey}
       />
     </div>

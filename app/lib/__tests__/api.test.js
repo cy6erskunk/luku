@@ -132,7 +132,7 @@ describe("translateWord", () => {
       json: () => Promise.resolve({ content: [{ type: "text", text: '{"base":"koira","translations":["dog"],"form_translation":"dog\'s","pos":"noun"}' }] }),
     }));
     const result = await translateWord("sk-test", "koiran", "Koiran nimi on Musti.");
-    expect(result).toEqual({ base: "koira", translations: ["dog"], formTranslation: "dog's", pos: "noun", example: null, example_translation: null });
+    expect(result).toEqual({ base: "koira", translations: ["dog"], formTranslation: "dog's", pos: "noun", example: null, example_translation: null, altBase: null });
   });
 
   it("defaults formTranslation to null when the response omits it", async () => {
@@ -159,7 +159,60 @@ describe("translateWord", () => {
       json: () => Promise.resolve({ content: [{ type: "text", text: "not json" }] }),
     }));
     const result = await translateWord("sk-test", "talo", "Talo on iso.");
-    expect(result).toEqual({ base: "talo", translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null });
+    expect(result).toEqual({ base: "talo", translations: ["(unavailable)"], formTranslation: null, pos: "?", example: null, example_translation: null, altBase: null });
+  });
+
+  const replyWith = (text) => vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ content: [{ type: "text", text }] }) });
+
+  it("returns the alternative dictionary entry the model names", async () => {
+    vi.stubGlobal("fetch", replyWith(JSON.stringify({
+      base: "kirjoitettu", translations: ["written"], pos: "adj",
+      alt_base: { base: "kirjoittaa", pos: "verb", relation: "past passive participle of the verb" },
+    })));
+    const result = await translateWord("sk-test", "kirjoitettu", "Kirje on kirjoitettu käsin.");
+    expect(result.altBase).toEqual({ base: "kirjoittaa", pos: "verb", relation: "past passive participle of the verb" });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["a bare string", "kirjoittaa"],
+    ["without a base", { pos: "verb" }],
+    ["blank", { base: "  " }],
+    ["the chosen base again, in another case", { base: "Kirjoitettu", pos: "adj" }],
+  ])("treats an alt_base that is %s as no alternative", async (_label, alt) => {
+    vi.stubGlobal("fetch", replyWith(JSON.stringify({ base: "kirjoitettu", translations: ["written"], pos: "adj", alt_base: alt })));
+    const result = await translateWord("sk-test", "kirjoitettu", "Kirje on kirjoitettu käsin.");
+    expect(result.altBase).toBeNull();
+  });
+
+  it("names a forced base in the prompt", async () => {
+    const fetchMock = replyWith('{"base":"kirjoittaa","translations":["to write"],"pos":"verb"}');
+    vi.stubGlobal("fetch", fetchMock);
+    await translateWord("sk-test", "kirjoitettu", "Kirje on kirjoitettu käsin.", { forceBase: "kirjoittaa" });
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(prompt).toContain('Use "kirjoittaa" as the dictionary form');
+  });
+
+  it("leaves the forcing instruction out of an ordinary lookup", async () => {
+    const fetchMock = replyWith('{"base":"koira","translations":["dog"],"pos":"noun"}');
+    vi.stubGlobal("fetch", fetchMock);
+    await translateWord("sk-test", "koiran", "Koiran nimi on Musti.");
+    const prompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+    expect(prompt).not.toContain("as the dictionary form (\"base\") and translate");
+  });
+
+  it("throws on a forced reply with no translations", async () => {
+    vi.stubGlobal("fetch", replyWith('{"base":"kirjoittaa","pos":"verb"}'));
+    await expect(translateWord("sk-test", "kirjoitettu", "Kirje.", { forceBase: "kirjoittaa" }))
+      .rejects.toThrow("Unreadable translation");
+  });
+
+  it("throws on an unreadable reply to a forced lookup rather than falling back", async () => {
+    // The fallback would replace a good translation with "(unavailable)".
+    vi.stubGlobal("fetch", replyWith("not json"));
+    await expect(translateWord("sk-test", "kirjoitettu", "Kirje.", { forceBase: "kirjoittaa" }))
+      .rejects.toThrow("Unreadable translation");
   });
 });
 

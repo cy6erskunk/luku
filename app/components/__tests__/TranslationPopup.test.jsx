@@ -225,3 +225,65 @@ describe("TranslationPopup – failed form lookup", () => {
     expect(screen.getByText(/network down/)).toBeTruthy();
   });
 });
+
+describe("TranslationPopup – alternative base", () => {
+  const ALT = { base: "kirjoittaa", pos: "verb", relation: "past passive participle of the verb" };
+  const ENTRY = { base: "kirjoitettu", translations: ["written"], pos: "adj", altBase: ALT, added: false };
+  const popup = { ...ENTRY, word: "kirjoitettu", k: "w1", x: 100, y: 80 };
+
+  function setupAlt(p, entry = ENTRY) {
+    const onSwitchBase = vi.fn();
+    render(
+      <TranslationPopup
+        popup={p}
+        containerRef={{ current: { offsetWidth: 400 } }}
+        session={{ w1: entry }}
+        onAddWord={vi.fn()}
+        onSwitchBase={onSwitchBase}
+        onAddApiKey={vi.fn()}
+      />
+    );
+    return { onSwitchBase };
+  }
+
+  it("offers the alternative with how the word relates to it", () => {
+    const { onSwitchBase } = setupAlt(popup);
+    const chip = screen.getByRole("button", { name: /Use kirjoittaa/ });
+    expect(chip.textContent).toContain("(verb)");
+    expect(chip.textContent).toContain("kirjoitettu is the past passive participle of the verb");
+    fireEvent.click(chip);
+    expect(onSwitchBase).toHaveBeenCalled();
+  });
+
+  it("offers nothing once the word is added", () => {
+    // Switching then would leave the first card behind and make a second.
+    setupAlt({ ...popup, added: true }, { ...ENTRY, added: true });
+    expect(screen.queryByRole("button", { name: /Use kirjoittaa/ })).toBeNull();
+  });
+
+  it("offers nothing while the form is still being looked up", () => {
+    setupAlt({ ...popup, loading: true });
+    expect(screen.queryByRole("button", { name: /Use kirjoittaa/ })).toBeNull();
+  });
+
+  it("offers nothing without an alternative", () => {
+    const { altBase: _, ...plain } = ENTRY;
+    setupAlt({ ...popup, altBase: undefined }, plain);
+    expect(screen.queryByRole("button", { name: /Use / })).toBeNull();
+  });
+
+  it("holds Add and ignores the chip while a switch is in flight", () => {
+    const { onSwitchBase } = setupAlt({ ...popup, switching: true });
+    const chip = screen.getByRole("button", { name: /Use kirjoittaa/ });
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(chip);
+    expect(onSwitchBase).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Add to review list/ }).disabled).toBe(true);
+    expect(screen.getByText(/looking up kirjoittaa/)).toBeTruthy();
+  });
+
+  it("says when a switch failed", () => {
+    setupAlt({ ...popup, switchError: "offline" });
+    expect(screen.getByText(/Couldn't switch to kirjoittaa \(offline\)/)).toBeTruthy();
+  });
+});
