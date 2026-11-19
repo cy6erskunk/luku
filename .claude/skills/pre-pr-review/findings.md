@@ -263,7 +263,7 @@ widened — and is any of them what keeps a credential out?
 Promoted at once: a security property (credentials reaching a third party).
 
 ## F25 — A behaviour change leaves copy that described the old behaviour
-PR (this branch, Again in ten minutes) · self-review (`/code-review`) · Telegram copy / UI · fixed · open
+PR (this branch, Again in ten minutes) · self-review (`/code-review`) · Telegram copy / UI · fixed · promoted
 What happened: moving Again from one day to ten minutes left the bot's
 closing message saying "nothing else is due today" after a session whose last
 card had just been failed — due again in minutes — and a code comment saying
@@ -398,7 +398,7 @@ assumes the old value. Does each one still hold when the refresh lands
 first, and when it lands second?
 
 ## F35 — Input validated with `new Date()`, which parses almost anything
-PR (this branch, stale-tab grading) · self-review (`/code-review`) · API · fixed · open
+PR (this branch, stale-tab grading) · self-review (`/code-review`) · API · fixed · promoted
 What happened: `/api/reviews` accepted `expectedNextReviewAt` if
 `new Date(value)` was valid, so `"1"` passed as 2001-01-01. The guard then
 missed, and a client bug was reported as "already graded" with a 409.
@@ -408,3 +408,46 @@ Check: for each validator, try a few junk inputs (`"1"`, `"2024"`, `""`)
 and ask what the route reports for them. Where a wrong value turns into a
 plausible domain answer rather than a 400, check the format, not just
 whether it parses.
+
+## F36 — A message names a cause, but its query selects only by a symptom
+PR (this branch, Telegram closing message) · user report · Telegram copy / database · fixed · promoted
+What happened: F25's fix told the reader "3 words you missed come back in
+10 min" by counting every card due in the next ten minutes. Cards passed
+days ago that happened to fall due then were counted as missed, after a
+session with no misses. Once that was fixed, "nothing else is due today"
+was still false for the same cards.
+Missed because: F25's check asked what the old behaviour guaranteed, and
+then fixed the message using the very property that guarantee had covered
+("a graded card leaves the window"). Nobody asked which other rows match
+the window too.
+Check: when copy states *why* rows are counted ("you missed", "new", "due
+today"), does the query select by that property, or only by a symptom that
+other rows share? List every kind of row that can match.
+Promoted: a recurrence of F25's class, reported by the user.
+
+## F37 — SQL semantics checked only through the fake driver
+PR (this branch, Telegram closing message) · self-review · database · fixed · open
+What happened: `(date + 1) AT TIME ZONE tz` passed every test, because
+`fakeSql` only records the text. Postgres casts a `date` to `timestamptz`
+before `AT TIME ZONE` and so converts the wrong way: "local midnight" came
+out at 02:00 the next day for Helsinki. A real Postgres 16 caught it before
+the push; it needed `::timestamp`.
+Missed because: the tests assert the query's text and values, and nothing
+in the suite runs SQL.
+Check: does the diff add date, time zone, interval or cast arithmetic in
+SQL? Run it against a real Postgres (`/usr/lib/postgresql/*/bin` is in the
+cloud container) with rows on both sides of each boundary.
+
+## F38 — Validated by one runtime, consumed by another
+PR (this branch, Telegram closing message) · self-review (`/code-review`) · Telegram / database · fixed · promoted
+What happened: `isValidTimezone` accepted whatever Intl accepts, including
+"+03:00". Postgres reads that in `AT TIME ZONE` with the POSIX sign, east as
+west, so the local-day boundary (and the reminder cron's hour check) was
+off by twice the offset.
+Missed because: F35's check asks what a validator lets through, but this
+validator was correct for the runtime it ran in. The value was used
+somewhere else.
+Check: where does a validated value actually get *interpreted*? If that's a
+different runtime (Postgres vs Node, a third-party API), try the edge
+inputs there.
+Promoted: a recurrence of F35's class.

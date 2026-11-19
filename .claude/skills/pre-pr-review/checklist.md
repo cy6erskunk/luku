@@ -28,6 +28,10 @@ Sections are selected by the paths the diff touches. **Every change** and
       from the code by listing the items, not adjusted from the old figure
       (F31); where a reader
       or a model acts on it, a test holds it (F20, §9).
+- [ ] A message that states a cause or a guarantee ("you missed", "nothing
+      else today"): list every kind of row the query matches, not just the
+      one the copy has in mind, and every behaviour that once made the
+      guarantee true (F25, F36).
 - [ ] A guard, gate or "this prevents X" claim: every path that reaches X
       listed — tool calls, UI buttons, other clients, local vs remote state —
       and the docs claim only the paths it covers (F23).
@@ -124,6 +128,12 @@ request*, answered here explicitly:
       the tagged template, never concatenated.
 - [ ] Every `LIMIT 1` has an `ORDER BY` that makes it deterministic, and the
       match agrees with the uniqueness constraint it relies on (F14).
+- [ ] New date / time zone / cast arithmetic in SQL was run against a real
+      Postgres with rows either side of each boundary; `fakeSql` checks only
+      the text (F37 — open).
+- [ ] A validator's junk inputs (`"1"`, `""`, `"+03:00"`) tried where the
+      value is *interpreted*, which may be Postgres rather than the Node that
+      validated it (F35, F38).
 - [ ] Migrations appended, idempotent (`IF NOT EXISTS`), safe re-run against
       both a live and an empty database, with a comment naming who needs it.
 - [ ] A new per-user table or list has a bound, enforced in one statement
