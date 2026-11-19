@@ -706,6 +706,37 @@ describe("reading a scanned page", () => {
       expect(JSON.parse(post[1].body).base).toBe("koiramainen");
     });
 
+    it("counts a reply that ignored the forced base as a failed switch", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockResolvedValueOnce({ ...FIRST, altBase: null });
+      mockApi();
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(screen.getByText(/Couldn't switch to koira/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Use koiramainen/ })).toBeNull();
+    });
+
+    it("does not badge the new base with a card saved under the one it left", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockResolvedValueOnce(SWITCHED);
+      // A card whose base is the tapped form itself: it matches the form, not "koira".
+      mockApi({ words: [{ ...WORD, id: 5, base: "Koira-form", forms: [{ word: "Koira" }] }] });
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await screen.findByRole("button", { name: "1 words" });
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      expect(screen.getByText(/in your list/i)).toBeTruthy();
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(screen.getByText(/→ dog/)).toBeTruthy();
+      expect(screen.queryByText(/in your list/i)).toBeNull();
+    });
+
     it("holds Add until the switch lands", async () => {
       const { ocrLocal } = await import("../lib/ocr.js");
       let resolve;

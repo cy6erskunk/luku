@@ -202,6 +202,12 @@ describe("translateWord", () => {
     expect(prompt).not.toContain("as the dictionary form (\"base\") and translate");
   });
 
+  it("throws on a forced reply with no translations", async () => {
+    vi.stubGlobal("fetch", replyWith('{"base":"kirjoittaa","pos":"verb"}'));
+    await expect(translateWord("sk-test", "kirjoitettu", "Kirje.", { forceBase: "kirjoittaa" }))
+      .rejects.toThrow("Unreadable translation");
+  });
+
   it("throws on an unreadable reply to a forced lookup rather than falling back", async () => {
     // The fallback would replace a good translation with "(unavailable)".
     vi.stubGlobal("fetch", replyWith("not json"));

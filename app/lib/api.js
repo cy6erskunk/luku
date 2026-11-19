@@ -58,8 +58,8 @@ function parseAltBase(alt, base) {
 /**
  * `forceBase` asks for the word to be filed under that dictionary form — the
  * reader picked the popup's alternative. A forced lookup throws on a reply it
- * cannot read instead of falling back, because the fallback would replace a
- * good translation with "(unavailable)".
+ * cannot read, or one with no translations, instead of falling back: it would
+ * replace a good translation with "(unavailable)" or nothing.
  */
 export async function translateWord(apiKey, word, context, { forceBase } = {}) {
   const force = forceBase
@@ -75,6 +75,7 @@ export async function translateWord(apiKey, word, context, { forceBase } = {}) {
   );
   try {
     const d = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    if (forceBase && !(Array.isArray(d?.translations) && d.translations.length)) throw new Error("Unreadable translation");
     return {
       base: d.base,
       translations: d.translations,

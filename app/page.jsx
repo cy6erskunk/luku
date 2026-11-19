@@ -359,9 +359,12 @@ function LukuApp({ user }) {
     setPopup((p) => p?.k === key ? { ...p, switching: true, switchError: null } : p);
     try {
       const d = await translateWord(effectiveKey, form, sentenceOf(text, form), { forceBase: entry.altBase.base });
+      // A model that ignored the forced base would leave the chip offering
+      // the base already on screen.
+      if (!d.base || d.base.toLowerCase() === entry.base?.toLowerCase()) throw new Error("no other entry found");
       const next = {
         ...entry,
-        base: d.base || entry.altBase.base,
+        base: d.base,
         translations: d.translations,
         formTranslation: d.formTranslation ?? entry.formTranslation,
         pos: d.pos,
@@ -377,12 +380,16 @@ function LukuApp({ user }) {
       setSession((s) => s[key] === entry ? { ...s, [key]: next } : s);
       // `switching` marks the popup that asked. A rescan closes it, and taps
       // are refused while `xlating` is set, so no other popup can carry it.
-      const existing = findExistingWord(words.dbWords, { form, base: next.base });
+      // By base alone: matching the tapped form would find a card saved under
+      // the base just left and badge the new one "in your list". A card for
+      // the new base that recorded this form still matches on its base.
+      const existing = findExistingWord(words.dbWords, { base: next.base });
       setPopup((p) => p?.k === key && p.switching
         ? { ...next, word: p.word, k: key, x: p.x, y: p.y, existsInDb: !!existing }
         : p);
     } catch (e) {
       // Nothing was written, so a popup closed meanwhile has lost nothing.
+      reportClientError("switch base", e);
       setPopup((p) => p?.k === key && p.switching ? { ...p, switching: false, switchError: e.message || "error" } : p);
     }
     finally { setXlating(null); }
