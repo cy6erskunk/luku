@@ -19,7 +19,7 @@
   "dependencies": {
     "@neon/oauth": "0.3.0",
     "@neondatabase/auth": "0.7.0-beta",
-    "@neondatabase/serverless": "1.2.0",
+    "@neondatabase/serverless": "1.2.1",
     "@sentry/nextjs": "11.12.0",
     "next": "16.4.6",
     "react": "19.3.1",
