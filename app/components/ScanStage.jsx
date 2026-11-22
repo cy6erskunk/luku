@@ -105,7 +105,8 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
     );
   }
 
-  const hasWords = repeatWords.length > 0 || dueWords.length > 0;
+  const showReverse = reverseCount > 0 && !!onStartReverse;
+  const hasReview = repeatWords.length > 0 || dueWords.length > 0 || showReverse;
   // Exactly one primary button on the screen: the due review when there is
   // one, otherwise picking a photo.
   const reviewIsPrimary = dueWords.length > 0;
@@ -120,42 +121,40 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
     // without a drop area that a phone can't use and that crowded out review.
     <div {...dropProps} style={{ padding: "28px 20px 36px", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "calc(100vh - 66px)", outline: dragOver ? "1.5px dashed rgba(74,124,158,0.6)" : "none", outlineOffset: -10, background: dragOver ? "rgba(74,124,158,0.04)" : "transparent" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
-        {loadingWords && !hasWords && (
+        {loadingWords && !hasReview && (
           <div style={{ ...sectionLabel, minHeight: 60, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={11} />Loading your words…</div>
         )}
 
-        {dueWords.length > 0 && (
+        {hasReview && (
           <section style={{ marginBottom: 32 }}>
             <div style={sectionLabel}>Review</div>
-            <h2 style={{ fontSize: 26, fontWeight: 400, margin: "0 0 16px" }}>
-              {dueWords.length} word{dueWords.length !== 1 ? "s" : ""} due
-            </h2>
-            <button onClick={onStartReview} style={{ ...Bp, width: "100%", padding: "16px 18px", fontSize: 16 }}>
-              Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
-            </button>
-            {reverseCount > 0 && onStartReverse && (
-              <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ width: "100%", marginTop: 10 }} />
+            {dueWords.length > 0 && (<>
+              <h2 style={{ fontSize: 26, fontWeight: 400, margin: "0 0 16px" }}>
+                {dueWords.length} word{dueWords.length !== 1 ? "s" : ""} due
+              </h2>
+              <button onClick={onStartReview} style={{ ...Bp, width: "100%", padding: "16px 18px", fontSize: 16 }}>
+                Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
+              </button>
+            </>)}
+            {dueWords.length === 0 && repeatWords.length > 0 && (<>
+              <h2 style={{ fontSize: 22, fontWeight: 400, margin: "0 0 4px" }}>All caught up</h2>
+              <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>Nothing is due right now. Extra practice doesn&apos;t change the schedule.</p>
+              <button onClick={onStartRepeat} style={{ ...Bg, width: "100%", borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
+                Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
+              </button>
+            </>)}
+            {/* Shown whenever a pass can be drawn, as before this screen led
+                with review: due and repeat can both be empty while words are
+                eligible, when every due word was added this session. */}
+            {showReverse && (
+              <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ width: "100%", marginTop: dueWords.length > 0 || repeatWords.length > 0 ? 10 : 0 }} />
             )}
           </section>
         )}
 
-        {dueWords.length === 0 && repeatWords.length > 0 && (
-          <section style={{ marginBottom: 32 }}>
-            <div style={sectionLabel}>Review</div>
-            <h2 style={{ fontSize: 22, fontWeight: 400, margin: "0 0 4px" }}>All caught up</h2>
-            <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>Nothing is due right now. Extra practice doesn&apos;t change the schedule.</p>
-            <button onClick={onStartRepeat} style={{ ...Bg, width: "100%", borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
-              Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
-            </button>
-            {reverseCount > 0 && onStartReverse && (
-              <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ width: "100%", marginTop: 10 }} />
-            )}
-          </section>
-        )}
-
-        <section style={hasWords ? { borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 24 } : undefined}>
+        <section style={hasReview ? { borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 24 } : undefined}>
           <div style={sectionLabel}>Scan</div>
-          <h2 style={{ fontSize: hasWords ? 18 : 24, fontWeight: 400, margin: "0 0 4px" }}>Photograph a Finnish page</h2>
+          <h2 style={{ fontSize: hasReview ? 18 : 24, fontWeight: 400, margin: "0 0 4px" }}>Photograph a Finnish page</h2>
           <p style={{ color: "#6b645e", marginBottom: 14, fontSize: 13, lineHeight: 1.6 }}>
             Take a photo or upload an image. Text will be extracted locally.
             <span className="luku-drop-hint"> Or drop an image here.</span>
