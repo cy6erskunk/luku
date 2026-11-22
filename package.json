@@ -19,19 +19,19 @@
   "dependencies": {
     "@neon/oauth": "0.3.0",
     "@neondatabase/auth": "0.7.0-beta",
-    "@neondatabase/serverless": "1.2.0",
-    "@sentry/nextjs": "11.10.0",
-    "next": "16.4.5",
+    "@neondatabase/serverless": "1.2.1",
+    "@sentry/nextjs": "11.12.0",
+    "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-easy-crop": "6.2.4"
+    "react-easy-crop": "6.2.5"
   },
   "devDependencies": {
     "@testing-library/react": "16.3.3",
-    "@vitejs/plugin-react": "6.2.1",
+    "@vitejs/plugin-react": "6.3.0",
     "@vitest/coverage-v8": "5.1.0",
-    "jsdom": "31.0.0",
-    "oxlint": "1.92.0",
+    "jsdom": "31.0.1",
+    "oxlint": "1.93.0",
     "vitest": "5.1.0"
   }
 }

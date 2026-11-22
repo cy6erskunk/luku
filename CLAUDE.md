@@ -180,6 +180,10 @@ changing it:
   card due in `AGAIN_DELAY_MINUTES` (10, `lib/srs.js`), so it comes round
   again in a chat session still going by then; a session that runs out first
   ends by saying how many are coming back. That applies to web grades too.
+  "Missed" means `review_count = 0`, never just "due within the window": a
+  card passed days ago can fall due minutes after a session ends, and the
+  closing message counts those separately, as due later in the reader's local
+  day (`countComingDue`, `lib/reviews.js`).
 - Due cards come up in **random order**, on both surfaces: cards graded in
   one sitting fall due seconds apart and would otherwise replay that order
   every session. The bot draws a random due card each turn (`listDueWords`),
