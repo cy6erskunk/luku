@@ -53,6 +53,11 @@ export function useImageProcessing({ savedKey, onTextReady }) {
 
   const showCropper = (f) => {
     if (!f || busy) return;
+    // The picker asks for images, but a drop can bring any file, and the
+    // cropper can never finish on one it cannot draw. An empty type is let
+    // through: some platforms leave it blank for a real photo.
+    if (f.type && !f.type.startsWith("image/")) { setErr("That file isn't an image."); return; }
+    setErr("");
     setCropFile(f);
     setCrop({ x: 0, y: 0 });
     setZoom(1);

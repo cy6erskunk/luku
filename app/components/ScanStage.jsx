@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Cropper from "react-easy-crop";
 import { Bp, Bg } from "../lib/styles.js";
 import ReverseButton from "./ReverseButton.jsx";
@@ -31,6 +31,9 @@ const sectionLabel = { fontSize: 10, letterSpacing: "0.15em", textTransform: "up
 
 export default function ScanStage({ image, loadingWords = false, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
   const [dragOver, setDragOver] = useState(false);
+  // dragenter/dragleave fire for every child crossed, and Safari reports no
+  // relatedTarget on dragleave, so the highlight follows a count of entries.
+  const dragDepth = useRef(0);
   const {
     busy, step, err, preview, ocrProgress,
     cropImage, crop, setCrop, zoom, setZoom, croppedAreaPixels, cropAspect, setCropAspect,
@@ -107,19 +110,31 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
 
   const showReverse = reverseCount > 0 && !!onStartReverse;
   const hasReview = repeatWords.length > 0 || dueWords.length > 0 || showReverse;
+  // While the list loads, the scan section takes the shape it will most
+  // likely keep, so the buttons don't move under a finger when it arrives.
+  const compactScan = hasReview || loadingWords;
   // Exactly one primary button on the screen: the due review when there is
   // one, otherwise picking a photo.
-  const reviewIsPrimary = dueWords.length > 0;
+  const reviewIsPrimary = dueWords.length > 0 || loadingWords;
+  // Only a drag carrying files is a drop the screen takes; dragging selected
+  // text or a link is left to the browser.
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
   const dropProps = {
-    onDrop: (e) => { setDragOver(false); if (!busy) onDrop(e); else e.preventDefault(); },
-    onDragOver: (e) => { e.preventDefault(); if (!busy) setDragOver(true); },
-    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); },
+    onDragEnter: (e) => { if (!hasFiles(e)) return; dragDepth.current++; if (!busy) setDragOver(true); },
+    onDragOver: (e) => { if (hasFiles(e)) e.preventDefault(); },
+    onDragLeave: (e) => { if (!hasFiles(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragOver(false); },
+    onDrop: (e) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current = 0;
+      setDragOver(false);
+      if (busy) e.preventDefault(); else onDrop(e);
+    },
   };
 
   return (
     // The whole screen takes a dropped image, so a desktop keeps drag-and-drop
     // without a drop area that a phone can't use and that crowded out review.
-    <div {...dropProps} style={{ padding: "28px 20px 36px", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "calc(100vh - 66px)", outline: dragOver ? "1.5px dashed rgba(74,124,158,0.6)" : "none", outlineOffset: -10, background: dragOver ? "rgba(74,124,158,0.04)" : "transparent" }}>
+    <div {...dropProps} style={{ padding: "28px 20px 36px", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "calc(100dvh - 65px)", outline: dragOver ? "1.5px dashed rgba(74,124,158,0.6)" : "none", outlineOffset: -10, background: dragOver ? "rgba(74,124,158,0.04)" : "transparent" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         {loadingWords && !hasReview && (
           <div style={{ ...sectionLabel, minHeight: 60, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={11} />Loading your words…</div>
@@ -152,9 +167,9 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
           </section>
         )}
 
-        <section style={hasReview ? { borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 24 } : undefined}>
+        <section style={compactScan ? { borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 24 } : undefined}>
           <div style={sectionLabel}>Scan</div>
-          <h2 style={{ fontSize: hasReview ? 18 : 24, fontWeight: 400, margin: "0 0 4px" }}>Photograph a Finnish page</h2>
+          <h2 style={{ fontSize: compactScan ? 18 : 24, fontWeight: 400, margin: "0 0 4px" }}>Photograph a Finnish page</h2>
           <p style={{ color: "#6b645e", marginBottom: 14, fontSize: 13, lineHeight: 1.6 }}>
             Take a photo or upload an image. Text will be extracted locally.
             <span className="luku-drop-hint"> Or drop an image here.</span>
@@ -165,9 +180,12 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
             <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
             <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...(reviewIsPrimary ? Bg : Bp), flex: reviewIsPrimary ? 1 : 2 }}>📁 Photo Library</button>
           </div>
+          {/* Kept beside an error too, so the reader can see which photo failed. */}
+          {preview && (busy || err) && (
+            <img src={preview} alt="" style={{ display: "block", width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 10, marginTop: 16, opacity: 0.7 }} />
+          )}
           {busy && (
-            <div style={{ marginTop: 16 }}>
-              {preview && <img src={preview} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 10, marginBottom: 10, opacity: 0.7 }} />}
+            <div style={{ marginTop: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13, marginBottom: 8 }}>
                 <Spinner size={13} />{step}
               </div>

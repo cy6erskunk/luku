@@ -31,15 +31,29 @@ describe("ScanStage", () => {
     const img = image();
     render(<ScanStage image={img} dueWords={words(2)} repeatWords={[]} />);
 
-    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [] } });
+    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [], types: ["Files"] } });
     expect(img.onDrop).toHaveBeenCalled();
+  });
+
+  it("leaves a drag of text or a link to the browser", () => {
+    const img = image();
+    render(<ScanStage image={img} dueWords={[]} repeatWords={[]} />);
+
+    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [], types: ["text/plain"] } });
+    expect(img.onDrop).not.toHaveBeenCalled();
+  });
+
+  it("keeps the failed photo on screen beside the error", () => {
+    const { container } = render(<ScanStage image={image({ preview: "data:image/png;base64,x", err: "No text found" })} dueWords={[]} repeatWords={[]} />);
+
+    expect(container.querySelector("img")).toBeTruthy();
   });
 
   it("ignores a drop while a scan is running", () => {
     const img = image({ busy: true, step: "Reading…" });
     render(<ScanStage image={img} dueWords={[]} repeatWords={[]} />);
 
-    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [] } });
+    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [], types: ["Files"] } });
     expect(img.onDrop).not.toHaveBeenCalled();
   });
 });
