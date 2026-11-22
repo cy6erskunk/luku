@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Cropper from "react-easy-crop";
 import { Bp, Bg } from "../lib/styles.js";
 import ReverseButton from "./ReverseButton.jsx";
@@ -26,7 +27,10 @@ const nudgeButton = {
   touchAction: "manipulation",
 };
 
-export default function ScanStage({ image, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
+const sectionLabel = { fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 8, fontFamily: "monospace" };
+
+export default function ScanStage({ image, loadingWords = false, dueWords, onStartReview, repeatWords, onStartRepeat, reverseCount = 0, onStartReverse }) {
+  const [dragOver, setDragOver] = useState(false);
   const {
     busy, step, err, preview, ocrProgress,
     cropImage, crop, setCrop, zoom, setZoom, croppedAreaPixels, cropAspect, setCropAspect,
@@ -101,72 +105,92 @@ export default function ScanStage({ image, dueWords, onStartReview, repeatWords,
     );
   }
 
+  const hasWords = repeatWords.length > 0 || dueWords.length > 0;
+  // Exactly one primary button on the screen: the due review when there is
+  // one, otherwise picking a photo.
+  const reviewIsPrimary = dueWords.length > 0;
+  const dropProps = {
+    onDrop: (e) => { setDragOver(false); if (!busy) onDrop(e); else e.preventDefault(); },
+    onDragOver: (e) => { e.preventDefault(); if (!busy) setDragOver(true); },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); },
+  };
+
   return (
-    <div style={{ padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "#4a7c9e", marginBottom: 10, fontFamily: "monospace" }}>Step 1 — Scan</div>
-      <h2 style={{ fontSize: 24, fontWeight: 400, textAlign: "center", margin: "0 0 6px" }}>Photograph a Finnish page</h2>
-      <p style={{ color: "#6b645e", textAlign: "center", marginBottom: 28, maxWidth: 300, fontSize: 13, lineHeight: 1.6 }}>
-        Take a photo or upload an image. Text will be extracted locally.
-      </p>
-      <div
-        onDrop={onDrop} onDragOver={(e) => e.preventDefault()}
-        onClick={() => !busy && fileRef.current?.click()}
-        style={{ width: "100%", maxWidth: 400, aspectRatio: "4/3", borderRadius: 14, border: "1.5px dashed rgba(74,124,158,0.4)", cursor: busy ? "default" : "pointer", background: preview ? "transparent" : "rgba(74,124,158,0.03)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, marginBottom: 14, position: "relative" }}
-      >
-        {preview
-          ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          : (
-            <>
-              <div style={{ fontSize: 36, opacity: 0.15 }}>🖼</div>
-              <div style={{ color: "#4a6070", fontSize: 13, textAlign: "center" }}>
-                Drop image here<br /><span style={{ opacity: 0.6, fontSize: 11 }}>or tap to browse</span>
-              </div>
-            </>
-          )
-        }
-        {[
-          [{ top: 8, left: 8 }, { borderTop: "2px solid #4a7c9e", borderLeft: "2px solid #4a7c9e", borderRadius: "3px 0 0 0" }],
-          [{ top: 8, right: 8 }, { borderTop: "2px solid #4a7c9e", borderRight: "2px solid #4a7c9e", borderRadius: "0 3px 0 0" }],
-          [{ bottom: 8, left: 8 }, { borderBottom: "2px solid #4a7c9e", borderLeft: "2px solid #4a7c9e", borderRadius: "0 0 0 3px" }],
-          [{ bottom: 8, right: 8 }, { borderBottom: "2px solid #4a7c9e", borderRight: "2px solid #4a7c9e", borderRadius: "0 0 3px 0" }],
-        ].map(([p, b], i) => <div key={i} style={{ position: "absolute", width: 18, height: 18, ...p, ...b }} />)}
-      </div>
-      <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
-      <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
-      <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 400 }}>
-        <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
-        <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...Bp, flex: 2 }}>📁 Photo Library</button>
-      </div>
-      {busy && (
-        <div style={{ marginTop: 20, width: "100%", maxWidth: 400 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13, marginBottom: 8 }}>
-            <Spinner size={13} />{step}
+    // The whole screen takes a dropped image, so a desktop keeps drag-and-drop
+    // without a drop area that a phone can't use and that crowded out review.
+    <div {...dropProps} style={{ padding: "28px 20px 36px", display: "flex", flexDirection: "column", alignItems: "center", minHeight: "calc(100vh - 66px)", outline: dragOver ? "1.5px dashed rgba(74,124,158,0.6)" : "none", outlineOffset: -10, background: dragOver ? "rgba(74,124,158,0.04)" : "transparent" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        {loadingWords && !hasWords && (
+          <div style={{ ...sectionLabel, minHeight: 60, display: "flex", alignItems: "center", gap: 8 }}><Spinner size={11} />Loading your words…</div>
+        )}
+
+        {dueWords.length > 0 && (
+          <section style={{ marginBottom: 32 }}>
+            <div style={sectionLabel}>Review</div>
+            <h2 style={{ fontSize: 26, fontWeight: 400, margin: "0 0 16px" }}>
+              {dueWords.length} word{dueWords.length !== 1 ? "s" : ""} due
+            </h2>
+            <button onClick={onStartReview} style={{ ...Bp, width: "100%", padding: "16px 18px", fontSize: 16 }}>
+              Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
+            </button>
+            {reverseCount > 0 && onStartReverse && (
+              <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ width: "100%", marginTop: 10 }} />
+            )}
+          </section>
+        )}
+
+        {dueWords.length === 0 && repeatWords.length > 0 && (
+          <section style={{ marginBottom: 32 }}>
+            <div style={sectionLabel}>Review</div>
+            <h2 style={{ fontSize: 22, fontWeight: 400, margin: "0 0 4px" }}>All caught up</h2>
+            <p style={{ color: "#6b645e", fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>Nothing is due right now. Extra practice doesn&apos;t change the schedule.</p>
+            <button onClick={onStartRepeat} style={{ ...Bg, width: "100%", borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
+              Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
+            </button>
+            {reverseCount > 0 && onStartReverse && (
+              <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ width: "100%", marginTop: 10 }} />
+            )}
+          </section>
+        )}
+
+        <section style={hasWords ? { borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 24 } : undefined}>
+          <div style={sectionLabel}>Scan</div>
+          <h2 style={{ fontSize: hasWords ? 18 : 24, fontWeight: 400, margin: "0 0 4px" }}>Photograph a Finnish page</h2>
+          <p style={{ color: "#6b645e", marginBottom: 14, fontSize: 13, lineHeight: 1.6 }}>
+            Take a photo or upload an image. Text will be extracted locally.
+            <span className="luku-drop-hint"> Or drop an image here.</span>
+          </p>
+          <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
+          <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => camRef.current?.click()} disabled={busy} style={{ ...Bg, flex: 1 }}>📷 Camera</button>
+            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...(reviewIsPrimary ? Bg : Bp), flex: reviewIsPrimary ? 1 : 2 }}>📁 Photo Library</button>
           </div>
-          {ocrProgress > 0 && ocrProgress < 1 && (
-            <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${Math.round(ocrProgress * 100)}%`, background: "linear-gradient(90deg,#4a7c9e,#2d5a7a)", transition: "width 0.2s" }} />
+          {busy && (
+            <div style={{ marginTop: 16 }}>
+              {preview && <img src={preview} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 10, marginBottom: 10, opacity: 0.7 }} />}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4a7c9e", fontSize: 13, marginBottom: 8 }}>
+                <Spinner size={13} />{step}
+              </div>
+              {ocrProgress > 0 && ocrProgress < 1 && (
+                <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.round(ocrProgress * 100)}%`, background: "linear-gradient(90deg,#4a7c9e,#2d5a7a)", transition: "width 0.2s" }} />
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
-      {err && (
-        <div style={{ marginTop: 14, maxWidth: 400, width: "100%", background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>
-          ⚠ {err}
-        </div>
-      )}
-      {dueWords.length > 0 && (
-        <button onClick={onStartReview} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13 }}>
-          Review {dueWords.length} due word{dueWords.length !== 1 ? "s" : ""} →
-        </button>
-      )}
-      {dueWords.length === 0 && repeatWords.length > 0 && (
-        <button onClick={onStartRepeat} style={{ ...Bg, marginTop: 20, padding: "9px 20px", fontSize: 13, borderColor: "rgba(74,124,158,0.3)", color: "#6a9ebe" }}>
-          Repeat {repeatWords.length} word{repeatWords.length !== 1 ? "s" : ""} →
-        </button>
-      )}
-      {reverseCount > 0 && onStartReverse && (
-        <ReverseButton count={reverseCount} onClick={onStartReverse} style={{ marginTop: dueWords.length > 0 || repeatWords.length > 0 ? 10 : 20 }} />
-      )}
+          {err && (
+            <div style={{ marginTop: 14, background: "rgba(180,80,80,0.1)", border: "1px solid rgba(180,80,80,0.3)", borderRadius: 10, padding: "11px 14px", fontSize: 12, color: "#c48a8a" }}>
+              ⚠ {err}
+            </div>
+          )}
+        </section>
+      </div>
+      {/* Only a mouse can drag a file in, so only a mouse is told it can. */}
+      <style>{`
+        .luku-drop-hint { display: none; }
+        @media (hover: hover) and (pointer: fine) { .luku-drop-hint { display: inline; } }
+      `}</style>
     </div>
   );
 }
