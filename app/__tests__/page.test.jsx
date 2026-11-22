@@ -661,6 +661,129 @@ describe("reading a scanned page", () => {
     expect(screen.queryByText(/network down/)).toBeNull();
   });
 
+  describe("switching to the alternative base", () => {
+    // Stand-ins: the tapped word is "Koira" because that is what the scan
+    // holds; what matters is that the two lookups name different bases.
+    const FIRST = {
+      base: "koiramainen", translations: ["doglike"], formTranslation: "dog", pos: "adj",
+      example: "Koiramainen into.", example_translation: "Doglike enthusiasm.",
+      altBase: { base: "koira", pos: "noun", relation: "root noun" },
+    };
+    const SWITCHED = {
+      base: "koira", translations: ["dog"], formTranslation: "dog", pos: "noun",
+      example: "Iso koira.", example_translation: "A big dog.", altBase: null,
+    };
+
+    it("re-files the word under the alternative and saves it there", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockResolvedValueOnce(SWITCHED);
+      const fetchMock = mockApi({ saved: { ...WORD, id: 2, base: "koira" } });
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(mocks.translateWord).toHaveBeenLastCalledWith("sk-ant-test", "Koira", SCANNED, { forceBase: "koira" });
+      expect(screen.getByText(/→ dog/)).toBeTruthy();
+      // The way back is offered even though the second reply named none.
+      expect(screen.getByRole("button", { name: /Use koiramainen/ })).toBeTruthy();
+
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Add to review list/ })); });
+      const post = fetchMock.mock.calls.find(([url, opts]) => String(url).startsWith("/api/words") && opts?.method === "POST");
+      const body = JSON.parse(post[1].body);
+      // The tapped form travels as `word`, so the route records it as an
+      // inflection of the base it was switched to.
+      expect(body).toMatchObject({ word: "Koira", base: "koira", translations: ["dog"], pos: "noun", example: "Iso koira." });
+      expect(screen.queryByRole("button", { name: /Use / })).toBeNull();
+    });
+
+    it("keeps the first lookup and says so when the switch fails", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockRejectedValueOnce(new Error("offline"));
+      const fetchMock = mockApi();
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(screen.getByText(/Couldn't switch to koira \(offline\)/)).toBeTruthy();
+      expect(screen.getByText(/→ doglike/)).toBeTruthy();
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Add to review list/ })); });
+      const post = fetchMock.mock.calls.find(([url, opts]) => String(url).startsWith("/api/words") && opts?.method === "POST");
+      expect(JSON.parse(post[1].body).base).toBe("koiramainen");
+    });
+
+    it("counts a reply that ignored the forced base as a failed switch", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockResolvedValueOnce({ ...FIRST, altBase: null });
+      mockApi();
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(screen.getByText(/Couldn't switch to koira/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Use koiramainen/ })).toBeNull();
+    });
+
+    it("does not badge the new base with a card saved under the one it left", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockResolvedValueOnce(SWITCHED);
+      // A card whose base is the tapped form itself: it matches the form, not "koira".
+      mockApi({ words: [{ ...WORD, id: 5, base: "Koira-form", forms: [{ word: "Koira" }] }] });
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await screen.findByRole("button", { name: "1 words" });
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      expect(screen.getByText(/in your list/i)).toBeTruthy();
+      await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /Use koira/ })); });
+
+      expect(screen.getByText(/→ dog/)).toBeTruthy();
+      expect(screen.queryByText(/in your list/i)).toBeNull();
+    });
+
+    it("holds Add until the switch lands", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      let resolve;
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+      const fetchMock = mockApi();
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      fireEvent.click(await screen.findByRole("button", { name: /Use koira/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Add to review list/ }));
+      expect(fetchMock.mock.calls.some(([, opts]) => opts?.method === "POST")).toBe(false);
+
+      await act(async () => { resolve(SWITCHED); });
+      expect(screen.getByRole("button", { name: /Add to review list/ }).disabled).toBe(false);
+    });
+
+    it("keeps a switch that lands after the popup was closed, without reopening it", async () => {
+      const { ocrLocal } = await import("../lib/ocr.js");
+      let resolve;
+      mocks.translateWord.mockResolvedValueOnce(FIRST).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+      mockApi();
+      render(<Luku />);
+
+      await scan(ocrLocal);
+      await act(async () => { fireEvent.click(screen.getByText("Koira")); });
+      fireEvent.click(await screen.findByRole("button", { name: /Use koira/ }));
+      fireEvent.click(screen.getByText("tap any word"));
+
+      await act(async () => { resolve(SWITCHED); });
+      expect(screen.queryByText(/→ dog/)).toBeNull();
+
+      fireEvent.click(screen.getByText("Koira"));
+      expect(await screen.findByText(/→ dog/)).toBeTruthy();
+      expect(mocks.translateWord).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("offers the key screen instead of translating when the key was skipped", async () => {
     const { ocrLocal } = await import("../lib/ocr.js");
     saveKey("__skip__");

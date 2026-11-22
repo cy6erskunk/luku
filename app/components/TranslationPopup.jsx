@@ -3,7 +3,7 @@ import Spinner from "./Spinner.jsx";
 
 const POS_CLR = { verb: "#7a9e7e", noun: "#9e8a7a", adjective: "#7a8a9e", adverb: "#9e7a9e" };
 
-export default function TranslationPopup({ popup, containerRef, session, onAddWord, onAddApiKey }) {
+export default function TranslationPopup({ popup, containerRef, session, onAddWord, onSwitchBase, onAddApiKey }) {
   if (!popup) return null;
   const containerWidth = containerRef?.current?.offsetWidth ?? 360;
   const left = Math.max(Math.min((popup.x ?? 150) - 125, containerWidth - 258), 4);
@@ -14,6 +14,11 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
   // the tapped form is still running, or when there is no API key at all.
   const translations = popup.translations || [];
   const hasTranslation = translations.length > 0;
+  const entry = popup.k ? session[popup.k] : null;
+  const added = !!(popup.added || entry?.added);
+  // Offered only before the word is added: switching afterwards would leave
+  // the first card behind and make a second one.
+  const alt = entry && !added && !popup.loading ? entry.altBase : null;
 
   const inListBadge = (
     <div
@@ -86,10 +91,36 @@ export default function TranslationPopup({ popup, containerRef, session, onAddWo
                 checking this form…
               </div>
             )}
-            {session[popup.k] && (
-              (popup.added || session[popup.k]?.added)
+            {alt && (
+              <div style={{ marginBottom: 10 }}>
+                <button
+                  // aria-disabled, not disabled: a disabled button drops focus,
+                  // and the reader may want to switch straight back.
+                  onClick={popup.switching ? undefined : onSwitchBase}
+                  aria-disabled={popup.switching || undefined}
+                  style={{ width: "100%", textAlign: "left", padding: "6px 8px", fontSize: 12, cursor: popup.switching ? "default" : "pointer", background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(122,180,212,0.35)", color: "#c8c0b5", borderRadius: 7, fontFamily: "inherit", opacity: popup.switching ? 0.6 : 1 }}
+                >
+                  <span style={{ color: "#7ab4d4" }}>↳ Use {alt.base}</span>
+                  {alt.pos && <span style={{ color: "#6b645e" }}> ({alt.pos})</span>}
+                  {alt.relation && <div style={{ fontSize: 10, color: "#6b645e", marginTop: 2 }}>{popup.word} is the {alt.relation}</div>}
+                </button>
+                {popup.switching && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, color: "#4a7c9e", paddingTop: 6 }}>
+                    <Spinner size={11} />
+                    looking up {alt.base}…
+                  </div>
+                )}
+                {popup.switchError && (
+                  <div style={{ textAlign: "center", fontSize: 11, color: "#c48a8a", paddingTop: 6 }}>
+                    Couldn't switch to {alt.base} ({popup.switchError})
+                  </div>
+                )}
+              </div>
+            )}
+            {entry && (
+              added
                 ? <div style={{ fontSize: 11, color: "#4a7c9e", textAlign: "center", padding: 5, background: "rgba(74,124,158,0.1)", borderRadius: 6 }}>✓ Added to review</div>
-                : <button onClick={onAddWord} style={{ width: "100%", padding: 7, fontSize: 12, cursor: "pointer", background: "rgba(74,124,158,0.18)", border: "1px solid rgba(74,124,158,0.38)", color: "#7ab4d4", borderRadius: 7, fontFamily: "inherit" }}>+ Add to review list</button>
+                : <button onClick={onAddWord} disabled={popup.switching} style={{ width: "100%", padding: 7, fontSize: 12, cursor: popup.switching ? "default" : "pointer", background: "rgba(74,124,158,0.18)", border: "1px solid rgba(74,124,158,0.38)", color: "#7ab4d4", borderRadius: 7, fontFamily: "inherit", opacity: popup.switching ? 0.6 : 1 }}>+ Add to review list</button>
             )}
           </>
         )
