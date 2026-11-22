@@ -451,3 +451,30 @@ Check: where does a validated value actually get *interpreted*? If that's a
 different runtime (Postgres vs Node, a third-party API), try the edge
 inputs there.
 Promoted: a recurrence of F35's class.
+
+## F39 — A model reply trusted to have obeyed the instruction it was given
+PR (this branch, alternative base form) · self-review (`/code-review`) · Claude calls · fixed · open
+What happened: switching a word to its alternative dictionary form re-asked
+the model with that base forced, then took the reply as obeying. A reply
+that kept the old base would have left the chip offering the base already on
+screen, one paid call per tap. A reply that parsed but carried no
+translations would have replaced a good entry with an empty one, although
+the code only guarded against JSON that didn't parse.
+Missed because: the fallback was designed for "unreadable", and "readable
+but not what was asked" was never considered as its own case.
+Check: for each instruction a prompt gives ("use this base", "don't repeat
+these"), what does the code do with a well-formed reply that ignores it? And
+for each field the UI relies on, what does it do when that field is missing
+from JSON that otherwise parses?
+
+## F40 — A shared match helper asked a broader question than the new caller meant
+PR (this branch, alternative base form) · self-review (`/code-review`) · UI state · fixed · open
+What happened: after a switch, the "in your list" badge was computed with
+`findExistingWord({ form, base })`, copied from `onWord`. The form match
+found a card saved under the base just left, so the badge sat under a base
+that wasn't on the list.
+Missed because: the call was copied along with its arguments. In `onWord`
+the form is the question asked; after a switch the question is about the
+new base.
+Check: when a lookup is copied to a new call site, does every key passed
+still belong to the question this caller is asking?
