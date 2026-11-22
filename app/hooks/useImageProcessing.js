@@ -56,7 +56,9 @@ export function useImageProcessing({ savedKey, onTextReady }) {
     // The picker asks for images, but a drop can bring any file, and the
     // cropper can never finish on one it cannot draw. An empty type is let
     // through: some platforms leave it blank for a real photo.
-    if (f.type && !f.type.startsWith("image/")) { setErr("That file isn't an image."); return; }
+    // The previous photo is dropped too, or it would sit beside this error as
+    // if it were the file refused.
+    if (f.type && !f.type.startsWith("image/")) { setPreview(null); setErr("That file isn't an image."); return; }
     setErr("");
     setCropFile(f);
     setCrop({ x: 0, y: 0 });

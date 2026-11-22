@@ -110,11 +110,13 @@ export default function ScanStage({ image, loadingWords = false, dueWords, onSta
 
   const showReverse = reverseCount > 0 && !!onStartReverse;
   const hasReview = repeatWords.length > 0 || dueWords.length > 0 || showReverse;
-  // While the list loads, the scan section takes the shape it will most
-  // likely keep, so the buttons don't move under a finger when it arrives.
+  // While the list loads, the scan section is already in the compact shape a
+  // reader with words will see, so it doesn't shrink when the list arrives.
+  // (The review section still appears above it then.)
   const compactScan = hasReview || loadingWords;
-  // Exactly one primary button on the screen: the due review when there is
-  // one, otherwise picking a photo.
+  // At most one primary button on the screen: the due review when there is
+  // one, otherwise picking a photo — and neither while the list loads, since
+  // which one it will be isn't known yet.
   const reviewIsPrimary = dueWords.length > 0 || loadingWords;
   // Only a drag carrying files is a drop the screen takes; dragging selected
   // text or a link is left to the browser.

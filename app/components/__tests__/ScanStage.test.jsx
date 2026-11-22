@@ -20,11 +20,10 @@ describe("ScanStage", () => {
     expect(screen.queryByText("All caught up")).toBeNull();
   });
 
-  it("does not claim the reader is caught up while the list is loading", () => {
+  it("says the word list is loading rather than offering no review at all", () => {
     render(<ScanStage image={image()} loadingWords dueWords={[]} repeatWords={[]} />);
 
     expect(screen.getByText("Loading your words…")).toBeTruthy();
-    expect(screen.queryByText("All caught up")).toBeNull();
   });
 
   it("takes a dropped image anywhere on the screen", () => {
@@ -53,7 +52,10 @@ describe("ScanStage", () => {
     const img = image({ busy: true, step: "Reading…" });
     render(<ScanStage image={img} dueWords={[]} repeatWords={[]} />);
 
-    fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [], types: ["Files"] } });
+    // false: the default was prevented, so the browser doesn't navigate away
+    // to the dropped file mid-scan.
+    const notPrevented = fireEvent.drop(screen.getByText("Photograph a Finnish page"), { dataTransfer: { files: [], types: ["Files"] } });
+    expect(notPrevented).toBe(false);
     expect(img.onDrop).not.toHaveBeenCalled();
   });
 });

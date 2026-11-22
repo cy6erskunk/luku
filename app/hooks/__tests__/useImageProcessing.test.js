@@ -39,6 +39,7 @@ describe("useImageProcessing – crop and scan", () => {
 
     expect(result.current.err).toBe("That file isn't an image.");
     expect(result.current.cropImage).toBeFalsy();
+    expect(result.current.preview).toBeNull();
   });
 
   it("scans the cropped region and hands its text on", async () => {
