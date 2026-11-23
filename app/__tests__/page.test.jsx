@@ -217,6 +217,15 @@ describe("page with a signed-in user", () => {
     expect(screen.getByRole("button", { name: /Review 1 due word/ })).toBeTruthy();
   });
 
+  it("offers extra practice, not a due review, when nothing is due", async () => {
+    mockApi({ words: [{ ...WORD, next_review_at: "2999-01-01T00:00:00.000Z" }] });
+    render(<Luku />);
+
+    expect(await screen.findByText("All caught up")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Repeat 1 word/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /due word/ })).toBeNull();
+  });
+
   it("starts a review session from the scan stage", async () => {
     mockApi({ words: [WORD] });
     render(<Luku />);

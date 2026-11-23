@@ -45,7 +45,7 @@ app/
 │   ├── useReview.js            # Flashcard queue: grading, self-correction, reset
 │   └── useImageProcessing.js  # File pick, crop UI, Tesseract OCR, AI rescan
 ├── components/
-│   ├── ScanStage.jsx           # Stage 0 — image upload / crop UI
+│   ├── ScanStage.jsx           # Stage 0 — home: review entry points first, then a compact scan section; crop UI
 │   ├── ReadStage.jsx           # Stage 1 — tappable text + TranslationPopup
 │   ├── ReviewStage.jsx         # Stage 2 — flashcard review (also the ungraded reverse pass)
 │   ├── ReverseButton.jsx       # Entry point for reverse practice, with its "alpha · not graded" tag

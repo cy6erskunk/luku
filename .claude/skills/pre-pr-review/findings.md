@@ -478,3 +478,14 @@ the form is the question asked; after a switch the question is about the
 new base.
 Check: when a lookup is copied to a new call site, does every key passed
 still belong to the question this caller is asking?
+
+## F41 — A redesign nests an unconditional control under new conditions
+PR (this branch, review-first home) · self-review · UI / layout · fixed · open
+What happened: the scan stage showed reverse practice whenever words were
+eligible. The new review section rendered it only beside a due or repeat
+entry, and both lists are empty while every due word is one added this
+session — so the button vanished in exactly that state.
+Missed because: tests and screenshots covered the states the new layout was
+designed around, not every state the old one handled.
+Check: for each control a layout change moves, what condition showed it
+before, and is that condition still the only one gating it now?

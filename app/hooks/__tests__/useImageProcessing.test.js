@@ -31,6 +31,17 @@ async function openCropper(result) {
 }
 
 describe("useImageProcessing – crop and scan", () => {
+  it("refuses a dropped file that isn't an image instead of opening a cropper it can't finish", () => {
+    const { result } = renderHook(() => useImageProcessing({ savedKey: "", onTextReady: vi.fn() }));
+    const file = new File(["%PDF"], "notes.pdf", { type: "application/pdf" });
+
+    act(() => result.current.onDrop({ preventDefault() {}, dataTransfer: { files: [file] } }));
+
+    expect(result.current.err).toBe("That file isn't an image.");
+    expect(result.current.cropImage).toBeFalsy();
+    expect(result.current.preview).toBeNull();
+  });
+
   it("scans the cropped region and hands its text on", async () => {
     ocrLocal.mockResolvedValue("  Hyvää huomenta  ");
     const onTextReady = vi.fn();

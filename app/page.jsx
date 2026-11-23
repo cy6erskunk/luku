@@ -562,7 +562,7 @@ function LukuApp({ user }) {
         </div>
       </div>
 
-      {stage === 0 && <ScanStage image={image} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} reverseCount={reverseCount} onStartReverse={handleStartReverse} />}
+      {stage === 0 && <ScanStage image={image} loadingWords={words.loadingWords} dueWords={dueWords} onStartReview={handleStartReview} repeatWords={repeatWords} onStartRepeat={handleStartRepeat} reverseCount={reverseCount} onStartReverse={handleStartReverse} />}
       {stage === 1 && (
         <ReadStage
           tokens={tokens}
